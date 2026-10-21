@@ -15,6 +15,32 @@
         tailwind.config={theme:{extend:{colors:{border:"hsl(0 0% 89%)",input:"hsl(0 0% 89%)",ring:"hsl(0 0% 3.9%)",background:"hsl(0 0% 100%)",foreground:"hsl(0 0% 3.9%)",primary:{DEFAULT:"hsl(0 0% 9%)",foreground:"hsl(0 0% 98%)"},secondary:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 9%)"},muted:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 45.1%)"},destructive:{DEFAULT:"hsl(0 84.2% 60.2%)",foreground:"hsl(0 0% 98%)"}}}}}
     </script>
 </head>
+    <script type="module">
+        import { i18n } from "/static/i18n/index.js";
+        i18n.apply();
+    </script>
+<script>
+(() => {
+  const replacements = new Map([
+    ["管理控制台", "Bảng điều khiển quản trị"], ["退出", "Đăng xuất"], ["Token 管理", "Quản lý Token"], ["系统配置", "Cấu hình hệ thống"], ["请求日志", "Nhật ký yêu cầu"], ["测试页面", "Trang kiểm thử"], ["Token 列表", "Danh sách Token"], ["活跃 Token", "Token đang hoạt động"], ["安全配置", "Cấu hình bảo mật"], ["代理配置", "Cấu hình proxy"], ["缓存配置", "Cấu hình bộ nhớ đệm"], ["验证码配置", "Cấu hình CAPTCHA"], ["调试配置", "Cấu hình gỡ lỗi"], ["添加账号", "Thêm tài khoản"], ["账号详情", "Chi tiết tài khoản"], ["导入账号", "Nhập tài khoản"], ["保存配置", "Lưu cấu hình"], ["取消", "Hủy"], ["保存", "Lưu"], ["导入", "Nhập"], ["导出", "Xuất"], ["新增", "Thêm mới"], ["刷新", "Làm mới"], ["清空", "Xóa tất cả"], ["启用", "Bật"], ["禁用", "Tắt"], ["错误", "Lỗi"], ["状态", "Trạng thái"], ["操作", "Thao tác"], ["图片", "Ảnh"], ["视频", "Video"], ["邮箱", "Email"], ["余额", "Số dư"], ["类型", "Loại"], ["项目ID", "ID dự án"], ["过期时间", "Thời gian hết hạn"], ["输入", "Nhập"], ["支持", "Hỗ trợ"], ["可选", "Tùy chọn"], ["分钟", "phút"], ["秒", "giây"], ["账号", "tài khoản"], ["代理", "proxy"], ["配置", "cấu hình"], ["登录", "đăng nhập"], ["成功", "thành công"], ["失败", "thất bại"], ["正在", "Đang"], ["确定", "Xác nhận"], ["提示", "Thông báo"]
+  ]);
+  const translate = (value) => {
+    let result = value;
+    for (const [source, target] of replacements) result = result.split(source).join(target);
+    return result.replace(/[一-鿿]+/g, "Nội dung");
+  };
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) node.nodeValue = translate(node.nodeValue);
+    else if (node.nodeType === Node.ELEMENT_NODE) {
+      for (const attr of ["title", "placeholder", "aria-label"]) if (node.hasAttribute(attr)) node.setAttribute(attr, translate(node.getAttribute(attr)));
+      node.childNodes.forEach(walk);
+    }
+  };
+  const apply = () => walk(document.body);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+  new MutationObserver(apply).observe(document.documentElement, { childList: true, subtree: true });
+})();
+</script>
 <body class="h-full bg-background text-foreground antialiased">
     <!-- 导航栏 -->
     <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">

@@ -291,13 +291,12 @@ app.add_middleware(
 app.include_router(routes.router)
 app.include_router(admin.router)
 
-# Static files - serve tmp directory for cached files
+# Static files - serve cached media and shared frontend assets
+static_path = Path(__file__).parent.parent / "static"
 tmp_dir = Path(__file__).parent.parent / "tmp"
 tmp_dir.mkdir(exist_ok=True)
 app.mount("/tmp", StaticFiles(directory=str(tmp_dir)), name="tmp")
-
-# HTML routes for frontend
-static_path = Path(__file__).parent.parent / "static"
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 _STATIC_PAGE_NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",

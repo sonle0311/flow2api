@@ -50,20 +50,20 @@ function saveSettings() {
   });
 
   if (!isValidWsUrl(settings.serverUrl)) {
-    setStatus("WebSocket URL 必须以 ws:// 或 wss:// 开头。", true);
+    setStatus(window.extensionI18n.t("wsError"), true);
     return;
   }
   if (!settings.apiKey) {
-    setStatus("请填写 Flow2API API Key。", true);
+    setStatus(window.extensionI18n.t("apiKeyRequired"), true);
     return;
   }
 
   chrome.storage.local.set(settings, () => {
     if (chrome.runtime.lastError) {
-      setStatus(`保存失败：${chrome.runtime.lastError.message}`, true);
+      setStatus(window.extensionI18n.t("saveError", { message: chrome.runtime.lastError.message }), true);
       return;
     }
-    setStatus("已保存，后台连接会自动重连。");
+    setStatus(window.extensionI18n.t("saved"));
   });
 }
 
