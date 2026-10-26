@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Flow2API Captcha Worker",
+  "name": "Flow2API - Trình xử lý mã xác minh",
   "version": "1.0.0",
-  "description": "Generate Google Labs reCAPTCHA Enterprise tokens for Flow2API.",
+  "description": "Tạo mã xác minh reCAPTCHA Enterprise của Google Labs cho Flow2API.",
   "permissions": [
     "storage",
     "tabs",

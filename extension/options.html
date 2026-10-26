@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Flow2API Captcha Worker - Cài đặt</title>
+  <title>Flow2API - Cài đặt trình xử lý mã xác minh</title>
   <style>
     body {
       margin: 0;
@@ -75,26 +75,27 @@
 <body>
   <div class="wrap">
     <div class="panel">
-      <h1>Flow2API Captcha Worker</h1>
+      <h1 data-i18n="extension.title">Flow2API - Trình xử lý mã xác minh</h1>
       <p data-i18n="extension.description">Đặt khóa định tuyến riêng cho phiên trình duyệt hiện tại để Flow2API gửi yêu cầu mã xác minh của tài khoản đến đúng phiên.</p>
 
-      <label for="routeKey">Route Key</label>
+      <label for="routeKey" data-i18n="extension.routeKey">Khóa định tuyến</label>
       <input id="routeKey" type="text" data-i18n-placeholder="extension.routeKeyPlaceholder" placeholder="Ví dụ: 9223">
 
-      <label for="clientLabel">Client Label</label>
+      <label for="clientLabel" data-i18n="extension.clientLabel">Tên phiên trình duyệt</label>
       <input id="clientLabel" type="text" data-i18n-placeholder="extension.clientLabelPlaceholder" placeholder="Ví dụ: browser-9223">
 
-      <label for="serverUrl">WebSocket URL</label>
+      <label for="serverUrl" data-i18n="extension.serverUrl">Địa chỉ WebSocket</label>
       <input id="serverUrl" type="text" placeholder="ws://127.0.0.1:8000/captcha_ws">
 
-      <label for="apiKey">Flow2API API Key</label>
-      <input id="apiKey" type="password" data-i18n-placeholder="extension.apiKeyPlaceholder" placeholder="API Key trong bảng quản trị">
+      <label for="apiKey" data-i18n="extension.apiKey">Khóa API Flow2API</label>
+      <input id="apiKey" type="password" data-i18n-placeholder="extension.apiKeyPlaceholder" placeholder="Khóa API trong bảng quản trị">
 
       <button id="saveBtn" type="button" data-i18n="extension.save">Lưu</button>
       <div class="status" id="status"></div>
-      <div class="hint" data-i18n="extension.hint">Nhập cùng Route Key trong token của bảng quản trị, ví dụ 9223 tương ứng với 9223. Backend sẽ dùng API Key để xác thực kết nối WebSocket.</div>
+      <div class="hint" data-i18n="extension.hint">Nhập cùng khóa định tuyến trong thông tin mã truy cập của bảng quản trị, ví dụ 9223 tương ứng với 9223. Máy chủ sẽ dùng khóa API để xác thực kết nối WebSocket.</div>
     </div>
   </div>
+  <script src="i18n.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

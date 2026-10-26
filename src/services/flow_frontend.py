@@ -105,11 +105,11 @@ class FlowFrontendMixin:
                     code = code if code is not None else "unknown"
                     if str(code) == "401":
                         raise RuntimeError(
-                            "Flow 登录认证失败：Google Cookie 已失效、不完整，或来自不同账号 "
+                            "Xác thực đăng nhập Flow thất bại: Google Cookie đã hết hiệu lực, không đầy đủ hoặc thuộc tài khoản khác "
                             f"(rpc={rpc_id}, code=401)"
                         )
                     raise RuntimeError(
-                        f"Flow frontend RPC rejected: rpc={rpc_id}, code={code}"
+                        f"RPC giao diện Flow từ chối yêu cầu: rpc={rpc_id}, code={code}"
                     )
                 if item[0] != "wrb.fr" or item[1] != rpc_id:
                     continue
@@ -117,11 +117,11 @@ class FlowFrontendMixin:
                 error_code = cls._extract_frontend_rpc_error_code(error_detail)
                 if error_code:
                     raise RuntimeError(
-                        f"Flow frontend RPC rejected: rpc={rpc_id}, error={error_code}"
+                        f"RPC giao diện Flow từ chối yêu cầu: rpc={rpc_id}, error={error_code}"
                     )
                 if item[2] is None and error_detail is not None:
                     raise RuntimeError(
-                        f"Flow frontend RPC rejected: rpc={rpc_id}, code={error_detail}"
+                        f"RPC giao diện Flow từ chối yêu cầu: rpc={rpc_id}, code={error_detail}"
                     )
 
     async def _resolve_flow_frontend_cookie_header(
@@ -137,7 +137,7 @@ class FlowFrontendMixin:
         cookie_header = serialize_cookie_header_for_url(cookie_storage, target_url)
         if not cookie_header:
             raise RuntimeError(
-                "Flow frontend generation requires Google session cookies"
+                "Tạo nội dung qua giao diện Flow cần Cookie phiên Google"
             )
         return cookie_header
 
@@ -155,7 +155,7 @@ class FlowFrontendMixin:
             return mapping[str(aspect_ratio or "").strip().upper()]
         except KeyError as exc:
             raise ValueError(
-                f"Unsupported Flow image aspect ratio: {aspect_ratio}"
+                f"Tỷ lệ khung hình ảnh Flow không được hỗ trợ: {aspect_ratio}"
             ) from exc
 
     @staticmethod
@@ -307,7 +307,7 @@ class FlowFrontendMixin:
                     }
                 )
         if not media:
-            raise RuntimeError("Flow frontend image RPC returned no downloadable media")
+            raise RuntimeError("RPC ảnh của giao diện Flow không trả về media có thể tải xuống")
         return {"media": media, "frontendRpc": "ogiZ0b"}
 
     def _build_frontend_video_generation_argument(
@@ -502,7 +502,7 @@ class FlowFrontendMixin:
             }
         if not operations:
             raise RuntimeError(
-                "Flow frontend video RPC returned no generation operations"
+                "RPC video của giao diện Flow không trả về thao tác tạo nội dung"
             )
         return {
             "operations": operations,
@@ -566,10 +566,10 @@ class FlowFrontendMixin:
             metadata["video"] = video_info
             error_message = {
                 "PUBLIC_ERROR_PROMINENT_PEOPLE_FILTER_FAILED": (
-                    "提示词或参考素材触发了人物安全过滤"
+                    "Lời nhắc hoặc tư liệu tham chiếu đã kích hoạt bộ lọc an toàn về nhân vật"
                 ),
-                "PUBLIC_ERROR_UNSAFE_GENERATION": "提示词或参考素材触发了内容安全过滤",
-            }.get(error_code, f"Flow 上游拒绝视频生成：{error_code}")
+                "PUBLIC_ERROR_UNSAFE_GENERATION": "Lời nhắc hoặc tư liệu tham chiếu đã kích hoạt bộ lọc an toàn nội dung",
+            }.get(error_code, f"Dịch vụ nguồn Flow từ chối tạo video: {error_code}")
             operation_body = {"name": operation_id, "metadata": metadata}
             if error_code:
                 operation_body["error"] = {
@@ -594,7 +594,7 @@ class FlowFrontendMixin:
         if not normalized:
             error_code = cls._extract_frontend_rpc_error_code(payload)
             if error_code:
-                error_message = f"Flow 上游拒绝视频生成：{error_code}"
+                error_message = f"Dịch vụ nguồn Flow từ chối tạo video: {error_code}"
                 for previous in operations:
                     operation_id = str(
                         (previous or {}).get("name")
@@ -653,12 +653,12 @@ class FlowFrontendMixin:
             response_host and response_host != "flow.google.com"
         ):
             raise RuntimeError(
-                "Flow 登录认证失败：Google Cookie 已失效、不完整，或登录态被重定向 "
+                "Xác thực đăng nhập Flow thất bại: Google Cookie đã hết hiệu lực, không đầy đủ hoặc phiên đăng nhập bị chuyển hướng "
                 f"(code={response.status_code})"
             )
         if response.status_code >= 400:
             raise RuntimeError(
-                f"Flow frontend bootstrap failed: HTTP {response.status_code}"
+                f"Khởi tạo giao diện Flow thất bại: HTTP {response.status_code}"
             )
         return response.text
 
@@ -682,7 +682,7 @@ class FlowFrontendMixin:
             else cookie_header
         )
         if not bootstrap_cookie_header:
-            raise RuntimeError("Flow frontend RPC requires Google session cookies")
+            raise RuntimeError("RPC giao diện Flow cần Cookie phiên Google")
         bootstrap_text = await self._load_flow_frontend_bootstrap(
             page_url,
             bootstrap_cookie_header,
@@ -694,7 +694,7 @@ class FlowFrontendMixin:
         )
         session_match = re.search(r'"FdrFJe":"(-?[0-9]+)"', bootstrap_text)
         if not bootloader_match or not session_match:
-            raise RuntimeError("Flow frontend bootstrap metadata is unavailable")
+            raise RuntimeError("Siêu dữ liệu khởi tạo giao diện Flow không khả dụng")
         bootloader_id = bootloader_match.group(0)
         frontend_session_id = session_match.group(1)
         request_counter = random.randint(10_000, 90_000)
@@ -712,7 +712,7 @@ class FlowFrontendMixin:
             else cookie_header
         )
         if not rpc_cookie_header:
-            raise RuntimeError("Flow frontend RPC requires Google session cookies")
+            raise RuntimeError("RPC giao diện Flow cần Cookie phiên Google")
         headers = {
             "Accept": "*/*",
             "Accept-Language": self._get_primary_accept_language(
@@ -763,7 +763,7 @@ class FlowFrontendMixin:
         self._raise_batchexecute_error(frames, rpc_id)
         payload = self._extract_batchexecute_payload(frames, rpc_id)
         if payload is None:
-            raise RuntimeError(f"Flow frontend RPC returned no payload: rpc={rpc_id}")
+            raise RuntimeError(f"RPC giao diện Flow không trả về dữ liệu: rpc={rpc_id}")
         return payload
 
     @staticmethod
@@ -866,7 +866,7 @@ class FlowFrontendMixin:
             else cookie_header
         )
         if not bootstrap_cookie_header:
-            raise RuntimeError("Flow StreamChat requires Google session cookies")
+            raise RuntimeError("Flow StreamChat cần Cookie phiên Google")
         bootstrap_text = await self._load_flow_frontend_bootstrap(
             page_url,
             bootstrap_cookie_header,
@@ -878,10 +878,10 @@ class FlowFrontendMixin:
         )
         session_match = re.search(r'"FdrFJe":"(-?[0-9]+)"', bootstrap_text)
         if not bootloader_match or not session_match:
-            raise RuntimeError("Flow frontend bootstrap metadata is unavailable")
+            raise RuntimeError("Siêu dữ liệu khởi tạo giao diện Flow không khả dụng")
         at_token = self._extract_stream_chat_at_token(bootstrap_text)
         if not at_token:
-            raise RuntimeError("Flow frontend bootstrap XSRF token is unavailable")
+            raise RuntimeError("Token XSRF khởi tạo giao diện Flow không khả dụng")
 
         url = (
             f"https://flow.google.com{self.STREAM_CHAT_RPC_PATH}"
@@ -895,7 +895,7 @@ class FlowFrontendMixin:
             else cookie_header
         )
         if not rpc_cookie_header:
-            raise RuntimeError("Flow StreamChat requires Google session cookies")
+            raise RuntimeError("Flow StreamChat cần Cookie phiên Google")
         headers = {
             "Accept": "*/*",
             "Accept-Language": self._get_primary_accept_language(
@@ -937,7 +937,7 @@ class FlowFrontendMixin:
         error_match = re.search(r"PUBLIC_ERROR_[A-Z_]+", response_text)
         if error_match:
             raise RuntimeError(
-                f"Flow StreamChat rejected: error={error_match.group(0)}"
+                f"Flow StreamChat từ chối yêu cầu: error={error_match.group(0)}"
             )
         media_ids = self._extract_stream_chat_media_ids(frames)
         if not media_ids:

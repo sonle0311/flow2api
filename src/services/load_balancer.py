@@ -389,7 +389,7 @@ class LoadBalancer:
 
         if model and not supported_tokens:
             tier_label = get_paygate_tier_label(required_tier)
-            return f"当前模型需要 {tier_label} 账号，但没有可用的 {tier_label} 账号: {model}"
+            return f"Mô hình hiện tại yêu cầu tài khoản {tier_label}, nhưng không có tài khoản {tier_label} khả dụng: {model}"
 
         capability_tokens = []
         for token in supported_tokens:
@@ -401,8 +401,8 @@ class LoadBalancer:
 
         if supported_tokens and not capability_tokens:
             if for_image_generation:
-                return "当前有符合档位的账号，但图片生成功能已全部禁用。"
+                return "Có tài khoản đáp ứng yêu cầu gói, nhưng chức năng tạo ảnh đã bị tắt trên tất cả tài khoản."
             if for_video_generation:
-                return "当前有符合档位的账号，但视频生成功能已全部禁用。"
+                return "Có tài khoản đáp ứng yêu cầu gói, nhưng chức năng tạo video đã bị tắt trên tất cả tài khoản."
 
         return None

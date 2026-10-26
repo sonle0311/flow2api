@@ -31,7 +31,7 @@ def _now_iso() -> str:
 def _normalize_runtime_kind(runtime_kind: str) -> str:
     kind = (runtime_kind or "").strip().lower()
     if kind not in _RUNTIME_STATUS:
-        raise ValueError(f"Unsupported runtime kind: {runtime_kind}")
+        raise ValueError(f"Loại môi trường chạy không được hỗ trợ: {runtime_kind}")
     return kind
 
 

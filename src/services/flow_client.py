@@ -603,7 +603,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     )
 
                 if response.status_code >= 400:
-                    error_reason = f"HTTP Error {response.status_code}"
+                    error_reason = f"Lỗi HTTP {response.status_code}"
                     try:
                         error_body = response.json()
                         if "error" in error_body:
@@ -618,7 +618,7 @@ class _FlowClientBase(FlowFrontendMixin):
                                 error_reason = f"{error_reason}: {error_message}"
                     except Exception:
                         error_reason = (
-                            f"HTTP Error {response.status_code}: {response.text[:200]}"
+                            f"Lỗi HTTP {response.status_code}: {response.text[:200]}"
                         )
 
                     debug_logger.log_error(f"[API FAILED] URL: {url}")
@@ -632,7 +632,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         except Exception as e:
             error_msg = str(e)
-            if "HTTP Error" not in error_msg and not any(
+            if not any(marker in error_msg for marker in ("HTTP Error", "Lỗi HTTP")) and not any(
                 x in error_msg for x in ["PUBLIC_ERROR", "INVALID_ARGUMENT"]
             ):
                 debug_logger.log_error(f"[API FAILED] URL: {url}")
@@ -660,10 +660,10 @@ class _FlowClientBase(FlowFrontendMixin):
                         f"[HTTP FALLBACK] urllib 回退也失败: {fallback_error}"
                     )
                     raise Exception(
-                        f"Flow API request failed: curl={error_msg}; urllib={fallback_error}"
+                        f"Yêu cầu API Flow thất bại: curl={error_msg}; urllib={fallback_error}"
                     )
 
-            raise Exception(f"Flow API request failed: {error_msg}")
+            raise Exception(f"Yêu cầu API Flow thất bại: {error_msg}")
 
     async def _make_text_request(
         self,
@@ -865,7 +865,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
                 if response.status_code >= 400:
                     error_reason = (
-                        f"HTTP Error {response.status_code}: {response_text[:500]}"
+                        f"Lỗi HTTP {response.status_code}: {response_text[:500]}"
                     )
                     try:
                         error_body = response.json()
@@ -897,7 +897,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         except Exception as e:
             error_msg = str(e)
-            if "HTTP Error" not in error_msg and not any(
+            if not any(marker in error_msg for marker in ("HTTP Error", "Lỗi HTTP")) and not any(
                 x in error_msg for x in ["PUBLIC_ERROR", "INVALID_ARGUMENT"]
             ):
                 debug_logger.log_error(f"[API FAILED] URL: {url}")
@@ -905,7 +905,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     f"[API FAILED] Request Body: {request_body_for_log}"
                 )
                 debug_logger.log_error(f"[API FAILED] Exception: {error_msg}")
-            raise Exception(f"Flow API text request failed: {error_msg}")
+            raise Exception(f"Yêu cầu văn bản đến API Flow thất bại: {error_msg}")
 
     def _should_fallback_to_urllib(self, error_message: str) -> bool:
         """判断是否应从 curl_cffi 回退到 urllib。"""
@@ -983,7 +983,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 except Exception:
                     pass
             body_text = payload.decode("utf-8", errors="replace")
-            raise Exception(f"HTTP Error {status_code}: {body_text[:200]}") from exc
+            raise Exception(f"Lỗi HTTP {status_code}: {body_text[:200]}") from exc
         except Exception as exc:
             raise Exception(str(exc)) from exc
 
@@ -994,12 +994,12 @@ class _FlowClientBase(FlowFrontendMixin):
                 pass
         body_text = payload.decode("utf-8", errors="replace")
         if status_code >= 400:
-            raise Exception(f"HTTP Error {status_code}: {body_text[:200]}")
+            raise Exception(f"Lỗi HTTP {status_code}: {body_text[:200]}")
 
         try:
             return json.loads(body_text) if body_text else {}
         except Exception as exc:
-            raise Exception(f"Invalid JSON response: {body_text[:200]}") from exc
+            raise Exception(f"Phản hồi JSON không hợp lệ: {body_text[:200]}") from exc
 
     def _is_timeout_error(self, error: Exception) -> bool:
         """判断是否为网络超时，便于快速失败重试。"""
@@ -1008,6 +1008,7 @@ class _FlowClientBase(FlowFrontendMixin):
             keyword in error_lower
             for keyword in [
             "timed out",
+            "hết thời gian chờ",
             "timeout",
             "curl: (28)",
             "connection timed out",
@@ -1049,6 +1050,7 @@ class _FlowClientBase(FlowFrontendMixin):
             "connection timed out",
             "curl: (28)",
             "timed out",
+            "hết thời gian chờ",
             "timeout",
             "unexpected eof",
             "empty reply from server",
@@ -1164,7 +1166,7 @@ class _FlowClientBase(FlowFrontendMixin):
             )
         except asyncio.TimeoutError as exc:
             raise Exception(
-                f"Flow video API request timed out after {timeout}s"
+                f"Hết thời gian chờ API video Flow sau {timeout} giây"
             ) from exc
 
     async def _acquire_image_launch_gate(
@@ -1274,7 +1276,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     status_code = int(response_payload.get("status") or 0)
                     response_text = response_payload.get("text") or ""
                     if status_code >= 400:
-                        error_reason = f"HTTP Error {status_code}"
+                        error_reason = f"Lỗi HTTP {status_code}"
                         parsed_body = None
                         try:
                             parsed_body = (
@@ -1294,7 +1296,7 @@ class _FlowClientBase(FlowFrontendMixin):
                                 error_reason = f"{error_reason}: {error_message}"
                         elif response_text:
                             error_reason = (
-                                f"HTTP Error {status_code}: {response_text[:200]}"
+                                f"Lỗi HTTP {status_code}: {response_text[:200]}"
                             )
                         error = RuntimeError(error_reason)
                         error.browser_ref = _browser_ref
@@ -1358,7 +1360,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         if last_error is not None:
             raise last_error
-        raise RuntimeError("图片生成请求失败")
+        raise RuntimeError("Yêu cầu tạo ảnh thất bại")
 
     # ========== 认证相关 (使用ST) ==========
 
@@ -1432,7 +1434,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 project_id = self._extract_flow_project_id(payload)
                 if not project_id:
                     raise RuntimeError(
-                        "Flow frontend createProject response missing projectId"
+                        "Phản hồi createProject của giao diện Flow thiếu projectId"
                     )
                 return project_id
             except Exception as frontend_error:
@@ -1467,7 +1469,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 project_id = project_result.get("projectId")
                 if not project_id:
                     raise Exception(
-                        "Invalid project.createProject response: missing projectId"
+                        "Phản hồi project.createProject không hợp lệ: thiếu projectId"
                     )
                 return project_id
             except Exception as e:
@@ -1488,7 +1490,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         if last_error is not None:
             raise last_error
-        raise RuntimeError("创建项目失败")
+        raise RuntimeError("Tạo dự án thất bại")
 
     async def delete_project(self, st: str, project_id: str):
         """删除项目
@@ -1721,7 +1723,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if media_id:
                     return media_id
                 raise Exception(
-                    f"Invalid upload response: missing media id, keys={list(new_result.keys())}"
+                    f"Phản hồi tải lên không hợp lệ: thiếu ID media, keys={list(new_result.keys())}"
                 )
             except Exception as new_upload_error:
                 last_error = new_upload_error
@@ -1741,9 +1743,9 @@ class _FlowClientBase(FlowFrontendMixin):
                         await asyncio.sleep(1)
                         continue
                     raise RuntimeError(
-                        "Project-scoped image upload failed via /flow/uploadImage; "
-                        "legacy :uploadUserImage fallback is disabled because it may attach media "
-                        f"to a different project (project_id={normalized_project_id})."
+                        "Tải ảnh lên dự án qua /flow/uploadImage thất bại; "
+                        "phương án dự phòng :uploadUserImage cũ đã bị tắt vì có thể gắn media "
+                        f"vào một dự án khác (project_id={normalized_project_id})."
                     ) from new_upload_error
 
                 debug_logger.log_warning(
@@ -1766,7 +1768,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if media_id:
                     return media_id
                 raise Exception(
-                    f"Legacy upload response missing media id: keys={list(legacy_result.keys())}"
+                    f"Phản hồi tải lên cũ thiếu ID media: keys={list(legacy_result.keys())}"
                 )
             except Exception as legacy_upload_error:
                 last_error = legacy_upload_error
@@ -1781,7 +1783,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         if last_error is not None:
             raise last_error
-        raise RuntimeError("上传图片失败")
+        raise RuntimeError("Tải ảnh lên thất bại")
 
     # ========== 图片生成 (使用AT) - 同步返回 ==========
 
@@ -1857,7 +1859,7 @@ class _FlowClientBase(FlowFrontendMixin):
             attempt_trace["launch_queue_ms"] = launch_queue_ms
             attempt_trace["launch_stagger_ms"] = launch_stagger_ms
             if not launch_ok:
-                last_error = Exception("Image launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy ảnh")
                 attempt_trace["success"] = False
                 attempt_trace["error"] = str(last_error)
                 attempt_trace["duration_ms"] = int(
@@ -1886,7 +1888,7 @@ class _FlowClientBase(FlowFrontendMixin):
             )
             attempt_trace["recaptcha_ok"] = bool(recaptcha_token)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 attempt_trace["success"] = False
                 attempt_trace["error"] = str(last_error)
                 attempt_trace["duration_ms"] = int(
@@ -2039,7 +2041,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 project_id, action="IMAGE_GENERATION", token_id=token_id
             )
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -2489,7 +2491,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -2508,7 +2510,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -3029,7 +3031,7 @@ class _FlowClientBase(FlowFrontendMixin):
         entity_id = self._extract_flow_entity_id(result)
         if not entity_id:
             raise RuntimeError(
-                f"flow.createEntity 响应缺少 entityId: keys={list(result.keys())}"
+                f"Phản hồi flow.createEntity thiếu entityId: keys={list(result.keys())}"
             )
         return entity_id
 
@@ -3106,7 +3108,7 @@ class _FlowClientBase(FlowFrontendMixin):
             status_code = int(response_payload.get("status") or 0)
             raw_text = response_payload.get("text") or ""
             if status_code >= 400:
-                error_reason = f"HTTP Error {status_code}"
+                error_reason = f"Lỗi HTTP {status_code}"
                 parsed_body = None
                 try:
                     parsed_body = json.loads(raw_text) if raw_text else None
@@ -3123,7 +3125,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     if error_message:
                         error_reason = f"{error_reason}: {error_message}"
                 elif raw_text:
-                    error_reason = f"HTTP Error {status_code}: {raw_text[:200]}"
+                    error_reason = f"Lỗi HTTP {status_code}: {raw_text[:200]}"
                 error = RuntimeError(error_reason)
                 error.browser_ref = _browser_ref
                 raise error
@@ -3157,9 +3159,9 @@ class _FlowClientBase(FlowFrontendMixin):
         token_video_concurrency: Optional[int] = None,
     ) -> Dict[str, Any]:
         if not st:
-            raise RuntimeError("Omni 参考图视频需要 ST token，但当前账号未提供 ST")
+            raise RuntimeError("Tạo video từ ảnh tham chiếu Omni cần token ST nhưng tài khoản hiện tại chưa cung cấp ST")
         if not reference_media_ids:
-            raise RuntimeError("Omni 参考图视频至少需要 1 张参考图")
+            raise RuntimeError("Tạo video từ ảnh tham chiếu Omni cần ít nhất 1 ảnh tham chiếu")
 
         max_retries = self._resolve_generation_retry_budget(config.flow_max_retries)
         last_error = None
@@ -3186,7 +3188,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -3202,7 +3204,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     await self._release_video_launch_gate(token_id)
 
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -3254,7 +3256,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 )
                 if not agent_session_id:
                     raise RuntimeError(
-                        f"未找到 Flow Creation Agent Session: project_id={project_id}"
+                        f"Không tìm thấy phiên Flow Creation Agent: project_id={project_id}"
                     )
 
                 session_detail = await self.get_flow_creation_agent_session_detail(
@@ -3311,7 +3313,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     )
                     if not approve_recaptcha_token:
                         raise RuntimeError(
-                            "Omni 参考图视频审批阶段获取 reCAPTCHA token 失败"
+                            "Không lấy được token reCAPTCHA ở bước phê duyệt video từ ảnh tham chiếu Omni"
                         )
                     approve_payload = {
                         "agentSessionId": agent_session_id,
@@ -3347,7 +3349,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
                 if not tool_result:
                     raise RuntimeError(
-                        "Omni 参考图视频链路未返回 generate_video_with_references toolResult"
+                        "Quy trình tạo video từ ảnh tham chiếu Omni không trả về toolResult của generate_video_with_references"
                     )
 
                 media_id = str(tool_result.get("media_id") or "").strip()
@@ -3357,7 +3359,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 )
                 if not media_id:
                     raise RuntimeError(
-                        f"Omni 参考图视频 toolResult 缺少 media_id: {tool_result}"
+                        f"toolResult tạo video từ ảnh tham chiếu Omni thiếu media_id: {tool_result}"
                     )
 
                 operation = {
@@ -3450,7 +3452,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -3462,7 +3464,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -3598,7 +3600,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -3610,7 +3612,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -3745,7 +3747,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -3757,7 +3759,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -3893,7 +3895,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -3905,7 +3907,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -4134,7 +4136,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     return result
                 except Exception as e:
                     debug_logger.log_error(f"[CONCAT] 解码 encodedVideo 失败: {e}")
-                    raise Exception(f"解码拼接视频失败: {e}")
+                    raise Exception(f"Giải mã video đã ghép thất bại: {e}")
             
             # SUCCESSFUL but neither outputUri nor encodedVideo
             if "SUCCESSFUL" in status:
@@ -4146,12 +4148,12 @@ class _FlowClientBase(FlowFrontendMixin):
                 debug_logger.log_error(
                     f"[CONCAT] 失败: {status}, 响应: {json.dumps(result, ensure_ascii=False)[:300]}"
                 )
-                raise Exception(f"视频拼接失败: {status}")
+                raise Exception(f"Ghép video thất bại: {status}")
             
             await asyncio.sleep(poll_interval)
         
         debug_logger.log_error(f"[CONCAT] 超时 ({timeout}s)，放弃拼接")
-        raise Exception(f"视频拼接超时 ({timeout}s)")
+        raise Exception(f"Hết thời gian ghép video ({timeout} giây)")
 
     # ========== 视频放大 (Video Upsampler) ==========
 
@@ -4197,7 +4199,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 token_video_concurrency=token_video_concurrency,
             )
             if not launch_ok:
-                last_error = Exception("Video launch queue wait timeout")
+                last_error = Exception("Hết thời gian chờ trong hàng đợi khởi chạy video")
                 raise last_error
 
             launch_gate_acquired = True
@@ -4209,7 +4211,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 if launch_gate_acquired:
                     await self._release_video_launch_gate(token_id)
             if not recaptcha_token:
-                last_error = Exception("Failed to obtain reCAPTCHA token")
+                last_error = Exception("Không lấy được token reCAPTCHA")
                 should_retry = await self._handle_missing_recaptcha_token(
                     retry_attempt=retry_attempt,
                     max_retries=max_retries,
@@ -4340,7 +4342,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     if operation_id and operation_id not in operation_ids:
                         operation_ids.append(operation_id)
                 if not operation_ids:
-                    raise ValueError("视频状态查询缺少 Flow frontend operation ID")
+                    raise ValueError("Truy vấn trạng thái video thiếu ID thao tác của giao diện Flow")
                 cookie_storage = await self._resolve_flow_frontend_cookie_storage(
                     google_cookies=google_cookies,
                     token_id=token_id,
@@ -4369,7 +4371,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         media_refs = self._operations_to_media_refs(operations)
         if not media_refs:
-            raise ValueError("视频状态查询缺少 media 引用，无法按当前上游结构发起查询")
+            raise ValueError("Truy vấn trạng thái video thiếu tham chiếu media, không thể truy vấn theo cấu trúc hiện tại của dịch vụ nguồn")
 
         json_data = {"media": media_refs}
         max_retries = config.flow_max_retries
@@ -4430,7 +4432,7 @@ class _FlowClientBase(FlowFrontendMixin):
 
         if last_error is not None:
             raise last_error
-        raise RuntimeError("视频状态查询失败")
+        raise RuntimeError("Truy vấn trạng thái video thất bại")
 
     # ========== 媒体删除 (使用ST) ==========
 
@@ -4514,12 +4516,12 @@ class _FlowClientBase(FlowFrontendMixin):
                 return final_url
 
             raise RuntimeError(
-                f"media.getMediaUrlRedirect returned unexpected status={response.status_code} "
-                f"for media={normalized_media_name}"
+                f"media.getMediaUrlRedirect trả về mã trạng thái không mong đợi: {response.status_code} "
+                f"cho media={normalized_media_name}"
             )
         except Exception as e:
             raise RuntimeError(
-                f"获取媒体重定向地址失败: media={normalized_media_name}, type={media_url_type}, error={e}"
+                f"Lấy địa chỉ chuyển hướng media thất bại: media={normalized_media_name}, type={media_url_type}, error={e}"
             ) from e
 
     # ========== 辅助方法 ==========
@@ -4582,7 +4584,7 @@ class _FlowClientBase(FlowFrontendMixin):
         project_id: str,
         log_prefix: str,
     ) -> bool:
-        token_error = Exception("Failed to obtain reCAPTCHA token")
+        token_error = Exception("Không lấy được token reCAPTCHA")
         return await self._handle_retryable_generation_error(
             error=token_error,
             retry_attempt=retry_attempt,
@@ -4656,29 +4658,30 @@ class _FlowClientBase(FlowFrontendMixin):
     def _get_retry_reason(self, error_str: str) -> Optional[str]:
         """判断是否需要重试，返回日志提示内容"""
         error_lower = error_str.lower()
-        if "browser captcha queue wait timeout" in error_lower:
+        if any(marker in error_lower for marker in ("browser captcha queue wait timeout", "hết thời gian chờ trong hàng đợi captcha trình duyệt")):
             return None
         if "error_no_slot_available_block" in error_lower:
-            return "打码服务资源阻塞"
+            return "Tài nguyên dịch vụ giải CAPTCHA bị chặn"
         if "error_no_slot_available" in error_lower:
-            return "打码服务资源不足"
+            return "Dịch vụ giải CAPTCHA không đủ tài nguyên"
         if "model_access_denied" in error_lower:
             # 账号无对应模型权限，重试不会改变结果
             return None
         if "403" in error_lower:
-            return "403错误"
+            return "Lỗi 403"
         if "429" in error_lower or "too many requests" in error_lower:
-            return "429限流"
+            return "Giới hạn tần suất 429"
         if self._is_retryable_network_error(error_str):
-            return "网络/TLS错误"
+            return "Lỗi mạng/TLS"
         if "recaptcha evaluation failed" in error_lower:
-            return "reCAPTCHA 验证失败"
+            return "Xác minh reCAPTCHA thất bại"
         if "recaptcha" in error_lower:
-            return "reCAPTCHA 错误"
+            return "Lỗi reCAPTCHA"
         if any(
             keyword in error_lower
             for keyword in [
             "http error 500",
+            "lỗi http 500",
             "public_error",
             "internal error",
             "reason=internal",
@@ -4688,7 +4691,7 @@ class _FlowClientBase(FlowFrontendMixin):
             "upstream error",
             ]
         ):
-            return "500/内部错误"
+            return "Lỗi 500/nội bộ"
         return None
 
     def _get_retry_delay_seconds(self, error_str: str, retry_attempt: int) -> int:
@@ -4897,12 +4900,12 @@ class _FlowClientBase(FlowFrontendMixin):
         timeout = max(5, int(config.remote_browser_timeout or 60))
 
         if not base_url:
-            raise RuntimeError("remote_browser 服务地址未配置")
+            raise RuntimeError("Chưa cấu hình địa chỉ dịch vụ remote_browser")
         if not api_key:
-            raise RuntimeError("remote_browser API Key 未配置")
+            raise RuntimeError("Chưa cấu hình khóa API remote_browser")
 
         if not (base_url.startswith("http://") or base_url.startswith("https://")):
-            raise RuntimeError("remote_browser 服务地址格式错误")
+            raise RuntimeError("Địa chỉ dịch vụ remote_browser không hợp lệ")
 
         return base_url, api_key, timeout
 
@@ -4972,7 +4975,7 @@ class _FlowClientBase(FlowFrontendMixin):
         try:
             status_code, text = await asyncio.to_thread(do_request)
         except Exception as e:
-            raise RuntimeError(f"remote_browser 请求失败: {e}") from e
+            raise RuntimeError(f"Yêu cầu remote_browser thất bại: {e}") from e
 
         return status_code, FlowClient._parse_json_response_text(text), text
 
@@ -5018,7 +5021,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     **request_kwargs,
                 )
         except Exception as e:
-            raise RuntimeError(f"remote_browser 请求失败: {e}") from e
+            raise RuntimeError(f"Yêu cầu remote_browser thất bại: {e}") from e
 
         status_code = int(getattr(response, "status_code", 0) or 0)
         text = response.text or ""
@@ -5051,10 +5054,10 @@ class _FlowClientBase(FlowFrontendMixin):
                 detail = payload.get("detail") or payload.get("message") or str(payload)
             if not detail:
                 detail = (response_text or "").strip() or f"HTTP {status_code}"
-            raise RuntimeError(f"remote_browser 请求失败: {detail}")
+            raise RuntimeError(f"Yêu cầu remote_browser thất bại: {detail}")
 
         if not isinstance(payload, dict):
-            raise RuntimeError("remote_browser 返回格式错误")
+            raise RuntimeError("remote_browser trả về định dạng không hợp lệ")
 
         return payload
 
@@ -5375,7 +5378,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 self._set_request_fingerprint(fingerprint if token else None)
                 if not token or not session_id:
                     raise RuntimeError(
-                        f"remote_browser 返回缺少 token/session_id: {payload}"
+                        f"Phản hồi remote_browser thiếu token/session_id: {payload}"
                     )
                 return token, str(session_id)
             except Exception as e:

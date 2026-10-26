@@ -31,7 +31,7 @@ function closeSocket() {
         try {
             ws.close();
         } catch (e) {
-            console.log("[Flow2API] Close socket error", e);
+            console.log("[Flow2API] Lỗi đóng kết nối", e);
         }
         ws = null;
     }
@@ -89,7 +89,7 @@ async function connectWS() {
     ws = new WebSocket(url.toString());
 
     ws.onopen = () => {
-        console.log("[Flow2API] Background connected to WebSocket", url.toString());
+        console.log("[Flow2API] Tiến trình nền đã kết nối WebSocket", url.toString());
         ws.send(JSON.stringify({
             type: "register",
             route_key: settings.routeKey,
@@ -114,19 +114,19 @@ async function connectWS() {
         }
 
         if (data.type === "register_ack") {
-            console.log("[Flow2API] Registered route key:", data.route_key || "(empty)");
+            console.log("[Flow2API] Đã đăng ký khóa định tuyến:", data.route_key || "(trống)");
             return;
         }
 
         if (data.type === "get_token") {
             tokenQueue = tokenQueue.then(() => handleGetToken(data)).catch(err => {
-                console.error("[Flow2API] Queue Error:", err);
+                console.error("[Flow2API] Lỗi hàng đợi:", err);
             });
         }
     };
 
     ws.onclose = () => {
-        console.log("[Flow2API] WebSocket Closed. Reconnecting in 2s...");
+        console.log("[Flow2API] WebSocket đã đóng. Kết nối lại sau 2 giây...");
         ws = null;
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
@@ -134,14 +134,14 @@ async function connectWS() {
     };
 
     ws.onerror = (e) => {
-        console.log("[Flow2API] WebSocket Error", e);
+        console.log("[Flow2API] Lỗi WebSocket", e);
     };
 }
 
 async function handleGetToken(data) {
     let newTabId = null;
     try {
-        console.log("[Flow2API] Auto-opening fresh Google Labs tab to avoid token expiry...");
+        console.log("[Flow2API] Đang tự động mở thẻ Google Labs mới để tránh mã hết hạn...");
         const newTab = await chrome.tabs.create({ url: "https://labs.google/fx/tools/flow", active: false });
         newTabId = newTab.id;
 
@@ -149,7 +149,7 @@ async function handleGetToken(data) {
         await sleep(1200);
 
         let successResponse = null;
-        let lastErrorMsg = "No response from tab.";
+        let lastErrorMsg = "Không có phản hồi từ thẻ trình duyệt.";
         const scriptTimeoutMs = data.action === "VIDEO_GENERATION" ? 30000 : 20000;
 
         try {
@@ -169,7 +169,7 @@ async function handleGetToken(data) {
                                 grecaptcha.enterprise.ready(function() {
                                     grecaptcha.enterprise.execute("6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV", { action: action })
                                         .then(token => finish(resolve, token))
-                                        .catch(err => finish(reject, err.message || "reCAPTCHA evaluation failed internally"));
+                                        .catch(err => finish(reject, err.message || "Lỗi nội bộ khi thực thi reCAPTCHA"));
                                 });
                             }
 
@@ -179,11 +179,11 @@ async function handleGetToken(data) {
                                 const s = document.createElement("script");
                                 s.src = "https://www.google.com/recaptcha/enterprise.js?render=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV";
                                 s.onload = run;
-                                s.onerror = () => finish(reject, "Failed to load enterprise.js via network");
+                                s.onerror = () => finish(reject, "Không thể tải enterprise.js qua mạng");
                                 document.head.appendChild(s);
                             }
 
-                            setTimeout(() => finish(reject, "Timeout generating reCAPTCHA locally"), timeoutMs);
+                            setTimeout(() => finish(reject, "Hết thời gian tạo mã reCAPTCHA trên trình duyệt"), timeoutMs);
                         } catch (e) {
                             finish(reject, e.message);
                         }
@@ -196,7 +196,7 @@ async function handleGetToken(data) {
                 successResponse = { status: "success", token: results[0].result };
             }
         } catch (e) {
-            lastErrorMsg = e.message || "Script execution failed";
+            lastErrorMsg = e.message || "Thực thi tập lệnh thất bại";
         }
 
         if (successResponse) {
@@ -209,7 +209,7 @@ async function handleGetToken(data) {
             ws.send(JSON.stringify({
                 req_id: data.req_id,
                 status: "error",
-                error: "Extension script failed: " + lastErrorMsg
+                error: "Tập lệnh tiện ích thất bại: " + lastErrorMsg
             }));
         }
     } catch (err) {
@@ -222,9 +222,9 @@ async function handleGetToken(data) {
         if (newTabId) {
             try {
                 await chrome.tabs.remove(newTabId);
-                console.log("[Flow2API] Closed temporary token tab.");
+                console.log("[Flow2API] Đã đóng thẻ tạm dùng để tạo mã.");
             } catch (e) {
-                console.log("[Flow2API] Error closing tab:", e);
+                console.log("[Flow2API] Lỗi đóng thẻ:", e);
             }
         }
     }
@@ -233,7 +233,7 @@ async function handleGetToken(data) {
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
     if (changes.routeKey || changes.serverUrl || changes.apiKey || changes.clientLabel) {
-        console.log("[Flow2API] Extension settings changed, reconnecting WebSocket...");
+        console.log("[Flow2API] Cài đặt tiện ích đã thay đổi, đang kết nối lại WebSocket...");
         closeSocket();
         connectWS();
     }

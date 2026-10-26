@@ -82,7 +82,7 @@ def _run_pip_install(package: str, use_mirror: bool = False) -> bool:
     
     try:
         debug_logger.log_info(f"[BrowserCaptcha] 正在安装 {package}...")
-        progress_runtime_prepare("browser", f"[BrowserCaptcha] 正在安装 {package}...")
+        progress_runtime_prepare("browser", f"[BrowserCaptcha] Đang cài đặt {package}...")
         print(f"[BrowserCaptcha] 正在安装 {package}...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
@@ -94,12 +94,12 @@ def _run_pip_install(package: str, use_mirror: bool = False) -> bool:
                 f"[BrowserCaptcha] {package} 安装失败: {result.stderr[:200]}"
             )
             fail_runtime_prepare(
-                "browser", f"{package} 安装失败，请检查网络或 Python 环境。"
+                "browser", f"Cài đặt {package} thất bại, vui lòng kiểm tra mạng hoặc môi trường Python."
             )
             return False
     except Exception as e:
         debug_logger.log_warning(f"[BrowserCaptcha] {package} 安装异常: {e}")
-        fail_runtime_prepare("browser", f"{package} 安装异常: {e}")
+        fail_runtime_prepare("browser", f"Lỗi cài đặt {package}: {e}")
         return False
 
 
@@ -114,7 +114,7 @@ def _run_playwright_install(use_mirror: bool = False) -> bool:
     
     try:
         debug_logger.log_info("[BrowserCaptcha] 正在安装 chromium 浏览器...")
-        progress_runtime_prepare("browser", "正在安装 chromium 浏览器，请稍候...")
+        progress_runtime_prepare("browser", "Đang cài đặt trình duyệt Chromium, vui lòng chờ...")
         print("[BrowserCaptcha] 正在安装 chromium 浏览器...")
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=600, env=env
@@ -122,7 +122,7 @@ def _run_playwright_install(use_mirror: bool = False) -> bool:
         if result.returncode == 0:
             debug_logger.log_info("[BrowserCaptcha] ✅ chromium 浏览器安装成功")
             progress_runtime_prepare(
-                "browser", "chromium 浏览器安装成功，正在完成收尾检查..."
+                "browser", "Đã cài đặt Chromium thành công, đang hoàn tất kiểm tra..."
             )
             print("[BrowserCaptcha] ✅ chromium 浏览器安装成功")
             return True
@@ -131,12 +131,12 @@ def _run_playwright_install(use_mirror: bool = False) -> bool:
                 f"[BrowserCaptcha] chromium 安装失败: {result.stderr[:200]}"
             )
             fail_runtime_prepare(
-                "browser", "chromium 浏览器安装失败，请稍后重试或手动安装。"
+                "browser", "Cài đặt Chromium thất bại, vui lòng thử lại sau hoặc cài đặt thủ công."
             )
             return False
     except Exception as e:
         debug_logger.log_warning(f"[BrowserCaptcha] chromium 安装异常: {e}")
-        fail_runtime_prepare("browser", f"chromium 浏览器安装异常: {e}")
+        fail_runtime_prepare("browser", f"Lỗi cài đặt trình duyệt Chromium: {e}")
         return False
 
 
@@ -152,7 +152,7 @@ def _ensure_playwright_installed() -> bool:
     
     debug_logger.log_info("[BrowserCaptcha] playwright 未安装，开始自动安装...")
     progress_runtime_prepare(
-        "browser", "[BrowserCaptcha] playwright 未安装，开始自动安装..."
+        "browser", "[BrowserCaptcha] Chưa cài đặt Playwright, đang bắt đầu cài đặt tự động..."
     )
     print("[BrowserCaptcha] playwright 未安装，开始自动安装...")
     
@@ -163,7 +163,7 @@ def _ensure_playwright_installed() -> bool:
     # 官方源失败，尝试国内镜像
     debug_logger.log_info("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
     progress_runtime_prepare(
-        "browser", "[BrowserCaptcha] 官方源安装失败，尝试国内镜像..."
+        "browser", "[BrowserCaptcha] Cài đặt từ nguồn chính thức thất bại, đang thử máy chủ thay thế..."
     )
     print("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
     if _run_pip_install("playwright", use_mirror=True):
@@ -174,7 +174,7 @@ def _ensure_playwright_installed() -> bool:
     )
     fail_runtime_prepare(
         "browser",
-        "[BrowserCaptcha] ❌ playwright 自动安装失败，请手动安装: pip install playwright",
+        "[BrowserCaptcha] ❌ Cài đặt Playwright tự động thất bại, vui lòng cài đặt thủ công: pip install playwright",
     )
     print(
         "[BrowserCaptcha] ❌ playwright 自动安装失败，请手动安装: pip install playwright"
@@ -209,7 +209,7 @@ def _ensure_browser_installed() -> bool:
                 f"[BrowserCaptcha] chromium 浏览器已安装: {browser_path}"
             )
             finish_runtime_prepare(
-                "browser", "检测到 chromium 浏览器已安装，正在准备实例..."
+                "browser", "Đã phát hiện Chromium được cài đặt, đang chuẩn bị phiên trình duyệt..."
             )
             return True
     except Exception as e:
@@ -217,7 +217,7 @@ def _ensure_browser_installed() -> bool:
     
     debug_logger.log_info("[BrowserCaptcha] chromium 浏览器未安装，开始自动安装...")
     progress_runtime_prepare(
-        "browser", "[BrowserCaptcha] chromium 浏览器未安装，开始自动安装..."
+        "browser", "[BrowserCaptcha] Chưa cài đặt Chromium, đang bắt đầu cài đặt tự động..."
     )
     print("[BrowserCaptcha] chromium 浏览器未安装，开始自动安装...")
     
@@ -228,7 +228,7 @@ def _ensure_browser_installed() -> bool:
     # 官方源失败，尝试国内镜像
     debug_logger.log_info("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
     progress_runtime_prepare(
-        "browser", "[BrowserCaptcha] 官方源安装失败，尝试国内镜像..."
+        "browser", "[BrowserCaptcha] Cài đặt từ nguồn chính thức thất bại, đang thử máy chủ thay thế..."
     )
     print("[BrowserCaptcha] 官方源安装失败，尝试国内镜像...")
     if _run_playwright_install(use_mirror=True):
@@ -239,7 +239,7 @@ def _ensure_browser_installed() -> bool:
     )
     fail_runtime_prepare(
         "browser",
-        "[BrowserCaptcha] ❌ chromium 浏览器自动安装失败，请手动安装: python -m playwright install chromium",
+        "[BrowserCaptcha] ❌ Cài đặt Chromium tự động thất bại, vui lòng cài đặt thủ công: python -m playwright install chromium",
     )
     print(
         "[BrowserCaptcha] ❌ chromium 浏览器自动安装失败，请手动安装: python -m playwright install chromium"
@@ -1791,7 +1791,7 @@ class TokenBrowser:
                     browser_pid=self._extract_browser_pid(browser),
                     clear_slot_pid=True,
                 )
-                raise RuntimeError("failed to bind token session context")
+                raise RuntimeError("Không thể liên kết ngữ cảnh phiên token")
             self._shared_playwright = playwright
             self._shared_browser = browser
             self._shared_context = context
@@ -1983,7 +1983,7 @@ class TokenBrowser:
                 "current_ip_address": last_snapshot.get("current_ip_address") or "",
                 "page_title": last_snapshot.get("title") or "",
                 "page_url": last_snapshot.get("url") or "",
-                "error": last_snapshot.get("error") or "未在页面中读取到分数",
+                "error": last_snapshot.get("error") or "Không đọc được điểm từ trang",
             },
         }
     
@@ -2847,7 +2847,7 @@ class TokenBrowser:
                             context_label="浏览器内提交",
                         )
                         if not ready:
-                            raise RuntimeError("grecaptcha.enterprise 未就绪")
+                            raise RuntimeError("grecaptcha.enterprise chưa sẵn sàng")
 
                         payload_for_submit = deepcopy(json_data)
                         submit_started = True
@@ -2938,7 +2938,7 @@ class TokenBrowser:
                         )
 
                         if not isinstance(response_payload, dict):
-                            raise RuntimeError("浏览器内提交返回格式异常")
+                            raise RuntimeError("Dữ liệu trả về khi gửi trong trình duyệt có định dạng không hợp lệ")
 
                         self._solve_count += 1
                         self._consecutive_browser_failures = 0
@@ -2959,7 +2959,7 @@ class TokenBrowser:
                         )
                         error_lower = error_message.lower()
                         if submit_started and not any(
-                            marker in error_lower for marker in ("captcha_timeout", "grecaptcha.enterprise 未就绪")
+                            marker in error_lower for marker in ("captcha_timeout", "grecaptcha.enterprise 未就绪", "grecaptcha.enterprise chưa sẵn sàng")
                         ):
                             setattr(e, "submission_uncertain", True)
                         if any(
@@ -2988,7 +2988,7 @@ class TokenBrowser:
                     if attempt < max_retries - 1:
                         await asyncio.sleep(1)
 
-                raise RuntimeError("浏览器内提交 Flow 请求失败")
+                raise RuntimeError("Gửi yêu cầu Flow trong trình duyệt thất bại")
             finally:
                 self._solve_inflight = max(0, self._solve_inflight - 1)
                 self.note_idle()
@@ -2998,7 +2998,7 @@ class TokenBrowser:
     ) -> Dict[str, Any]:
         """Refresh the bound account's current frontend without solving a CAPTCHA."""
         if not token_id:
-            raise ValueError("Cookie 刷新必须指定 Token ID")
+            raise ValueError("Phải chỉ định ID token để làm mới Cookie")
         async with self._semaphore:
             self._solve_inflight += 1
             page = None
@@ -3011,7 +3011,7 @@ class TokenBrowser:
                     "https://flow.google.com/projects", wait_until="domcontentloaded", timeout=30000
                 )
                 if urlparse(page.url).hostname != "flow.google.com" or not response or response.status != 200:
-                    raise RuntimeError("Flow 登录已失效，请重新同步 Google Cookies")
+                    raise RuntimeError("Phiên đăng nhập Flow đã hết hiệu lực, vui lòng đồng bộ lại Google Cookies")
                 email = await page.evaluate("(window.WIZ_global_data || {}).oPEP7c || ''")
                 cookies = [
                     cookie for cookie in await context.cookies()
@@ -3379,17 +3379,17 @@ class BrowserCaptchaService:
             instance = cls._instance
             if instance is not None:
                 if instance._closed:
-                    raise RuntimeError("Browser captcha service is closing")
+                    raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đang đóng")
                 return instance
 
             instance = cls(db)
             try:
                 await instance._load_browser_count()
                 if instance._closed:
-                    raise RuntimeError("Browser captcha service is closing")
+                    raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đang đóng")
                 await instance._ensure_idle_reaper()
                 if instance._closed:
-                    raise RuntimeError("Browser captcha service is closing")
+                    raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đang đóng")
             except BaseException:
                 instance._closed = True
                 if instance._idle_reaper_task:
@@ -3404,18 +3404,18 @@ class BrowserCaptchaService:
         """检查服务是否可用"""
         if DOCKER_HEADED_BLOCKED:
             raise RuntimeError(
-                "检测到 Docker 环境，默认禁用有头浏览器打码。"
-                "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true，并提供 DISPLAY/Xvfb。"
+                "Phát hiện môi trường Docker. Giải CAPTCHA bằng trình duyệt có giao diện bị tắt theo mặc định. "
+                "Để bật, đặt biến môi trường ALLOW_DOCKER_HEADED_CAPTCHA=true và cung cấp DISPLAY/Xvfb."
             )
         if IS_DOCKER and not os.environ.get("DISPLAY"):
             raise RuntimeError(
-                "Docker 有头浏览器打码已启用，但 DISPLAY 未设置。"
-                "请设置 DISPLAY（例如 :99）并启动 Xvfb。"
+                "Đã bật giải CAPTCHA bằng trình duyệt có giao diện trong Docker nhưng chưa đặt DISPLAY. "
+                "Vui lòng đặt DISPLAY (ví dụ :99) và khởi động Xvfb."
             )
         if not PLAYWRIGHT_AVAILABLE or async_playwright is None:
             raise RuntimeError(
-                "playwright 未安装或不可用。"
-                "请手动安装: pip install playwright && python -m playwright install chromium"
+                "Playwright chưa được cài đặt hoặc không khả dụng. "
+                "Vui lòng cài đặt thủ công: pip install playwright && python -m playwright install chromium"
             )
     
     async def _load_browser_count(self):
@@ -3765,7 +3765,7 @@ class BrowserCaptchaService:
         if not request:
             if candidate and candidate.token_id == token_id:
                 if self._slot_reservations.get(candidate.slot_id, 0):
-                    raise RuntimeError("Browser captcha request is already submitting")
+                    raise RuntimeError("Yêu cầu CAPTCHA trình duyệt đang được gửi")
                 await self._finish_request(candidate.ref, success=False)
             slot_id = await self._select_browser_id(
                 project_id,
@@ -3788,7 +3788,7 @@ class BrowserCaptchaService:
                 )
                 async with self._slot_condition:
                     if self._closed:
-                        raise RuntimeError("Browser captcha service is closed")
+                        raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đã đóng")
                     self._requests[request.ref] = request
                     request.owner.add_done_callback(request.owner_callback)
             except BaseException:
@@ -3823,7 +3823,7 @@ class BrowserCaptchaService:
         async with self._slot_condition:
             while True:
                 if self._closed:
-                    raise RuntimeError("Browser captcha service is closed")
+                    raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đã đóng")
                 now = time.monotonic()
                 for slot_id, state in self._slot_recovery.items():
                     if state.phase == "cooldown" and state.cooldown_until <= now:
@@ -3883,7 +3883,7 @@ class BrowserCaptchaService:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self._queue_timeouts += 1
-                    raise BrowserCaptchaQueueTimeout("Browser captcha queue wait timeout")
+                    raise BrowserCaptchaQueueTimeout("Hết thời gian chờ trong hàng đợi CAPTCHA trình duyệt")
                 wake_delays = [
                     state.cooldown_until - time.monotonic()
                     for state in self._slot_recovery.values()
@@ -3899,7 +3899,7 @@ class BrowserCaptchaService:
         """获取或创建指定 ID 的浏览器实例"""
         async with self._browsers_lock:
             if self._closed:
-                raise RuntimeError("Browser captcha service is closed")
+                raise RuntimeError("Dịch vụ CAPTCHA trình duyệt đã đóng")
             if browser_id not in self._browsers:
                 user_data_dir = os.path.join(
                     self.base_user_data_dir, f"browser_{browser_id}"
@@ -4000,7 +4000,7 @@ class BrowserCaptchaService:
     ) -> Dict[str, Any]:
         self._check_available()
         if not token_id:
-            raise ValueError("Cookie 刷新必须指定 Token ID")
+            raise ValueError("Phải chỉ định ID token để làm mới Cookie")
         token_proxy_url = await self._resolve_token_proxy_url(token_id)
         async with self._borrow_browser(project_id, token_id) as request:
             return await request.browser.refresh_google_cookies(
@@ -4247,7 +4247,7 @@ class BrowserCaptchaService:
                 type(self)._instance = None
             
     async def open_login_browser(self):
-        return {"success": False, "error": "Not implemented"}
+        return {"success": False, "error": "Chưa được triển khai"}
 
     async def create_browser_for_token(self, t, s=None):
         pass

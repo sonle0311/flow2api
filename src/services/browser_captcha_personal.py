@@ -856,6 +856,7 @@ _RUNTIME_ERROR_KEYWORDS = (
     "cannot find context with specified id",
     "websocket is not open",
     "websocket unavailable",
+    "websocket nodriver không khả dụng",
     "'nonetype' object has no attribute 'send'",
     '"nonetype" object has no attribute "send"',
     "no close frame received or sent",
@@ -1055,7 +1056,7 @@ def _patch_nodriver_connection_instance(connection_instance):
             self.mapper.pop(tx_id, None)
             if not transaction.done():
                 transaction.cancel()
-            raise ConnectionError("nodriver websocket unavailable after connect")
+            raise ConnectionError("WebSocket nodriver không khả dụng sau khi kết nối")
 
         send_task = asyncio.create_task(websocket.send(transaction.message))
         send_task.add_done_callback(
@@ -2538,17 +2539,17 @@ class BrowserCaptchaService:
         """检查服务是否可用"""
         if DOCKER_HEADED_BLOCKED:
             raise RuntimeError(
-                "检测到 Docker 环境，默认禁用内置浏览器打码。"
-                "如需启用请设置环境变量 ALLOW_DOCKER_HEADED_CAPTCHA=true。"
+                "Phát hiện môi trường Docker. Giải CAPTCHA bằng trình duyệt tích hợp bị tắt theo mặc định. "
+                "Để bật, đặt biến môi trường ALLOW_DOCKER_HEADED_CAPTCHA=true."
             )
         if self._requires_virtual_display() and not os.environ.get("DISPLAY"):
             raise RuntimeError(
-                "Docker 内置浏览器打码已启用，但 DISPLAY 未设置。"
-                "请设置 DISPLAY（例如 :99）并启动 Xorg/Xdummy 等虚拟显示。"
+                "Đã bật giải CAPTCHA bằng trình duyệt tích hợp trong Docker nhưng chưa đặt DISPLAY. "
+                "Vui lòng đặt DISPLAY (ví dụ :99) và khởi động màn hình ảo như Xorg/Xdummy."
             )
         if not NODRIVER_AVAILABLE or uc is None:
             raise RuntimeError(
-                "nodriver 未安装或不可用。请手动安装: pip install nodriver"
+                "nodriver chưa được cài đặt hoặc không khả dụng. Vui lòng cài đặt thủ công: pip install nodriver"
             )
 
     async def _run_with_timeout(self, awaitable, timeout_seconds: float, label: str):
@@ -2557,7 +2558,7 @@ class BrowserCaptchaService:
         try:
             return await asyncio.wait_for(awaitable, timeout=effective_timeout)
         except asyncio.TimeoutError as e:
-            raise TimeoutError(f"{label} 超时 ({effective_timeout:.1f}s)") from e
+            raise TimeoutError(f"{label} hết thời gian chờ ({effective_timeout:.1f} giây)") from e
 
     async def _wait_for_display_ready(
         self, display_value: str, timeout_seconds: float = 5.0
@@ -2583,7 +2584,7 @@ class BrowserCaptchaService:
             await asyncio.sleep(0.1)
 
         raise RuntimeError(
-            f"DISPLAY={display_value} 对应的 X display socket 未就绪: {socket_path}"
+            f"DISPLAY={display_value} có socket màn hình X chưa sẵn sàng: {socket_path}"
         )
 
     def _mark_browser_health(self, healthy: bool):
@@ -2674,7 +2675,7 @@ class BrowserCaptchaService:
             else ""
         )
         raise RuntimeError(
-            f"浏览器启动冷却中，请 {remaining_seconds:.1f}s 后重试{suffix}"
+            f"Trình duyệt đang chờ trước khi khởi động lại, vui lòng thử sau {remaining_seconds:.1f} giây{suffix}"
         )
 
     @staticmethod
@@ -6378,7 +6379,7 @@ class BrowserCaptchaService:
         """确保当前浏览器存在至少一个可复用的 page target。"""
         browser = self.browser
         if browser is None or getattr(browser, "stopped", False):
-            raise RuntimeError("browser runtime unavailable")
+            raise RuntimeError("Môi trường chạy trình duyệt không khả dụng")
 
         try:
             await browser.update_targets()
@@ -6447,7 +6448,7 @@ class BrowserCaptchaService:
     ):
         browser = self.browser
         if browser is None or getattr(browser, "stopped", False):
-            raise RuntimeError("browser runtime unavailable")
+            raise RuntimeError("Môi trường chạy trình duyệt không khả dụng")
 
         from nodriver import cdp
 
@@ -6524,7 +6525,7 @@ class BrowserCaptchaService:
                 f"target not found after create_target (target_id={target_id})"
             )
 
-        raise last_error or RuntimeError("failed to create browser target")
+        raise last_error or RuntimeError("Không thể tạo trang đích trình duyệt")
 
     async def _open_visible_browser_tab(
         self,
@@ -6626,7 +6627,7 @@ class BrowserCaptchaService:
         """通过 CDP 手动创建独立 browser context 与 target，绕过 nodriver.create_context 的 StopIteration 缺陷。"""
         browser = self.browser
         if browser is None or getattr(browser, "stopped", False):
-            raise RuntimeError("browser runtime unavailable")
+            raise RuntimeError("Môi trường chạy trình duyệt không khả dụng")
 
         timeout_seconds = create_timeout_seconds or self._navigation_timeout_seconds
         target_url = str(url or "").strip() or PERSONAL_COOKIE_PREBIND_URL
@@ -7432,7 +7433,7 @@ class BrowserCaptchaService:
         tab=None,
     ) -> int:
         if not self.browser:
-            raise RuntimeError("browser runtime unavailable")
+            raise RuntimeError("Môi trường chạy trình duyệt không khả dụng")
 
         cookie_params = self._build_cdp_cookie_params(browser_cookies)
         if not cookie_params:
@@ -7472,7 +7473,7 @@ class BrowserCaptchaService:
         browser_cookies = self._build_configured_browser_cookie_targets(cookie_text)
         if not browser_cookies:
             raise RuntimeError(
-                "browser startup cookie enabled but no valid cookie targets were produced"
+                "Đã bật Cookie khi khởi động trình duyệt nhưng không tạo được đích Cookie hợp lệ"
             )
 
         cookie_count = await self._set_browser_cookie_targets(
@@ -7484,7 +7485,7 @@ class BrowserCaptchaService:
         )
         if cookie_count <= 0:
             raise RuntimeError(
-                "browser startup cookie enabled but no valid cookie params were produced"
+                "Đã bật Cookie khi khởi động trình duyệt nhưng không tạo được tham số Cookie hợp lệ"
             )
 
         target_id = getattr(tab, "target_id", None)
@@ -9868,7 +9869,7 @@ class BrowserCaptchaService:
 
         source = response.content.decode("utf-8", errors="ignore").strip()
         if not source or "grecaptcha" not in source or "gstatic" not in source:
-            raise RuntimeError("bootstrap 内容校验失败")
+            raise RuntimeError("Xác minh nội dung bootstrap thất bại")
         return source
 
     async def _load_recaptcha_bootstrap_source(
@@ -9938,7 +9939,7 @@ class BrowserCaptchaService:
                 except Exception:
                     continue
 
-        raise RuntimeError(f"无法加载 reCAPTCHA bootstrap: {last_error or '未知错误'}")
+        raise RuntimeError(f"Không tải được bootstrap reCAPTCHA: {last_error or 'Lỗi không xác định'}")
 
     async def _inject_recaptcha_bootstrap_script(
         self,
@@ -10551,6 +10552,8 @@ class BrowserCaptchaService:
             keyword in error_lower
             for keyword in [
             "http error 500",
+            "lỗi http 500",
+            "lỗi 500/nội bộ",
             "public_error",
             "internal error",
             "reason=internal",
@@ -10577,6 +10580,7 @@ class BrowserCaptchaService:
             "name or service not known",
             "temporary failure in name resolution",
             "timed out",
+            "hết thời gian chờ",
             "timeout",
             "proxyerror",
             "proxy error",
@@ -11613,7 +11617,7 @@ class BrowserCaptchaService:
 
         editor = await tab.select(".ProseMirror", timeout=10)
         if editor is None:
-            raise RuntimeError("Flow prompt editor is unavailable")
+            raise RuntimeError("Trình soạn lời nhắc Flow không khả dụng")
         await editor.click()
         await editor.send_keys(prompt)
 
@@ -11750,20 +11754,20 @@ class BrowserCaptchaService:
             )
         except Exception as exc:
             raise NativeGenerationOutcomeUnknownError(
-                "personal StreamChat submission outcome is unknown"
+                "Chưa xác định được kết quả gửi StreamChat personal"
             ) from exc
         if not isinstance(result, dict):
-            raise RuntimeError("personal browser StreamChat returned an invalid payload")
+            raise RuntimeError("StreamChat của trình duyệt personal trả về dữ liệu không hợp lệ")
         status = int(result.get("status") or 0)
         text = str(result.get("text") or "")
         if status < 200 or status >= 300:
             raise RuntimeError(
-                f"personal browser StreamChat failed: HTTP {status}, body={text[:300]}"
+                f"StreamChat của trình duyệt personal thất bại: HTTP {status}, body={text[:300]}"
             )
         if "PUBLIC_ERROR_" in text:
             error_match = re.search(r"PUBLIC_ERROR_[A-Z_]+", text)
             raise RuntimeError(
-                "Flow StreamChat rejected: "
+                "Flow StreamChat từ chối yêu cầu: "
                 f"error={error_match.group(0) if error_match else 'UNKNOWN'}"
             )
         return {
@@ -11784,7 +11788,7 @@ class BrowserCaptchaService:
     ) -> Dict[str, Any]:
         normalized_session = str(session_id or "").strip()
         if not normalized_session:
-            raise RuntimeError("personal StreamChat session id is missing")
+            raise RuntimeError("Thiếu ID phiên StreamChat personal")
 
         async with self._resident_lock:
             resident_info = next(
@@ -11797,10 +11801,10 @@ class BrowserCaptchaService:
             )
 
         if resident_info is None or not resident_info.tab:
-            raise RuntimeError("personal StreamChat resident tab is unavailable")
+            raise RuntimeError("Tab thường trú của StreamChat personal không khả dụng")
         async with resident_info.solve_lock:
             if resident_info.last_harvest_session_id != normalized_session:
-                raise RuntimeError("personal StreamChat session is no longer active")
+                raise RuntimeError("Phiên StreamChat personal không còn hoạt động")
             return await self._submit_native_stream_chat_with_resident(
                 resident_info,
                 project_id=project_id,
@@ -11929,11 +11933,11 @@ class BrowserCaptchaService:
             await self._wait_for_document_ready(tab, retries=30, interval_seconds=0.5)
             await self._dismiss_native_page_overlays(tab, label=label)
             if not await self._wait_for_recaptcha(tab):
-                raise RuntimeError("native generation page recaptcha is not ready")
+                raise RuntimeError("reCAPTCHA trên trang tạo nội dung gốc chưa sẵn sàng")
             if not await self._wait_for_native_prompt_editor(tab, label=label):
-                raise RuntimeError("native generation prompt editor is not ready")
+                raise RuntimeError("Trình soạn lời nhắc trên trang tạo nội dung gốc chưa sẵn sàng")
             if not await self._install_native_generation_observer(tab):
-                raise RuntimeError("native generation observer is unavailable")
+                raise RuntimeError("Trình theo dõi tạo nội dung gốc không khả dụng")
             await self._submit_native_prompt(tab, prompt, label=label)
             submitted = True
 
@@ -11965,11 +11969,11 @@ class BrowserCaptchaService:
                 state = {}
             if not state.get("done"):
                 raise NativeGenerationOutcomeUnknownError(
-                    "native generation response timed out; outcome is unknown"
+                    "Hết thời gian chờ phản hồi tạo nội dung gốc; chưa xác định được kết quả"
                 )
             if state.get("error"):
                 raise NativeGenerationOutcomeUnknownError(
-                    f"native generation outcome is unknown: {state['error']}"
+                    f"Chưa xác định được kết quả tạo nội dung gốc: {state['error']}"
                 )
             request_body = str(state.get("requestBody") or "")
             harvest = self._parse_native_harvest_post_data(request_body)
@@ -11977,12 +11981,12 @@ class BrowserCaptchaService:
             response_text = str(state.get("responseText") or "")
             if status < 200 or status >= 300:
                 raise RuntimeError(
-                    f"native generation HTTP failed: status={status}, body={response_text[:240]}"
+                    f"Yêu cầu HTTP tạo nội dung gốc thất bại: status={status}, body={response_text[:240]}"
                 )
             if "PUBLIC_ERROR_" in response_text:
                 error_match = re.search(r"PUBLIC_ERROR_[A-Z_]+", response_text)
                 raise RuntimeError(
-                    "Flow StreamChat rejected: "
+                    "Flow StreamChat từ chối yêu cầu: "
                     f"error={error_match.group(0) if error_match else 'UNKNOWN'}"
                 )
             debug_logger.log_info(
@@ -12002,7 +12006,7 @@ class BrowserCaptchaService:
         except Exception as e:
             if submitted:
                 raise NativeGenerationOutcomeUnknownError(
-                    "native generation outcome is unknown"
+                    "Chưa xác định được kết quả tạo nội dung gốc"
                 ) from e
             debug_logger.log_warning(
                 f"[BrowserCaptcha] {label} 原生生成失败: "
@@ -12456,7 +12460,7 @@ class BrowserCaptchaService:
                 "current_ip_address": last_snapshot.get("current_ip_address") or "",
                 "page_title": last_snapshot.get("title") or "",
                 "page_url": last_snapshot.get("url") or "",
-                "error": last_snapshot.get("error") or "未在页面中读取到分数",
+                "error": last_snapshot.get("error") or "Không đọc được điểm từ trang",
             },
         }
 
@@ -14060,7 +14064,7 @@ class BrowserCaptchaService:
     ) -> Dict[str, Any]:
         """Export current Google/Flow Cookies from the reserved account context."""
         if not token_id:
-            raise ValueError("Cookie 刷新必须指定 Token ID")
+            raise ValueError("Phải chỉ định ID token để làm mới Cookie")
         self._mark_runtime_active()
         await self.initialize()
         slot_id, resident_info = await self._ensure_resident_tab(
@@ -14069,16 +14073,16 @@ class BrowserCaptchaService:
         consumed = False
         try:
             if not slot_id or not resident_info or not resident_info.tab:
-                raise RuntimeError("账号浏览器标签页不可用")
+                raise RuntimeError("Tab trình duyệt của tài khoản không khả dụng")
             async with resident_info.solve_lock:
                 await self._consume_resident_slot_reservation(slot_id, resident_info)
                 consumed = True
                 if not await self._apply_token_cookie_binding(
                     resident_info, token_id, label="cookie_refresh", acquire_lock=False
                 ):
-                    raise RuntimeError("账号浏览器 Cookie 绑定失败")
+                    raise RuntimeError("Liên kết Cookie trình duyệt của tài khoản thất bại")
                 if resident_info.token_id != int(token_id):
-                    raise RuntimeError("浏览器标签页绑定的 Token 不一致")
+                    raise RuntimeError("Token liên kết với tab trình duyệt không khớp")
                 resident_info.recaptcha_ready = False
                 tab = resident_info.tab
                 await self._tab_get(
@@ -14099,9 +14103,9 @@ class BrowserCaptchaService:
                         identity = None
                     await asyncio.sleep(0.3)
                 if not isinstance(identity, dict) or identity.get("ready") != "complete":
-                    raise TimeoutError("Flow Cookie 刷新页面加载超时")
+                    raise TimeoutError("Hết thời gian tải trang làm mới Flow Cookie")
                 if identity.get("host") != "flow.google.com" or not identity.get("email"):
-                    raise RuntimeError("Flow 登录已失效，请重新同步 Google Cookies")
+                    raise RuntimeError("Phiên đăng nhập Flow đã hết hiệu lực, vui lòng đồng bộ lại Google Cookies")
                 cookies = await self._get_browser_cookies(
                     label="cookie_refresh_export",
                     browser_context_id=resident_info.browser_context_id,
@@ -14255,7 +14259,7 @@ class BrowserCaptchaService:
                         await tab.sleep(0.5)
 
                     if not page_loaded:
-                        raise RuntimeError("自定义页面加载超时")
+                        raise RuntimeError("Hết thời gian tải trang tùy chỉnh")
 
                     if not custom_info.get("recaptcha_ready"):
                         recaptcha_ready = await self._wait_for_custom_recaptcha(
@@ -14264,7 +14268,7 @@ class BrowserCaptchaService:
                             enterprise=enterprise,
                         )
                         if not recaptcha_ready:
-                            raise RuntimeError("自定义 reCAPTCHA 无法加载")
+                            raise RuntimeError("Không tải được reCAPTCHA tùy chỉnh")
                         custom_info["recaptcha_ready"] = True
 
                     try:
@@ -14374,7 +14378,7 @@ class BrowserCaptchaService:
                         )
                         return token
 
-                    raise RuntimeError("自定义 token 获取失败（返回 null）")
+                    raise RuntimeError("Không lấy được token tùy chỉnh (trả về null)")
                 except Exception as e:
                     debug_logger.log_warning(
                         f"[BrowserCaptcha] [Custom] 尝试 {attempt + 1}/{max_retries} 失败: {str(e)}"
@@ -14427,7 +14431,7 @@ class BrowserCaptchaService:
             custom_info = self._custom_tabs.get(cache_key)
             tab = custom_info.get("tab") if isinstance(custom_info, dict) else None
             if tab is None:
-                raise RuntimeError("页面分数测试标签页不存在")
+                raise RuntimeError("Tab kiểm tra điểm trên trang không tồn tại")
             verify_payload = await self._verify_score_on_tab(tab, token, verify_url)
 
         return {
@@ -15577,7 +15581,7 @@ class _PersonalBrowserPoolService:
         acquire_started_at = time.monotonic()
         async with self._worker_dispatch_lock:
             if not self._workers:
-                raise RuntimeError("没有可用的浏览器实例")
+                raise RuntimeError("Không có phiên trình duyệt khả dụng")
             if len(self._workers) <= 1:
                 return 0, self._workers[0]
 
@@ -16065,7 +16069,7 @@ class _PersonalBrowserPoolService:
         await self._ensure_workers()
         worker_index = self._take_native_session_worker(session_id)
         if worker_index is None:
-            raise RuntimeError("personal StreamChat session worker is unavailable")
+            raise RuntimeError("Tiến trình xử lý phiên StreamChat personal không khả dụng")
         return await self._workers[worker_index].submit_native_stream_chat(
             project_id=project_id,
             prompt=prompt,
@@ -16135,7 +16139,7 @@ class _PersonalBrowserPoolService:
                 bucket_key, now_value=time.time()
             )
             raise TokenPoolTimeoutError(
-                "token 池等待超时且未命中可用 token "
+                "Hết thời gian chờ nhóm token và không tìm thấy token khả dụng "
                 f"(action_bucket={bucket_snapshot['action']}, project_id={project_id or '<empty>'}, "
                 f"token_id={token_id}, action={action}, ready={bucket_snapshot['ready_count']}, "
                 f"waiting={bucket_snapshot['waiting_requests']}, inflight={bucket_snapshot['refill_inflight']})"
@@ -16191,7 +16195,7 @@ class _PersonalBrowserPoolService:
                 bucket_key, now_value=time.time()
             )
             raise TokenPoolTimeoutError(
-                "token 池等待超时且未命中可用 token "
+                "Hết thời gian chờ nhóm token và không tìm thấy token khả dụng "
                 f"(action_bucket={bucket_snapshot['action']}, project_id={project_id or '<empty>'}, "
                 f"token_id={token_id}, action={action}, ready={bucket_snapshot['ready_count']}, "
                 f"waiting={bucket_snapshot['waiting_requests']}, inflight={bucket_snapshot['refill_inflight']})"
@@ -16295,7 +16299,7 @@ class _PersonalBrowserPoolService:
     async def open_login_window(self):
         await self._ensure_workers()
         if not self._workers:
-            raise RuntimeError("没有可用的浏览器实例")
+            raise RuntimeError("Không có phiên trình duyệt khả dụng")
         await self._workers[0].open_login_window()
 
     async def warmup_resident_tabs(
@@ -16362,7 +16366,7 @@ class _PersonalBrowserPoolService:
         self, project_id: Optional[str], *, token_id: int
     ) -> Dict[str, Any]:
         if not token_id:
-            raise ValueError("Cookie 刷新必须指定 Token ID")
+            raise ValueError("Phải chỉ định ID token để làm mới Cookie")
         await self._ensure_workers()
         excluded_indexes: set[int] = set()
         last_error = None
@@ -16386,7 +16390,7 @@ class _PersonalBrowserPoolService:
                 await self._release_worker_reservation(worker_index)
         if last_error is not None:
             raise last_error
-        raise RuntimeError("账号浏览器 Cookie 刷新失败：没有可用实例")
+        raise RuntimeError("Làm mới Cookie trình duyệt của tài khoản thất bại: không có phiên trình duyệt khả dụng")
 
     async def start_resident_mode(self, project_id: str):
         await self._ensure_workers()

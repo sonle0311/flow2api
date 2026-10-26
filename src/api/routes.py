@@ -101,7 +101,7 @@ def set_generation_handler(handler: GenerationHandler):
 def _ensure_generation_handler() -> GenerationHandler:
     if generation_handler is None:
         raise HTTPException(
-            status_code=500, detail="Generation handler not initialized"
+            status_code=500, detail="Bộ xử lý tạo nội dung chưa được khởi tạo"
         )
     return generation_handler
 
@@ -111,7 +111,7 @@ def _build_model_description(model_config: Dict[str, Any]) -> str:
     display_name = str(model_config.get("display_name") or "").strip()
     if display_name:
         return display_name
-    description = f"{model_config['type'].capitalize()} generation"
+    description = "Tạo ảnh" if model_config["type"] == "image" else "Tạo video"
     if model_config["type"] == "image":
         description += f" - {model_config['model_name']}"
     else:
@@ -162,7 +162,7 @@ def _build_gemini_model_resource(model_id: str, description: str) -> Dict[str, A
 def _decode_data_url(data_url: str) -> tuple[str, bytes]:
     match = DATA_URL_RE.match(data_url)
     if not match:
-        raise HTTPException(status_code=400, detail="Invalid data URL")
+        raise HTTPException(status_code=400, detail="URL dữ liệu không hợp lệ")
     return match.group("mime"), base64.b64decode(match.group("data"))
 
 
@@ -235,7 +235,7 @@ async def retrieve_image_data(url: str) -> Optional[bytes]:
 
 async def _load_image_bytes_from_uri(uri: str) -> bytes:
     if not uri:
-        raise HTTPException(status_code=400, detail="Image URI cannot be empty")
+        raise HTTPException(status_code=400, detail="URI ảnh không được để trống")
 
     if uri.startswith("data:image"):
         _, image_bytes = _decode_data_url(uri)
@@ -245,9 +245,9 @@ async def _load_image_bytes_from_uri(uri: str) -> bytes:
         image_bytes = await retrieve_image_data(uri)
         if image_bytes:
             return image_bytes
-        raise HTTPException(status_code=400, detail=f"Failed to load image from {uri}")
+        raise HTTPException(status_code=400, detail=f"Không thể tải ảnh từ {uri}")
 
-    raise HTTPException(status_code=400, detail=f"Unsupported image URI: {uri}")
+    raise HTTPException(status_code=400, detail=f"URI ảnh không được hỗ trợ: {uri}")
 
 
 def _coerce_gemini_contents(raw_contents: Optional[List[Any]]) -> List[GeminiContent]:
@@ -377,7 +377,7 @@ async def _extract_prompt_and_images_from_gemini_contents(
     contents: List[GeminiContent],
 ) -> tuple[str, List[bytes]]:
     if not contents:
-        raise HTTPException(status_code=400, detail="contents cannot be empty")
+        raise HTTPException(status_code=400, detail="contents không được để trống")
 
     target_content = next(
         (
@@ -401,7 +401,7 @@ async def _extract_prompt_and_images_from_gemini_contents(
             if not mime_type.startswith("image/"):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported inlineData mime type: {part.inlineData.mimeType}",
+                    detail=f"Loại MIME của inlineData không được hỗ trợ: {part.inlineData.mimeType}",
                 )
             images.append(base64.b64decode(part.inlineData.data))
         elif part.fileData is not None:
@@ -409,7 +409,7 @@ async def _extract_prompt_and_images_from_gemini_contents(
             if mime_type and not mime_type.startswith("image/"):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported fileData mime type: {part.fileData.mimeType}",
+                    detail=f"Loại MIME của fileData không được hỗ trợ: {part.fileData.mimeType}",
                 )
             images.append(await _load_image_bytes_from_uri(part.fileData.fileUri))
 
@@ -478,7 +478,7 @@ async def _normalize_openai_request(
         normalized.messages = request.messages
         return normalized
 
-    raise HTTPException(status_code=400, detail="Messages or contents cannot be empty")
+    raise HTTPException(status_code=400, detail="messages hoặc contents không được để trống")
 
 
 async def _normalize_gemini_request(
@@ -533,7 +533,7 @@ async def _collect_non_stream_result(
         result = chunk
 
     if result is None:
-        raise HTTPException(status_code=500, detail="Generation failed: No response")
+        raise HTTPException(status_code=500, detail="Tạo nội dung thất bại: không có phản hồi")
 
     return result
 
@@ -574,7 +574,7 @@ def _build_gemini_error_payload(status_code: int, message: str) -> Dict[str, Any
 def _build_gemini_error_response_from_handler(payload: Dict[str, Any]) -> JSONResponse:
     error = payload.get("error", {})
     status_code = _get_error_status_code(payload)
-    message = error.get("message", "Generation failed")
+    message = error.get("message", "Tạo nội dung thất bại")
     return JSONResponse(
         status_code=status_code,
         content=_build_gemini_error_payload(status_code, message),
@@ -792,7 +792,7 @@ async def _iterate_gemini_stream(
             payload = _parse_handler_result(payload_text)
             if "error" in payload:
                 yield (
-                    f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Generation failed')), ensure_ascii=False)}\n\n"
+                    f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Tạo nội dung thất bại')), ensure_ascii=False)}\n\n"
                 )
                 return
 
@@ -807,7 +807,7 @@ async def _iterate_gemini_stream(
         payload = _parse_handler_result(chunk)
         if "error" in payload:
             yield (
-                f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Generation failed')), ensure_ascii=False)}\n\n"
+                f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Tạo nội dung thất bại')), ensure_ascii=False)}\n\n"
             )
             return
 
@@ -873,7 +873,7 @@ async def get_gemini_model(model: str, api_key: str = Depends(verify_api_key_fle
     if not description:
         return JSONResponse(
             status_code=404,
-            content=_build_gemini_error_payload(404, f"Model not found: {model}"),
+            content=_build_gemini_error_payload(404, f"Không tìm thấy mô hình: {model}"),
         )
 
     return _build_gemini_model_resource(model, description)
@@ -889,7 +889,7 @@ async def create_chat_completion(
     try:
         normalized = await _normalize_openai_request(request)
         if not normalized.prompt:
-            raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+            raise HTTPException(status_code=400, detail="Lời nhắc không được để trống")
 
         request_base_url = _get_request_base_url(raw_request)
 
@@ -933,7 +933,7 @@ async def generate_content(
     try:
         normalized = await _normalize_gemini_request(model, request)
         if not normalized.prompt:
-            raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+            raise HTTPException(status_code=400, detail="Lời nhắc không được để trống")
 
         request_base_url = _get_request_base_url(raw_request)
 
@@ -980,7 +980,7 @@ async def stream_generate_content(
     try:
         normalized = await _normalize_gemini_request(model, request)
         if not normalized.prompt:
-            raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+            raise HTTPException(status_code=400, detail="Lời nhắc không được để trống")
 
         request_base_url = _get_request_base_url(raw_request)
 

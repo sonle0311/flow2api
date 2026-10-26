@@ -1,4 +1,4 @@
-console.log("[Flow2API] Captcha Worker injected.");
+console.log("[Flow2API] Đã nạp trình xử lý mã xác minh.");
 
 function getRecaptchaToken(action) {
     return new Promise((resolve, reject) => {
@@ -20,7 +20,7 @@ function getRecaptchaToken(action) {
                     const rScript = document.createElement('script');
                     rScript.src = "https://www.google.com/recaptcha/enterprise.js?render=6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV";
                     rScript.onload = () => { runCaptcha(); };
-                    rScript.onerror = () => { window.postMessage({type: 'reCAPTCHA_error', reqId: '${reqId}', error: 'Failed to load enterprise.js'}, '*'); };
+                    rScript.onerror = () => { window.postMessage({type: 'reCAPTCHA_error', reqId: '${reqId}', error: 'Không thể tải enterprise.js'}, '*'); };
                     document.head.appendChild(rScript);
                 }
             } catch (e) {
@@ -36,7 +36,7 @@ function getRecaptchaToken(action) {
                 if (event.data.type === 'reCAPTCHA_result') {
                     resolve(event.data.token);
                 } else {
-                    reject(new Error(event.data.error || "Unknown reCAPTCHA Error"));
+                    reject(new Error(event.data.error || "Lỗi reCAPTCHA không xác định"));
                 }
             }
         };
@@ -46,14 +46,14 @@ function getRecaptchaToken(action) {
         setTimeout(() => {
             window.removeEventListener("message", listener);
             script.remove();
-            reject(new Error("Timeout generating reCAPTCHA"));
+            reject(new Error("Hết thời gian tạo mã reCAPTCHA"));
         }, 15000);
     });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "get_token") {
-        console.log("[Flow2API] Generating token for action: " + message.action);
+        console.log("[Flow2API] Đang tạo mã cho tác vụ: " + message.action);
         getRecaptchaToken(message.action)
             .then(token => sendResponse({status: "success", token: token}))
             .catch(err => sendResponse({status: "error", error: err.message}));

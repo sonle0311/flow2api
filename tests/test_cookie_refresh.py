@@ -434,7 +434,7 @@ class TokenCookieRefreshTests(unittest.IsolatedAsyncioTestCase):
         # 不覆盖本地账号邮箱，也不保存别家账号的 Cookie
         self.assertEqual(latest.email, EMAIL)
         self.assertEqual(latest.google_cookies, COOKIES)
-        self.assertIn("已被 Token", latest.last_st_refresh_result)
+        self.assertIn("đang được token", latest.last_st_refresh_result)
 
     async def test_personal_network_failures_keep_account_active(self):
         self.flow._is_proxy_connection_error.return_value = False

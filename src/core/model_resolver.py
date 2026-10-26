@@ -755,14 +755,14 @@ def get_base_model_aliases() -> Dict[str, str]:
     for alias, base in IMAGE_BASE_MODELS.items():
         aspects = MODEL_SUPPORTED_ASPECTS.get(base, [])
         sizes = MODEL_SUPPORTED_SIZES.get(base, [])
-        desc_parts = [f"aspects: {', '.join(aspects)}"]
+        desc_parts = [f"Tỷ lệ khung hình: {', '.join(aspects)}"]
         if sizes:
-            desc_parts.append(f"sizes: {', '.join(sizes)}")
-        aliases[alias] = f"Image generation (alias) - {'; '.join(desc_parts)}"
+            desc_parts.append(f"Độ phân giải: {', '.join(sizes)}")
+        aliases[alias] = f"Tạo ảnh (bí danh) - {'; '.join(desc_parts)}"
 
     for alias in VIDEO_BASE_MODELS:
         aliases[alias] = (
-            "Video generation (alias) - supports landscape/portrait via generationConfig"
+            "Tạo video (bí danh) - hỗ trợ khung ngang/dọc qua generationConfig"
         )
 
     return aliases

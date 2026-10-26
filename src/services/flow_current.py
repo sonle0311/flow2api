@@ -154,7 +154,7 @@ class CurrentFlowClientMixin:
         )
         project_id = self._extract_flow_project_id(payload)
         if not project_id:
-            raise RuntimeError("Flow frontend createProject response missing projectId")
+            raise RuntimeError("Phản hồi createProject của giao diện Flow thiếu projectId")
         return project_id
 
     async def delete_project(
@@ -287,7 +287,7 @@ class CurrentFlowClientMixin:
     ) -> str:
         normalized_project_id = str(project_id or "").strip()
         if not normalized_project_id:
-            raise ValueError("Flow frontend image upload requires project_id")
+            raise ValueError("Tải ảnh lên qua giao diện Flow cần project_id")
         mime_type = self._detect_image_mime_type(image_bytes)
         extension = "png" if "png" in mime_type else "jpg"
         filename = f"flow2api_{uuid.uuid4().hex[:12]}.{extension}"
@@ -300,7 +300,7 @@ class CurrentFlowClientMixin:
             ),
         )
         if not recaptcha_token:
-            raise RuntimeError("Failed to obtain reCAPTCHA token for image upload")
+            raise RuntimeError("Không lấy được token reCAPTCHA để tải ảnh lên")
         try:
             context = self._frontend_project_context(
                 normalized_project_id,
@@ -337,7 +337,7 @@ class CurrentFlowClientMixin:
                 excluded={normalized_project_id},
             )
             if not media_id:
-                raise RuntimeError("Flow frontend upload response missing mediaId")
+                raise RuntimeError("Phản hồi tải lên của giao diện Flow thiếu mediaId")
             return media_id
         finally:
             await self._notify_browser_captcha_request_finished(browser_id)
@@ -361,7 +361,7 @@ class CurrentFlowClientMixin:
         if model_name == "NARWHAL":
             model_name = "BELUGA"
         if model_name not in self.CURRENT_IMAGE_MODELS:
-            raise ValueError(f"Unsupported Flow image model: {model_name}")
+            raise ValueError(f"Mô hình ảnh Flow không được hỗ trợ: {model_name}")
         await self._frontend_cookie(google_cookies, token_id)
         max_retries = max(1, int(self._get_runtime_config().flow_max_retries or 1))
         trace: Dict[str, Any] = {"max_retries": max_retries, "generation_attempts": []}
@@ -371,7 +371,7 @@ class CurrentFlowClientMixin:
             token_id=token_id,
         )
         if not str(cookie_storage or "").strip():
-            raise RuntimeError("Flow frontend generation requires Google session cookies")
+            raise RuntimeError("Tạo nội dung qua giao diện Flow cần Cookie phiên Google")
         for retry_attempt in range(max_retries):
             started_at = time.time()
             browser_id = None
@@ -393,7 +393,7 @@ class CurrentFlowClientMixin:
                 )
                 attempt["recaptcha_ok"] = bool(token)
                 if not token:
-                    raise RuntimeError("Failed to obtain reCAPTCHA token")
+                    raise RuntimeError("Không lấy được token reCAPTCHA")
                 if progress_callback:
                     await progress_callback("submitting_image", 48)
                 session_id = str(uuid.uuid4()).upper()
@@ -457,7 +457,7 @@ class CurrentFlowClientMixin:
                     )
                 else:
                     await self._notify_browser_captcha_request_finished(browser_id)
-        raise last_error or RuntimeError("Flow frontend image generation failed")
+        raise last_error or RuntimeError("Tạo ảnh qua giao diện Flow thất bại")
 
     async def upsample_image(
         self,
@@ -478,7 +478,7 @@ class CurrentFlowClientMixin:
             website_url=self._build_flow_frontend_project_page_url(project_id),
         )
         if not token:
-            raise RuntimeError("Failed to obtain reCAPTCHA token for image upsample")
+            raise RuntimeError("Không lấy được token reCAPTCHA để nâng độ phân giải ảnh")
         try:
             # The page sends enum values (verified by capturing the real UI request):
             # 1 = 2K, 2 = 4K.
@@ -540,7 +540,7 @@ class CurrentFlowClientMixin:
                     website_url=self._build_flow_frontend_project_page_url(project_id),
                 )
                 if not token:
-                    raise RuntimeError("Failed to obtain reCAPTCHA token")
+                    raise RuntimeError("Không lấy được token reCAPTCHA")
                 rpc_id, argument = self._build_frontend_video_generation_argument(
                     project_id=project_id,
                     prompt=prompt,
@@ -594,7 +594,7 @@ class CurrentFlowClientMixin:
                     raise
             finally:
                 await self._notify_browser_captcha_request_finished(browser_id)
-        raise last_error or RuntimeError("Flow frontend video generation failed")
+        raise last_error or RuntimeError("Tạo video qua giao diện Flow thất bại")
 
     async def generate_video_text(
         self,
@@ -800,7 +800,7 @@ class CurrentFlowClientMixin:
             if operation_id and operation_id not in operation_ids:
                 operation_ids.append(operation_id)
         if not operation_ids:
-            raise ValueError("视频状态查询缺少 Flow frontend operation ID")
+            raise ValueError("Truy vấn trạng thái video thiếu ID thao tác của giao diện Flow")
         first_operation = operations[0] if operations else {}
         project_id = str((first_operation or {}).get("projectId") or "").strip()
         payload = await self._current_rpc(
@@ -870,7 +870,7 @@ class CurrentFlowClientMixin:
         **_: Any,
     ) -> dict:
         raise RuntimeError(
-            "Current Flow frontend does not expose a media concatenation RPC"
+            "Giao diện Flow hiện tại không cung cấp RPC ghép media"
         )
 
     async def poll_concatenation_status(
@@ -883,7 +883,7 @@ class CurrentFlowClientMixin:
         token_id: Optional[int] = None,
     ) -> dict:
         raise RuntimeError(
-            "Current Flow frontend does not expose a media concatenation RPC"
+            "Giao diện Flow hiện tại không cung cấp RPC ghép media"
         )
 
     async def get_flow_creation_agent_session(
@@ -924,7 +924,7 @@ class CurrentFlowClientMixin:
 
     async def create_flow_entity(self, *args: Any, **kwargs: Any) -> str:
         raise RuntimeError(
-            "Flow entities are submitted through the current reference-media RPC"
+            "Các thực thể Flow được gửi qua RPC media tham chiếu hiện tại"
         )
 
     async def copy_project_media_to_character_slot(
@@ -933,7 +933,7 @@ class CurrentFlowClientMixin:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         raise RuntimeError(
-            "Character media is submitted through the current reference-media RPC"
+            "Media nhân vật được gửi qua RPC media tham chiếu hiện tại"
         )
 
     async def stream_flow_creation_agent(
@@ -942,7 +942,7 @@ class CurrentFlowClientMixin:
         **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         raise RuntimeError(
-            "Direct AI Sandbox agent streaming is retired; use current generation RPCs"
+            "Luồng tác nhân AI Sandbox trực tiếp đã ngừng hoạt động; hãy dùng RPC tạo nội dung hiện tại"
         )
 
     async def _warmup_flow_video_frontend_context(
@@ -951,12 +951,12 @@ class CurrentFlowClientMixin:
         return None
 
     async def _labs_trpc_get_with_st(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-        raise RuntimeError("The retired Labs tRPC transport is disabled")
+        raise RuntimeError("Giao thức truyền tải Labs tRPC cũ đã bị tắt")
 
     async def _labs_trpc_post_with_st(
         self, *args: Any, **kwargs: Any
     ) -> Dict[str, Any]:
-        raise RuntimeError("The retired Labs tRPC transport is disabled")
+        raise RuntimeError("Giao thức truyền tải Labs tRPC cũ đã bị tắt")
 
     async def _aisandbox_request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-        raise RuntimeError("The retired AI Sandbox REST transport is disabled")
+        raise RuntimeError("Giao thức truyền tải AI Sandbox REST cũ đã bị tắt")

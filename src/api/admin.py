@@ -198,14 +198,14 @@ def _validate_browser_proxy_url_local(proxy_url: str) -> tuple[bool, Optional[st
         r"^(socks5h?|socks5|http|https)://(?:([^:]+):([^@]+)@)?([^:]+):(\d+)$",
         normalized,
     ):
-        return False, "代理格式错误"
+        return False, "Định dạng proxy không hợp lệ"
     return True, None
 
 
 def _normalize_runtime_method(method: Optional[str]) -> str:
     normalized = (method or "").strip().lower()
     if normalized not in {"browser", "personal"}:
-        raise HTTPException(status_code=400, detail="Invalid runtime method")
+        raise HTTPException(status_code=400, detail="Phương thức môi trường chạy không hợp lệ")
     return normalized
 
 
@@ -215,12 +215,12 @@ async def _prepare_captcha_runtime(method: str):
         if runtime_method == "browser":
             start_runtime_prepare(
                 runtime_method,
-                "已开始准备有头浏览器打码运行环境，安装进度将自动显示。",
+                "Đã bắt đầu chuẩn bị môi trường giải CAPTCHA bằng trình duyệt có giao diện. Tiến trình cài đặt sẽ tự động hiển thị.",
             )
         else:
             start_runtime_prepare(
                 runtime_method,
-                "已开始准备内置浏览器打码运行环境，安装进度将自动显示。",
+                "Đã bắt đầu chuẩn bị môi trường giải CAPTCHA bằng trình duyệt tích hợp. Tiến trình cài đặt sẽ tự động hiển thị.",
             )
 
         if runtime_method == "browser":
@@ -235,7 +235,7 @@ async def _prepare_captcha_runtime(method: str):
                 await service.warmup_browser_slots()
             finish_runtime_prepare(
                 runtime_method,
-                "Chromium 浏览器环境已就绪，可以开始使用有头浏览器打码。",
+                "Môi trường Chromium đã sẵn sàng. Bạn có thể giải CAPTCHA bằng trình duyệt có giao diện.",
             )
             return
 
@@ -246,13 +246,13 @@ async def _prepare_captcha_runtime(method: str):
         service = await service_cls.get_instance(db)
         await service.reload_config()
         finish_runtime_prepare(
-            runtime_method, "内置浏览器环境已就绪，可以开始使用 personal 打码。"
+            runtime_method, "Môi trường trình duyệt tích hợp đã sẵn sàng. Bạn có thể giải CAPTCHA ở chế độ personal."
         )
     except HTTPException:
         raise
     except Exception as e:
         fail_runtime_prepare(
-            runtime_method, f"浏览器环境准备失败: {type(e).__name__}: {e}"
+            runtime_method, f"Chuẩn bị môi trường trình duyệt thất bại: {type(e).__name__}: {e}"
         )
     finally:
         captcha_runtime_prepare_tasks.pop(runtime_method, None)
@@ -263,7 +263,7 @@ def _schedule_captcha_runtime_prepare(method: str) -> bool:
     task = captcha_runtime_prepare_tasks.get(runtime_method)
     if task and not task.done():
         progress_runtime_prepare(
-            runtime_method, "浏览器环境准备任务仍在进行中，请稍候..."
+            runtime_method, "Môi trường trình duyệt vẫn đang được chuẩn bị, vui lòng chờ..."
         )
         return False
 
@@ -288,11 +288,11 @@ def _build_proxy_map(proxy_url: str) -> Optional[Dict[str, str]]:
 def _normalize_http_base_url(base_url: str) -> str:
     normalized = (base_url or "").strip().rstrip("/")
     if not normalized:
-        raise RuntimeError("远程打码服务地址未配置")
+        raise RuntimeError("Chưa cấu hình địa chỉ dịch vụ giải CAPTCHA từ xa")
 
     parsed = urlparse(normalized)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError("远程打码服务地址格式错误，必须是 http(s)://host[:port]")
+        raise RuntimeError("Địa chỉ dịch vụ giải CAPTCHA từ xa không hợp lệ, phải có dạng http(s)://host[:port]")
 
     return normalized
 
@@ -301,7 +301,7 @@ def _get_remote_browser_client_config() -> tuple[str, str, int]:
     base_url = _normalize_http_base_url(config.remote_browser_base_url)
     api_key = (config.remote_browser_api_key or "").strip()
     if not api_key:
-        raise RuntimeError("远程打码服务 API Key 未配置")
+        raise RuntimeError("Chưa cấu hình khóa API của dịch vụ giải CAPTCHA từ xa")
     timeout = max(5, int(config.remote_browser_timeout or 60))
     return base_url, api_key, timeout
 
@@ -371,7 +371,7 @@ async def _stdlib_json_http_request(
     try:
         status_code, text = await asyncio.to_thread(do_request)
     except Exception as e:
-        raise RuntimeError(f"远程打码服务请求失败: {e}") from e
+        raise RuntimeError(f"Yêu cầu đến dịch vụ giải CAPTCHA từ xa thất bại: {e}") from e
 
     return status_code, _parse_json_response_text(text), text
 
@@ -417,7 +417,7 @@ async def _sync_json_http_request(
                 **request_kwargs,
             )
     except Exception as e:
-        raise RuntimeError(f"远程打码服务请求失败: {e}") from e
+        raise RuntimeError(f"Yêu cầu đến dịch vụ giải CAPTCHA từ xa thất bại: {e}") from e
 
     status_code = int(getattr(response, "status_code", 0) or 0)
     text = response.text or ""
@@ -511,10 +511,10 @@ async def _solve_recaptcha_with_api_service(
         )
         return solution["gRecaptchaResponse"]
     else:
-        raise RuntimeError(f"不支持的打码方式: {method}")
+        raise RuntimeError(f"Phương thức giải CAPTCHA không được hỗ trợ: {method}")
 
     if not client_key:
-        raise RuntimeError(f"{method} API Key 未配置")
+        raise RuntimeError(f"{method} chưa được cấu hình khóa API")
 
     task: Dict[str, Any] = {
         "websiteURL": website_url,
@@ -550,7 +550,7 @@ async def _solve_recaptcha_with_api_service(
             payload = response.json()
             task_id = str(payload.get("taskId") or payload.get("id") or "")
             if response.status_code >= 400 or not task_id:
-                raise RuntimeError(f"captcharun 创建任务失败: {payload}")
+                raise RuntimeError(f"Không thể tạo tác vụ captcharun: {payload}")
             for _ in range(60):
                 await asyncio.sleep(3)
                 response = await session.get(
@@ -566,10 +566,10 @@ async def _solve_recaptcha_with_api_service(
                     token = solution.get("gRecaptchaResponse")
                     if token:
                         return str(token)
-                    raise RuntimeError("captcharun 返回结果中缺少 token")
+                    raise RuntimeError("Kết quả captcharun thiếu token")
                 if status in {"failed", "failure", "error", "cancelled"}:
-                    raise RuntimeError(f"captcharun 任务失败: {payload}")
-        raise RuntimeError("captcharun 获取 token 超时")
+                    raise RuntimeError(f"Tác vụ captcharun thất bại: {payload}")
+        raise RuntimeError("Hết thời gian chờ lấy token từ captcharun")
 
     create_url = f"{base_url.rstrip('/')}/createTask"
     get_url = f"{base_url.rstrip('/')}/getTaskResult"
@@ -605,7 +605,7 @@ async def _solve_recaptcha_with_api_service(
                 or create_json.get("errorMessage")
                 or str(create_json)
             )
-            raise RuntimeError(f"{method} createTask 失败: {error_desc}")
+            raise RuntimeError(f"{method} createTask thất bại: {error_desc}")
 
         for _ in range(40):
             poll_resp = await session.post(
@@ -621,7 +621,7 @@ async def _solve_recaptcha_with_api_service(
                 token = solution.get("gRecaptchaResponse") or solution.get("token")
                 if token:
                     return token
-                raise RuntimeError(f"{method} 返回结果缺少 token: {poll_json}")
+                raise RuntimeError(f"{method} trả về kết quả thiếu token: {poll_json}")
 
             if poll_json.get("errorId") not in (None, 0):
                 error_desc = (
@@ -629,11 +629,11 @@ async def _solve_recaptcha_with_api_service(
                     or poll_json.get("errorMessage")
                     or str(poll_json)
                 )
-                raise RuntimeError(f"{method} getTaskResult 失败: {error_desc}")
+                raise RuntimeError(f"{method} getTaskResult thất bại: {error_desc}")
 
             await asyncio.sleep(3)
 
-    raise RuntimeError(f"{method} 获取 token 超时")
+    raise RuntimeError(f"{method} đã hết thời gian chờ lấy token")
 
 
 async def _score_test_with_remote_browser_service(
@@ -673,11 +673,11 @@ async def _score_test_with_remote_browser_service(
         if not detail:
             detail = (response_text or "").strip()
         raise RuntimeError(
-            f"远程打码服务请求失败 (HTTP {status_code}): {detail or '未知错误'}"
+            f"Yêu cầu đến dịch vụ giải CAPTCHA từ xa thất bại (HTTP {status_code}): {detail or 'Lỗi không xác định'}"
         )
 
     if not isinstance(response_payload, dict):
-        raise RuntimeError("远程打码服务返回格式错误")
+        raise RuntimeError("Dịch vụ giải CAPTCHA từ xa trả về định dạng không hợp lệ")
     return response_payload
 
 
@@ -727,7 +727,7 @@ class AddTokenRequest(BaseModel):
     def validate_login_account(cls, value: str) -> str:
         normalized = value.strip().lower()
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
-            raise ValueError("login_account must be a valid email address")
+            raise ValueError("login_account phải là địa chỉ email hợp lệ")
         return normalized
 
 
@@ -757,7 +757,7 @@ class UpdateTokenRequest(BaseModel):
             return None
         normalized = value.strip().lower()
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
-            raise ValueError("login_account must be a valid email address")
+            raise ValueError("login_account phải là địa chỉ email hợp lệ")
         return normalized
 
 
@@ -848,7 +848,7 @@ class ImportTokenItem(BaseModel):
         if not normalized:
             return None
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
-            raise ValueError("login_account must be a valid email address")
+            raise ValueError("login_account phải là địa chỉ email hợp lệ")
         return normalized
 
 
@@ -863,7 +863,7 @@ class ImportTokensRequest(BaseModel):
             item.login_account for item in self.tokens if item.login_account
         ]
         if len(identities) != len(set(identities)):
-            raise ValueError("duplicate login_account entries are not allowed")
+            raise ValueError("Không được trùng lặp login_account")
         return self
 
 
@@ -888,7 +888,7 @@ class PluginTokenUpdateRequest(BaseModel):
     def validate_login_account(cls, value: str) -> str:
         normalized = value.strip().lower()
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
-            raise ValueError("login_account must be a valid email address")
+            raise ValueError("login_account phải là địa chỉ email hợp lệ")
         return normalized
 
 
@@ -910,9 +910,9 @@ async def verify_admin_token(request: Request, authorization: str = Header(None)
         return cookie_token
 
     if header_token or cookie_token:
-        raise HTTPException(status_code=401, detail="Invalid or expired admin token")
+        raise HTTPException(status_code=401, detail="Token quản trị không hợp lệ hoặc đã hết hạn")
 
-    raise HTTPException(status_code=401, detail="Missing authorization")
+    raise HTTPException(status_code=401, detail="Thiếu thông tin xác thực")
 
 
 def get_admin_token_from_cookie(request: Request) -> Optional[str]:
@@ -934,7 +934,7 @@ async def admin_login(request: LoginRequest, response: Response):
     admin_config = await db.get_admin_config()
 
     if not AuthManager.verify_admin(request.username, request.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Tên đăng nhập hoặc mật khẩu không đúng")
 
     # Generate independent session token
     session_token = f"admin-{secrets.token_urlsafe(32)}"
@@ -963,7 +963,7 @@ async def admin_logout(response: Response, token: str = Depends(verify_admin_tok
     """Admin logout - invalidate session token"""
     active_admin_tokens.discard(token)
     response.delete_cookie(ADMIN_SESSION_COOKIE_NAME, path="/")
-    return {"success": True, "message": "退出登录成功"}
+    return {"success": True, "message": "Đăng xuất thành công"}
 
 
 @router.post("/api/admin/change-password")
@@ -975,7 +975,7 @@ async def change_password(
 
     # Verify old password
     if not AuthManager.verify_admin(admin_config.username, request.old_password):
-        raise HTTPException(status_code=400, detail="旧密码错误")
+        raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng")
 
     # Update password and username in database
     update_params = {"password": request.new_password}
@@ -990,7 +990,7 @@ async def change_password(
     # 🔑 Invalidate all admin session tokens (force re-login for security)
     active_admin_tokens.clear()
 
-    return {"success": True, "message": "密码修改成功,请重新登录"}
+    return {"success": True, "message": "Đổi mật khẩu thành công, vui lòng đăng nhập lại"}
 
 
 # ========== Token Management ==========
@@ -1120,7 +1120,7 @@ async def add_token(request: AddTokenRequest, token: str = Depends(verify_admin_
 
         return {
             "success": True,
-            "message": "Token添加成功",
+            "message": "Thêm token thành công",
             "token": {
                 "id": new_token.id,
                 "email": new_token.email,
@@ -1132,7 +1132,7 @@ async def add_token(request: AddTokenRequest, token: str = Depends(verify_admin_
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"添加Token失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Thêm token thất bại: {str(e)}")
 
 
 @router.put("/api/tokens/{token_id}")
@@ -1207,7 +1207,7 @@ async def update_token(
                     video_concurrency=updated_token.video_concurrency,
                 )
 
-        return {"success": True, "message": "Token更新成功"}
+        return {"success": True, "message": "Cập nhật token thành công"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -1221,7 +1221,7 @@ async def delete_token(token_id: int, token: str = Depends(verify_admin_token)):
         await token_manager.delete_token(token_id)
         if concurrency_manager:
             await concurrency_manager.remove_token(token_id)
-        return {"success": True, "message": "Token删除成功"}
+        return {"success": True, "message": "Xóa token thành công"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1230,14 +1230,14 @@ async def delete_token(token_id: int, token: str = Depends(verify_admin_token)):
 async def enable_token(token_id: int, token: str = Depends(verify_admin_token)):
     """Enable token"""
     await token_manager.enable_token(token_id)
-    return {"success": True, "message": "Token已启用"}
+    return {"success": True, "message": "Đã bật token"}
 
 
 @router.post("/api/tokens/{token_id}/disable")
 async def disable_token(token_id: int, token: str = Depends(verify_admin_token)):
     """Disable token"""
     await token_manager.disable_token(token_id)
-    return {"success": True, "message": "Token已禁用"}
+    return {"success": True, "message": "Đã tắt token"}
 
 
 @router.post("/api/tokens/{token_id}/refresh-credits")
@@ -1245,9 +1245,9 @@ async def refresh_credits(token_id: int, token: str = Depends(verify_admin_token
     """刷新Token余额 🆕"""
     try:
         credits = await token_manager.refresh_credits(token_id)
-        return {"success": True, "message": "余额刷新成功", "credits": credits}
+        return {"success": True, "message": "Làm mới số dư thành công", "credits": credits}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"刷新余额失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Làm mới số dư thất bại: {str(e)}")
 
 
 @router.post("/api/tokens/{token_id}/refresh-at")
@@ -1268,7 +1268,7 @@ async def refresh_at(token_id: int, token: str = Depends(verify_admin_token)):
             # 获取更新后的token信息
             updated_token = await token_manager.get_token(token_id)
             
-            message = "Cookie 刷新并验证成功"
+            message = "Làm mới và xác minh Cookie thành công"
             
             debug_logger.log_info(f"[API] AT 刷新成功: token_id={token_id}")
             
@@ -1289,14 +1289,14 @@ async def refresh_at(token_id: int, token: str = Depends(verify_admin_token)):
             snapshot = await token_manager.get_token(token_id)
             error_detail = _sanitize_refresh_result(
                 snapshot.last_st_refresh_result if snapshot else None
-            ) or "Cookie 刷新失败，请重新同步完整的 Google Cookies"
+            ) or "Làm mới Cookie thất bại, vui lòng đồng bộ lại đầy đủ Google Cookies"
             
             raise HTTPException(status_code=500, detail=error_detail)
     except HTTPException:
         raise
     except Exception as e:
         debug_logger.log_error(f"[API] 刷新AT异常: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"刷新AT失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Làm mới AT thất bại: {str(e)}")
 
 
 @router.post("/api/tokens/st2at")
@@ -1309,7 +1309,7 @@ async def st_to_at(request: ST2ATRequest, token: str = Depends(verify_admin_toke
         )
         return {
             "success": True,
-            "message": "ST converted to AT successfully",
+            "message": "Chuyển đổi ST sang AT thành công",
             "access_token": result["access_token"],
             "email": result.get("user", {}).get("email"),
             "expires": result.get("expires"),
@@ -1458,18 +1458,18 @@ async def import_tokens(
                     added += 1
 
             except Exception as e:
-                errors.append(f"第{idx + 1}项 ({email or detected_email}): {str(e)}")
+                errors.append(f"Mục {idx + 1} ({email or detected_email}): {str(e)}")
 
         except Exception as e:
-            errors.append(f"第{idx + 1}项: {str(e)}")
+            errors.append(f"Mục {idx + 1}: {str(e)}")
 
     return {
         "success": not errors or added + updated > 0,
         "added": added,
         "updated": updated,
         "errors": errors if errors else None,
-        "message": f"导入完成: 新增 {added} 个, 更新 {updated} 个"
-        + (f", {len(errors)} 个失败" if errors else ""),
+        "message": f"Đã nhập xong: thêm {added}, cập nhật {updated}"
+        + (f", {len(errors)} mục thất bại" if errors else ""),
     }
 
 
@@ -1517,7 +1517,7 @@ async def update_proxy_config_alias(
         )
     except ValueError as e:
         return {"success": False, "message": str(e)}
-    return {"success": True, "message": "代理配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình proxy thành công"}
 
 
 @router.post("/api/config/proxy")
@@ -1534,7 +1534,7 @@ async def update_proxy_config(
         )
     except ValueError as e:
         return {"success": False, "message": str(e)}
-    return {"success": True, "message": "代理配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình proxy thành công"}
 
 
 @router.post("/api/proxy/test")
@@ -1548,7 +1548,7 @@ async def test_proxy_connectivity(
     timeout_seconds = max(5, min(timeout_seconds, 60))
 
     if not proxy_input:
-        return {"success": False, "message": "代理地址为空", "test_url": test_url}
+        return {"success": False, "message": "Địa chỉ proxy đang trống", "test_url": test_url}
 
     try:
         proxy_url = proxy_manager.normalize_proxy_url(proxy_input)
@@ -1575,9 +1575,9 @@ async def test_proxy_connectivity(
 
         return {
             "success": ok,
-            "message": "代理可用"
+            "message": "Proxy hoạt động bình thường"
             if ok
-            else f"代理可连通，但目标返回状态码 {status_code}",
+            else f"Kết nối proxy thành công nhưng trang đích trả về mã trạng thái {status_code}",
             "test_url": test_url,
             "final_url": final_url,
             "status_code": status_code,
@@ -1587,7 +1587,7 @@ async def test_proxy_connectivity(
         elapsed_ms = int((time.time() - start_time) * 1000)
         return {
             "success": False,
-            "message": f"代理测试失败: {str(e)}",
+            "message": f"Kiểm tra proxy thất bại: {str(e)}",
             "test_url": test_url,
             "elapsed_ms": elapsed_ms,
         }
@@ -1621,7 +1621,7 @@ async def update_generation_config(
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()
 
-    return {"success": True, "message": "生成配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình tạo nội dung thành công"}
 
 
 @router.get("/api/call-logic/config")
@@ -1653,14 +1653,14 @@ async def update_call_logic_config(
         request.call_mode if request.call_mode in ("default", "polling") else None
     )
     if call_mode is None:
-        raise HTTPException(status_code=400, detail="Invalid call_mode")
+        raise HTTPException(status_code=400, detail="Chế độ gọi call_mode không hợp lệ")
 
     await db.update_call_logic_config(call_mode)
     await db.reload_config_to_memory()
 
     return {
         "success": True,
-        "message": "Token轮询模式保存成功",
+        "message": "Lưu chế độ luân phiên token thành công",
         "config": {
             "call_mode": call_mode,
             "polling_mode_enabled": call_mode == "polling",
@@ -1760,7 +1760,7 @@ async def get_log_detail(log_id: int, token: str = Depends(verify_admin_token)):
     """Get single request log detail (payload loaded on demand)"""
     log = await db.get_log_detail(log_id)
     if not log:
-        raise HTTPException(status_code=404, detail="日志不存在")
+        raise HTTPException(status_code=404, detail="Nhật ký không tồn tại")
 
     error_summary = _extract_error_summary(log.get("response_body"))
 
@@ -1787,7 +1787,7 @@ async def clear_logs(token: str = Depends(verify_admin_token)):
     """Clear all logs"""
     try:
         await db.clear_all_logs()
-        return {"success": True, "message": "所有日志已清空"}
+        return {"success": True, "message": "Đã xóa toàn bộ nhật ký"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1813,7 +1813,7 @@ async def update_admin_config(
     # Update error_ban_threshold in database
     await db.update_admin_config(error_ban_threshold=request.error_ban_threshold)
 
-    return {"success": True, "message": "配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình thành công"}
 
 
 @router.post("/api/admin/password")
@@ -1835,7 +1835,7 @@ async def update_api_key(
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()
 
-    return {"success": True, "message": "API Key更新成功"}
+    return {"success": True, "message": "Cập nhật khóa API thành công"}
 
 
 @router.post("/api/admin/debug")
@@ -1848,15 +1848,15 @@ async def update_debug_config(
         # This ensures debug mode is automatically disabled on restart
         config.set_debug_enabled(request.enabled)
 
-        status = "enabled" if request.enabled else "disabled"
+        status = "bật" if request.enabled else "tắt"
         return {
             "success": True,
-            "message": f"Debug mode {status}",
+            "message": f"Chế độ gỡ lỗi đã {status}",
             "enabled": request.enabled,
         }
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to update debug config: {str(e)}"
+            status_code=500, detail=f"Cập nhật cấu hình gỡ lỗi thất bại: {str(e)}"
         )
 
 
@@ -1880,7 +1880,7 @@ async def update_generation_timeout(
     # 🔥 Hot reload: sync database config to memory
     await db.reload_config_to_memory()
 
-    return {"success": True, "message": "生成配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình tạo nội dung thành công"}
 
 
 # ========== AT Auto Refresh Config ==========
@@ -1908,7 +1908,7 @@ async def update_token_refresh_enabled(
     enabled = (request or {}).get("enabled")
     if enabled is not None:
         await db.update_token_refresh_config(enabled=bool(enabled))
-    return {"success": True, "message": "刷新配置已更新"}
+    return {"success": True, "message": "Đã cập nhật cấu hình làm mới"}
 
 
 @router.post("/api/token-refresh/config")
@@ -1980,7 +1980,7 @@ async def update_cache_enabled(request: dict, token: str = Depends(verify_admin_
     await db.reload_config_to_memory()
     await _sync_runtime_cache_config()
 
-    return {"success": True, "message": f"缓存已{'启用' if enabled else '禁用'}"}
+    return {"success": True, "message": f"Đã {'bật' if enabled else 'tắt'} bộ nhớ đệm"}
 
 
 @router.post("/api/cache/config")
@@ -1996,9 +1996,9 @@ async def update_cache_config_full(
         try:
             timeout = int(timeout)
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="缓存超时时间必须为整数")
+            raise HTTPException(status_code=400, detail="Thời gian hết hạn bộ nhớ đệm phải là số nguyên")
         if timeout < 0:
-            raise HTTPException(status_code=400, detail="缓存超时时间不能小于 0")
+            raise HTTPException(status_code=400, detail="Thời gian hết hạn bộ nhớ đệm không được nhỏ hơn 0")
 
     await db.update_cache_config(enabled=enabled, timeout=timeout, base_url=base_url)
 
@@ -2006,7 +2006,7 @@ async def update_cache_config_full(
     await db.reload_config_to_memory()
     await _sync_runtime_cache_config()
 
-    return {"success": True, "message": "缓存配置更新成功"}
+    return {"success": True, "message": "Cập nhật cấu hình bộ nhớ đệm thành công"}
 
 
 @router.post("/api/cache/base-url")
@@ -2021,7 +2021,7 @@ async def update_cache_base_url(
     await db.reload_config_to_memory()
     await _sync_runtime_cache_config()
 
-    return {"success": True, "message": "缓存Base URL更新成功"}
+    return {"success": True, "message": "Cập nhật URL gốc của bộ nhớ đệm thành công"}
 
 
 @router.post("/api/captcha/config")
@@ -2046,10 +2046,10 @@ async def update_captcha_config(
     twocaptcha_api_key = request.get("twocaptcha_api_key")
     twocaptcha_base_url = request.get("twocaptcha_base_url")
     if twocaptcha_api_key is not None and not isinstance(twocaptcha_api_key, str):
-        return {"success": False, "message": "2Captcha API Key 必须是字符串"}
+        return {"success": False, "message": "Khóa API 2Captcha phải là chuỗi"}
     if twocaptcha_base_url is not None:
         if not isinstance(twocaptcha_base_url, str):
-            return {"success": False, "message": "2Captcha API 地址必须是字符串"}
+            return {"success": False, "message": "Địa chỉ API 2Captcha phải là chuỗi"}
         try:
             twocaptcha_base_url = _normalize_http_base_url(twocaptcha_base_url.strip() or "https://api.2captcha.com")
         except RuntimeError as exc:
@@ -2083,11 +2083,11 @@ async def update_captcha_config(
     try:
         remote_browser_timeout = max(5, int(remote_browser_timeout or 60))
     except Exception:
-        return {"success": False, "message": "远程打码超时时间必须是整数秒"}
+        return {"success": False, "message": "Thời gian chờ giải CAPTCHA từ xa phải là số giây nguyên"}
     try:
         browser_count = max(1, min(20, int(browser_count or 1)))
     except Exception:
-        return {"success": False, "message": "浏览器实例数量必须是整数"}
+        return {"success": False, "message": "Số phiên trình duyệt phải là số nguyên"}
     try:
         browser_personal_fresh_restart_every_n_solves = max(
             0,
@@ -2098,18 +2098,18 @@ async def update_captcha_config(
             ),
         )
     except Exception:
-        return {"success": False, "message": "重置码数必须是整数，0 表示禁用"}
+        return {"success": False, "message": "Số lượt giải CAPTCHA trước khi đặt lại phải là số nguyên, 0 là tắt"}
 
     if captcha_method == "remote_browser":
         if not (remote_browser_base_url or "").strip():
             return {
                 "success": False,
-                "message": "remote_browser 模式需要配置远程打码服务地址",
+                "message": "Chế độ remote_browser cần có địa chỉ dịch vụ giải CAPTCHA từ xa",
             }
         if not (remote_browser_api_key or "").strip():
             return {
                 "success": False,
-                "message": "remote_browser 模式需要配置远程打码服务 API Key",
+                "message": "Chế độ remote_browser cần có khóa API của dịch vụ giải CAPTCHA từ xa",
             }
 
     await db.update_captcha_config(
@@ -2151,16 +2151,16 @@ async def update_captcha_config(
         runtime_prepare_started = _schedule_captcha_runtime_prepare(captcha_method)
         if captcha_method == "browser":
             runtime_prepare_message = (
-                "已开始准备有头浏览器打码运行环境，安装进度将自动显示。"
+                "Đã bắt đầu chuẩn bị môi trường giải CAPTCHA bằng trình duyệt có giao diện. Tiến trình cài đặt sẽ tự động hiển thị."
             )
         else:
             runtime_prepare_message = (
-                "已开始准备内置浏览器打码运行环境，安装进度将自动显示。"
+                "Đã bắt đầu chuẩn bị môi trường giải CAPTCHA bằng trình duyệt tích hợp. Tiến trình cài đặt sẽ tự động hiển thị."
             )
 
     return {
         "success": True,
-        "message": "验证码配置更新成功",
+        "message": "Cập nhật cấu hình CAPTCHA thành công",
         "runtime_prepare_started": runtime_prepare_started,
         "runtime_prepare_message": runtime_prepare_message,
         "runtime_status_method": runtime_status_method,
@@ -2341,7 +2341,7 @@ async def test_captcha_score(
             if isinstance(score_payload, dict):
                 if score_payload.get("success") is False:
                     raise RuntimeError(
-                        score_payload.get("message") or "远程打码分数测试失败"
+                        score_payload.get("message") or "Kiểm tra điểm CAPTCHA từ xa thất bại"
                     )
                 token_value = score_payload.get("token")
                 verify_elapsed_ms = int(score_payload.get("verify_elapsed_ms") or 0)
@@ -2375,7 +2375,7 @@ async def test_captcha_score(
                         token_elapsed_ms = int((time.time() - token_start) * 1000)
                     return {
                         "success": True,
-                        "message": "CapSolver不支持antcpt。已成功用 Google Labs 测试连通性",
+                        "message": "CapSolver không hỗ trợ antcpt. Đã kiểm tra kết nối thành công bằng Google Labs",
                         "captcha_method": captcha_method,
                         "website_url": "https://flow.google.com/",
                         "website_key": "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV",
@@ -2388,7 +2388,7 @@ async def test_captcha_score(
                         "verify_elapsed_ms": 0,
                         "verify_http_status": 200,
                         "score": 0.9,
-                        "verify_result": {"success": True, "message": "跳过分数校验"},
+                        "verify_result": {"success": True, "message": "Đã bỏ qua xác minh điểm"},
                         "verify_request_meta": {},
                         "browser_proxy_enabled": browser_proxy_enabled,
                         "browser_proxy_url": browser_proxy_url
@@ -2408,7 +2408,7 @@ async def test_captcha_score(
         else:
             return {
                 "success": False,
-                "message": f"当前打码方式不支持分数测试: {captcha_method}",
+                "message": f"Phương thức giải CAPTCHA hiện tại không hỗ trợ kiểm tra điểm: {captcha_method}",
                 "captcha_method": captcha_method,
                 "website_url": website_url,
                 "website_key": website_key,
@@ -2438,7 +2438,7 @@ async def test_captcha_score(
         if not token_value:
             return {
                 "success": False,
-                "message": "未获取到 reCAPTCHA token",
+                "message": "Không lấy được token reCAPTCHA",
                 "captcha_method": captcha_method,
                 "website_url": website_url,
                 "website_key": website_key,
@@ -2549,7 +2549,7 @@ async def test_captcha_score(
 
         return {
             "success": verify_success,
-            "message": "分数校验成功" if verify_success else "分数校验未通过",
+            "message": "Xác minh điểm thành công" if verify_success else "Xác minh điểm không đạt",
             "captcha_method": captcha_method,
             "website_url": website_url,
             "website_key": website_key,
@@ -2586,7 +2586,7 @@ async def test_captcha_score(
     except Exception as e:
         return {
             "success": False,
-            "message": f"分数测试失败: {str(e)}",
+            "message": f"Kiểm tra điểm thất bại: {str(e)}",
             "captcha_method": captcha_method,
             "website_url": website_url,
             "website_key": website_key,
@@ -2641,7 +2641,7 @@ async def _verify_plugin_connection_token(authorization: Optional[str]) -> None:
         or not provided_token
         or not secrets.compare_digest(provided_token, expected_token)
     ):
-        raise HTTPException(status_code=401, detail="Invalid connection token")
+        raise HTTPException(status_code=401, detail="Token kết nối không hợp lệ")
 
 
 @router.get("/api/plugin/config")
@@ -2708,7 +2708,7 @@ async def update_plugin_config(request: dict, token: str = Depends(verify_admin_
 
     return {
         "success": True,
-        "message": "插件配置更新成功",
+        "message": "Cập nhật cấu hình tiện ích thành công",
         "connection_token": connection_token,
         "auto_enable_on_update": auto_enable_on_update,
     }
@@ -2742,7 +2742,7 @@ async def plugin_update_token(
     except Exception as cookie_error:
         raise HTTPException(
             status_code=400,
-            detail=f"Google Cookie 验证失败：{str(cookie_error)}",
+            detail=f"Xác minh Google Cookie thất bại: {str(cookie_error)}",
         ) from cookie_error
 
     cookie_hash = hashlib.sha256(google_cookies.encode("utf-8")).hexdigest()[:32]
@@ -2772,19 +2772,19 @@ async def plugin_update_token(
                 await token_manager.enable_token(existing_token.id)
                 return {
                     "success": True,
-                    "message": f"Token updated and auto-enabled for {email}",
+                    "message": f"Đã cập nhật và tự động bật token cho {email}",
                     "action": "updated",
                     "auto_enabled": True,
                 }
 
             return {
                 "success": True,
-                "message": f"Token updated for {email}",
+                "message": f"Đã cập nhật token cho {email}",
                 "action": "updated",
             }
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Failed to update token: {str(e)}"
+                status_code=500, detail=f"Cập nhật token thất bại: {str(e)}"
             )
     else:
         # Add new token
@@ -2801,13 +2801,13 @@ async def plugin_update_token(
 
             return {
                 "success": True,
-                "message": f"Token added for {new_token.email}",
+                "message": f"Đã thêm token cho {new_token.email}",
                 "action": "added",
                 "token_id": new_token.id,
             }
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Failed to add token: {str(e)}"
+                status_code=500, detail=f"Thêm token thất bại: {str(e)}"
             )
 
 

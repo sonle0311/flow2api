@@ -179,24 +179,24 @@ class ProtocolLogin:
             if response_host and response_host != "flow.google.com":
                 return {
                     "success": False,
-                    "error": "Flow Cookie 已失效或不完整，页面已跳转到 Google 登录",
+                    "error": "Flow Cookie đã hết hiệu lực hoặc không đầy đủ, trang đã chuyển đến đăng nhập Google",
                 }
             if response.status_code != 200:
                 return {
                     "success": False,
-                    "error": f"Flow Cookie 验证失败: HTTP {response.status_code}",
+                    "error": f"Xác minh Flow Cookie thất bại: HTTP {response.status_code}",
                 }
             if "boq_labs-ai-sandbox-frontend_" not in (response.text or ""):
                 return {
                     "success": False,
-                    "error": "Flow Cookie 验证失败: 未加载当前前端",
+                    "error": "Xác minh Flow Cookie thất bại: không tải được giao diện hiện tại",
                 }
             validate_flow_cookie_storage(refreshed_cookies)
             account_email = extract_flow_account_email(response.text)
             if not account_email:
                 return {
                     "success": False,
-                    "error": "Flow 页面未返回已登录账号，请重新同步 Google Cookies",
+                    "error": "Trang Flow không trả về tài khoản đã đăng nhập, vui lòng đồng bộ lại Google Cookies",
                 }
             expected_email = str(email or "").strip()
             if (

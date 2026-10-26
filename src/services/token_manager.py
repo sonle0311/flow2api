@@ -286,7 +286,7 @@ class TokenManager:
         """Select the next project from the pool in round-robin order."""
         ordered_projects = self._sort_projects(projects)
         if not ordered_projects:
-            raise ValueError("No available projects for token")
+            raise ValueError("Không có dự án khả dụng cho token")
 
         if len(ordered_projects) == 1:
             return ordered_projects[0]
@@ -395,7 +395,7 @@ class TokenManager:
             st = f"frontend-{cookie_hash}"
         existing_token = await self.db.get_token_by_st(st) if st else None
         if existing_token:
-            raise ValueError(f"Token 已存在：{existing_token.email}")
+            raise ValueError(f"Token đã tồn tại: {existing_token.email}")
 
         debug_logger.log_info(f"[ADD_TOKEN] Converting ST to AT...")
         try:
@@ -427,7 +427,7 @@ class TokenManager:
             login_account = login_account or email
             existing_identity = await self.db.get_token_by_email(email) if email else None
             if existing_identity:
-                raise ValueError(f"账号已存在: {email}")
+                raise ValueError(f"Tài khoản đã tồn tại: {email}")
             name = user_info.get("name", email.split("@")[0] if email else "")
             at_expires = None
             if expires:
@@ -438,7 +438,7 @@ class TokenManager:
         except ValueError:
             raise
         except Exception as e:
-            raise ValueError(f"Google Cookie 验证失败：{str(e)}")
+            raise ValueError(f"Xác minh Google Cookie thất bại: {str(e)}")
 
         try:
             credits_result = await self.flow_client.get_credits(
@@ -488,7 +488,7 @@ class TokenManager:
                     )
                 )
             except Exception as e:
-                raise ValueError(f"创建项目失败：{str(e)}")
+                raise ValueError(f"Tạo dự án thất bại: {str(e)}")
 
         token = Token(
             st=st,
@@ -580,7 +580,7 @@ class TokenManager:
             normalized_email = email.strip().lower()
             existing_identity = await self.db.get_token_by_email(normalized_email)
             if existing_identity and existing_identity.id != token_id:
-                raise ValueError(f"账号已存在: {normalized_email}")
+                raise ValueError(f"Tài khoản đã tồn tại: {normalized_email}")
             update_fields["email"] = normalized_email
         if project_id is not None:
             update_fields["current_project_id"] = project_id
@@ -953,7 +953,7 @@ class TokenManager:
 
         cookies = str(google_cookies or "").strip()
         if not cookies:
-            raise ValueError("Google Cookies 不能为空")
+            raise ValueError("Google Cookies không được để trống")
         normalized_proxy = self._normalize_token_proxy_url(proxy_url)
         if not normalized_proxy:
             proxy_manager = getattr(self.flow_client, "proxy_manager", None)
@@ -969,11 +969,11 @@ class TokenManager:
         )
         if not result.get("success"):
             raise ValueError(
-                str(result.get("error") or "无法从 Cookie 获取 Flow 登录邮箱")
+                str(result.get("error") or "Không thể lấy email đăng nhập Flow từ Cookie")
             )
         email = str(result.get("email") or "").strip()
         if not email:
-            raise ValueError("无法从 Cookie 获取 Flow 登录邮箱")
+            raise ValueError("Không thể lấy email đăng nhập Flow từ Cookie")
         refreshed_cookies = str(result.get("google_cookies") or cookies).strip()
         session_token = str(result.get("session_token") or "").strip()
         if not session_token:
@@ -1015,15 +1015,15 @@ class TokenManager:
         observed_raw = str(result.get("email") or "").strip()
         observed_email = observed_raw.casefold()
         if not observed_email:
-            raise ValueError("Flow 页面未返回已登录账号，请重新同步 Google Cookies")
+            raise ValueError("Trang Flow không trả về tài khoản đã đăng nhập, vui lòng đồng bộ lại Google Cookies")
         # Cookie 对应的真实账号与本地记录不一致时，以 Flow 页面为准自动更正邮箱。
         identity_changed = observed_email != expected_email
         if identity_changed:
             conflict = await self.db.get_token_by_email(observed_raw)
             if conflict is not None and conflict.id != token_id:
                 raise ValueError(
-                    f"该 Cookie 对应账号 {observed_raw} 已被 Token {conflict.id} 使用，"
-                    f"请先处理重复账号"
+                    f"Tài khoản {observed_raw} của Cookie này đang được token {conflict.id} sử dụng, "
+                    f"vui lòng xử lý tài khoản trùng lặp trước"
                 )
             debug_logger.log_warning(
                 f"[COOKIE_REFRESH] Token {token_id}: 自动更新登录邮箱 "
@@ -1035,7 +1035,7 @@ class TokenManager:
         session = await self._st_to_at_for_token(candidate, new_st)
         new_at = str(session.get("access_token") or "").strip()
         if not new_at:
-            raise RuntimeError("Flow 登录态验证响应缺少 access_token")
+            raise RuntimeError("Phản hồi xác minh phiên đăng nhập Flow thiếu access_token")
         updates = {
             "google_cookies": cookies,
             "st": new_st,
@@ -1063,7 +1063,7 @@ class TokenManager:
             token_id, token.google_cookies, **updates
         )
         if not saved:
-            raise RuntimeError("Cookie 在刷新期间已更新，请使用最新登录态重试")
+            raise RuntimeError("Cookie đã được cập nhật trong lúc làm mới, vui lòng thử lại bằng phiên đăng nhập mới nhất")
         self._mark_at_valid(token_id)
         self._last_at_refresh_error.pop(token_id, None)
         record_token_refresh("st", "success")
@@ -1095,7 +1095,7 @@ class TokenManager:
                 token.google_cookies, proxy=proxy_url or None,
             )
             if not result.get("success"):
-                raise RuntimeError(str(result.get("error") or "Flow Cookie 刷新失败"))
+                raise RuntimeError(str(result.get("error") or "Làm mới Flow Cookie thất bại"))
             return await self._save_refreshed_cookies(token_id, token, result)
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
@@ -1241,7 +1241,7 @@ class TokenManager:
         async with project_lock:
             token = await self.db.get_token(token_id)
             if not token:
-                raise ValueError("Token not found")
+                raise ValueError("Không tìm thấy token")
 
             projects = [
                 project
@@ -1268,7 +1268,7 @@ class TokenManager:
                 )
                 return selected_project.project_id
             except Exception as e:
-                raise ValueError(f"Failed to prepare project pool: {str(e)}")
+                raise ValueError(f"Chuẩn bị nhóm dự án thất bại: {str(e)}")
 
     async def record_usage(self, token_id: int, is_video: bool = False):
         """Record token usage"""

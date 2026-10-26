@@ -276,14 +276,14 @@ class FileCache:
         """整理缓存错误，避免将底层命令异常直接暴露给用户。"""
         if isinstance(error, FileNotFoundError):
             missing_name = Path(getattr(error, "filename", "") or "curl").name or "curl"
-            return f"本机未安装 {missing_name}"
+            return f"Máy chưa cài đặt {missing_name}"
 
         message = str(error or "").strip()
         if not message:
-            return "未知错误"
+            return "Lỗi không xác định"
 
         if message.startswith("Failed to cache file:"):
-            message = message.split(":", 1)[1].strip() or "未知错误"
+            message = message.split(":", 1)[1].strip() or "Lỗi không xác định"
 
         return message
 
@@ -398,7 +398,7 @@ class FileCache:
                             f"File cached (wget): {filename} ({file_size} bytes)"
                         )
                         return filename
-                    raise Exception("Downloaded file is empty")
+                    raise Exception("Tệp tải xuống trống")
 
                 error_msg = (
                     result.stderr.decode("utf-8", errors="ignore")
@@ -459,14 +459,14 @@ class FileCache:
                             f"File cached (curl): {filename} ({file_size} bytes)"
                         )
                         return filename
-                    raise Exception("Downloaded file is empty")
+                    raise Exception("Tệp tải xuống trống")
 
                 error_msg = (
                     result.stderr.decode("utf-8", errors="ignore")
                     if result.stderr
                     else "Unknown error"
                 )
-                raise Exception(f"curl command failed: {error_msg}")
+                raise Exception(f"Lệnh curl thất bại: {error_msg}")
 
             except FileNotFoundError as e:
                 normalized_error = self._normalize_cache_error(e)
@@ -510,11 +510,11 @@ class FileCache:
             return filename
         except Exception as e:
             debug_logger.log_error(
-                error_message=f"Failed to cache base64 video: {str(e)}",
+                error_message=f"Không thể lưu video base64 vào bộ nhớ đệm: {str(e)}",
                 status_code=0,
                 response_text="",
             )
-            raise Exception(f"Failed to cache base64 video: {str(e)}")
+            raise Exception(f"Không thể lưu video base64 vào bộ nhớ đệm: {str(e)}")
 
     async def cache_base64_image(self, base64_data: str, resolution: str = "") -> str:
         """
@@ -547,11 +547,11 @@ class FileCache:
             return filename
         except Exception as e:
             debug_logger.log_error(
-                error_message=f"Failed to cache base64 image: {str(e)}",
+                error_message=f"Không thể lưu ảnh base64 vào bộ nhớ đệm: {str(e)}",
                 status_code=0,
                 response_text="",
             )
-            raise Exception(f"Failed to cache base64 image: {str(e)}")
+            raise Exception(f"Không thể lưu ảnh base64 vào bộ nhớ đệm: {str(e)}")
 
     def get_cache_path(self, filename: str) -> Path:
         """Get full path to cached file"""

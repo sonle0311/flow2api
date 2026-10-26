@@ -41,7 +41,7 @@ async def verify_api_key_header(
     """Verify API key from Authorization header"""
     api_key = credentials.credentials
     if not AuthManager.verify_api_key(api_key):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(status_code=401, detail="Khóa API không hợp lệ")
     return api_key
 
 
@@ -61,6 +61,6 @@ async def verify_api_key_flexible(
         api_key = key
 
     if not api_key or not AuthManager.verify_api_key(api_key):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(status_code=401, detail="Khóa API không hợp lệ")
 
     return api_key

@@ -68,7 +68,7 @@ class FlowClientUploadImageTests(unittest.IsolatedAsyncioTestCase):
     async def test_upload_requires_project_id(self):
         client = FlowClient(proxy_manager=None)
 
-        with self.assertRaisesRegex(ValueError, "requires project_id"):
+        with self.assertRaisesRegex(ValueError, "cần project_id"):
             await client.upload_image(
                 at="frontend-cookie",
                 image_bytes=JPEG_BYTES,

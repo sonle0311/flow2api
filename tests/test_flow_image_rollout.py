@@ -222,7 +222,7 @@ class ImageModelRolloutTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_retired_imagen_key_is_rejected_before_captcha(self):
-        with self.assertRaisesRegex(ValueError, "Unsupported Flow image model"):
+        with self.assertRaisesRegex(ValueError, "Mô hình ảnh Flow không được hỗ trợ"):
             await self.generate("IMAGEN_3_5")
         self.client._frontend_cookie.assert_not_awaited()
         self.client._get_recaptcha_token.assert_not_awaited()
