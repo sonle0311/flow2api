@@ -14,6 +14,8 @@ from typing import Dict, Any, Optional, List, Union, Callable, Awaitable
 from urllib.parse import quote, urljoin, urlparse
 import urllib.error
 import urllib.request
+from http.cookiejar import CookieJar
+from curl_cffi import CurlInfo, CurlOpt
 from curl_cffi.requests import AsyncSession
 from ..core.logger import debug_logger
 from ..core.config import (
@@ -27,11 +29,27 @@ from ..core.config import (
 )
 from .flow_current import CurrentFlowClientMixin
 from .flow_frontend import FlowFrontendMixin
+from .flow_cookies import FlowCookieJar
 
 try:
     import httpx
 except ImportError:
     httpx = None
+
+
+def _safe_updated_flow_cookies(owner, original) -> str:
+    """读取 Cookie 最新快照，缺失实现时安全降级。
+
+    历史报错：'FlowClient' object has no attribute 'get_updated_flow_cookies'
+    成因是自定义 flow_frontend 覆盖了上游新增的 Cookie 作用域方法。
+    """
+    getter = getattr(owner, "get_updated_flow_cookies", None)
+    if getter is None:
+        return str(original or "").strip()
+    try:
+        return getter(original)
+    except Exception:
+        return str(original or "").strip()
 
 
 class _FlowClientBase(FlowFrontendMixin):
@@ -683,6 +701,7 @@ class _FlowClientBase(FlowFrontendMixin):
         return_error_response: bool = False,
         redact_sensitive_logs: bool = False,
         impersonate: str = "chrome",
+        cookie_jar: Optional[CookieJar] = None,
     ) -> str:
         """执行原始文本请求（如 SSE），返回响应文本。"""
         fingerprint = self._request_fingerprint_ctx.get()
@@ -805,6 +824,14 @@ class _FlowClientBase(FlowFrontendMixin):
         ):
             headers["sec-ch-ua-mobile"] = inferred_fingerprint["sec_ch_ua_mobile"]
 
+        if cookie_jar is not None:
+            # The scoped jar is authoritative, including cookies deleted on retry.
+            headers.pop("Cookie", None)
+        if isinstance(cookie_jar, FlowCookieJar):
+            cookie_jar.add_runtime_cookies(
+                (fingerprint or {}).get("session_cookies"), url
+            )
+
         request_body_for_log = (
             "<redacted>"
             if redact_sensitive_logs
@@ -827,7 +854,17 @@ class _FlowClientBase(FlowFrontendMixin):
         start_time = time.time()
 
         try:
-            async with AsyncSession(trust_env=False) as session:
+            session_kwargs: Dict[str, Any] = {"trust_env": False}
+            if cookie_jar is not None:
+                session_kwargs.update(
+                    cookies=cookie_jar, curl_infos=[CurlInfo.COOKIELIST]
+                )
+            if isinstance(cookie_jar, FlowCookieJar):
+                extra = cookie_jar.extra_cookie_header(url)
+                session_kwargs.update(
+                    curl_options={CurlOpt.COOKIE: extra}, allow_redirects=not bool(extra)
+                )
+            async with AsyncSession(**session_kwargs) as session:
                 if method.upper() == "GET":
                     response = await session.get(
                         url,
@@ -848,6 +885,12 @@ class _FlowClientBase(FlowFrontendMixin):
                     else:
                         request_kwargs["json"] = json_data
                     response = await session.post(url, **request_kwargs)
+
+                if cookie_jar is not None:
+                    # 兼容自定义/旧版 flow_frontend：缺少该方法时跳过快照回写
+                    updater = getattr(self, "_update_flow_cookie_jar", None)
+                    if updater is not None:
+                        updater(cookie_jar, response)
 
                 duration_ms = (time.time() - start_time) * 1000
                 response_text = response.text
@@ -4600,6 +4643,7 @@ class _FlowClientBase(FlowFrontendMixin):
             cookie_storage = await self._resolve_flow_frontend_cookie_storage(
                 token_id=token_id
             )
+            cookie_storage = _safe_updated_flow_cookies(self, cookie_storage)
         except Exception as e:
             debug_logger.log_warning(
                 f"[reCAPTCHA {FLOW2API_TEAM_CAPTCHA_METHOD}] 读取账号 Cookie 失败: {e}"

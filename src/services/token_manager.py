@@ -77,6 +77,11 @@ class TokenManager:
         mode = (value or "session").strip().lower()
         return "protocol" if mode == "protocol" else "session"
 
+    def _latest_google_cookies(self, original: Optional[str]) -> str:
+        getter = getattr(self.flow_client, "get_updated_flow_cookies", None)
+        latest = getter(original) if callable(getter) else None
+        return latest if isinstance(latest, str) else (original or "")
+
     def _normalize_refresh_interval(self, value: Optional[int]) -> int:
         try:
             return max(1, int(value if value is not None else 30))
@@ -403,6 +408,7 @@ class TokenManager:
                 st,
                 google_cookies=google_cookies,
             )
+            google_cookies = result.get("google_cookies") or google_cookies
             at = result["access_token"]
             expires = result.get("expires")
             user_info = result.get("user", {})
@@ -490,6 +496,11 @@ class TokenManager:
             except Exception as e:
                 raise ValueError(f"创建项目失败：{str(e)}")
 
+        google_cookies = self._latest_google_cookies(google_cookies)
+        if google_cookies and st.startswith("frontend-"):
+            st = "frontend-" + hashlib.sha256(
+                google_cookies.encode("utf-8")
+            ).hexdigest()[:32]
         token = Token(
             st=st,
             at=at,
@@ -534,6 +545,15 @@ class TokenManager:
             )
             pooled_projects.append(new_project)
 
+        latest_cookies = self._latest_google_cookies(google_cookies)
+        if latest_cookies != token.google_cookies:
+            token.google_cookies = latest_cookies
+            if token.st.startswith("frontend-"):
+                token.st = "frontend-" + hashlib.sha256(
+                    latest_cookies.encode("utf-8")
+                ).hexdigest()[:32]
+            await self.db.update_token(token_id, google_cookies=latest_cookies, st=token.st)
+
         debug_logger.log_info(
             f"[ADD_TOKEN] Token added successfully (ID: {token_id}, Email: {email}, pooled_projects={len(pooled_projects)})"
         )
@@ -562,6 +582,7 @@ class TokenManager:
         proxy_url: Optional[str] = None,
         auto_refresh_enabled: Optional[bool] = None,
         refresh_interval_minutes: Optional[int] = None,
+        auto_enable_on_update: bool = True,
     ):
         """Update token (支持修改project_id和project_name)
 
@@ -621,7 +642,7 @@ class TokenManager:
 
         # 检查token是否因429被禁用，如果是且未过期，则清空429状态
         token = await self.db.get_token(token_id)
-        if credential_updated and token and not token.is_active:
+        if auto_enable_on_update and credential_updated and token and not token.is_active:
             debug_logger.log_info(
                 f"[UPDATE_TOKEN] Token {token_id} 已更新凭证，自动恢复为启用状态"
             )
@@ -881,31 +902,29 @@ class TokenManager:
                 except:
                     pass
 
-            # 更新数据库
-            await self.db.update_token(token_id, at=new_at, at_expires=new_at_expires)
-
-            debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT刷新成功")
-            debug_logger.log_info(f"  - 新过期时间: {new_at_expires}")
+            returned_cookies = result.get("google_cookies")
+            rotated_cookies = (
+                returned_cookies.strip() if isinstance(returned_cookies, str) else ""
+            )
+            verification_token = token
+            if rotated_cookies:
+                if token is None:
+                    raise RuntimeError("Token 不存在，无法保存刷新后的登录态")
+                verification_token = token.model_copy(
+                    update={"google_cookies": rotated_cookies, "at": new_at}
+                )
+            else:
+                # Legacy access-token refreshes do not return a Cookie snapshot.
+                await self.db.update_token(token_id, at=new_at, at_expires=new_at_expires)
 
             # 验证 AT 有效性：通过 get_credits 测试
+            credits_result = None
             try:
                 credits_result = await (
-                    self._get_credits_for_token(token, new_at)
-                    if token is not None
+                    self._get_credits_for_token(verification_token, new_at)
+                    if verification_token is not None
                     else self.flow_client.get_credits(new_at)
                 )
-                await self.db.update_token(
-                    token_id,
-                    credits=credits_result.get("credits", 0),
-                    user_paygate_tier=credits_result.get("userPaygateTier"),
-                )
-                self._mark_at_valid(token_id)
-                debug_logger.log_info(
-                    f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）"
-                )
-                self._last_at_refresh_error.pop(token_id, None)
-                record_token_refresh("at", "success")
-                return True
             except Exception as verify_err:
                 # AT 验证失败（可能返回 401），说明 ST 已过期
                 error_msg = str(verify_err)
@@ -923,9 +942,47 @@ class TokenManager:
                     debug_logger.log_warning(
                         f"[AT_REFRESH] Token {token_id}: AT 验证时发生非认证错误: {error_msg}"
                     )
-                    self._last_at_refresh_error.pop(token_id, None)
-                    record_token_refresh("at", "success")
-                    return True
+
+            if rotated_cookies:
+                from .browser_cookie_utils import validate_flow_cookie_storage
+
+                latest_cookies = self._latest_google_cookies(rotated_cookies)
+                validate_flow_cookie_storage(latest_cookies)
+                updates = {
+                    "at": new_at,
+                    "at_expires": new_at_expires,
+                    "google_cookies": latest_cookies,
+                    "st": "frontend-" + hashlib.sha256(
+                        latest_cookies.encode("utf-8")
+                    ).hexdigest()[:32],
+                }
+                validated = credits_result if credits_result is not None else result
+                if "credits" in validated:
+                    updates["credits"] = validated["credits"]
+                if "userPaygateTier" in validated:
+                    updates["user_paygate_tier"] = validated["userPaygateTier"]
+                saved = await self.db.update_token_if_cookie_matches(
+                    token_id, token.google_cookies, **updates
+                )
+                if not saved:
+                    raise RuntimeError("Cookie 在刷新期间已更新，请使用最新登录态重试")
+            elif credits_result is not None:
+                await self.db.update_token(
+                    token_id,
+                    credits=credits_result.get("credits", 0),
+                    user_paygate_tier=credits_result.get("userPaygateTier"),
+                )
+
+            if credits_result is not None:
+                self._mark_at_valid(token_id)
+                debug_logger.log_info(
+                    f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）"
+                )
+            debug_logger.log_info(f"[AT_REFRESH] Token {token_id}: AT刷新成功")
+            debug_logger.log_info(f"  - 新过期时间: {new_at_expires}")
+            self._last_at_refresh_error.pop(token_id, None)
+            record_token_refresh("at", "success")
+            return True
 
         except Exception as e:
             self._last_at_refresh_error[token_id] = f"{type(e).__name__}: {e}"
@@ -1036,6 +1093,8 @@ class TokenManager:
         new_at = str(session.get("access_token") or "").strip()
         if not new_at:
             raise RuntimeError("Flow 登录态验证响应缺少 access_token")
+        cookies = session.get("google_cookies") or cookies
+        new_st = "frontend-" + hashlib.sha256(cookies.encode("utf-8")).hexdigest()[:32]
         updates = {
             "google_cookies": cookies,
             "st": new_st,

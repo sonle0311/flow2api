@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .core.config import config
 from .core.database import Database
+from .core.i18n import I18nMiddleware
 from .core.monitoring import CONTENT_TYPE_LATEST, render_main_metrics
 from .services.flow_client import FlowClient
 from .services.proxy_manager import ProxyManager
@@ -286,6 +287,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(I18nMiddleware)
 
 # Include routers
 app.include_router(routes.router)
@@ -298,6 +300,11 @@ app.mount("/tmp", StaticFiles(directory=str(tmp_dir)), name="tmp")
 
 # HTML routes for frontend
 static_path = Path(__file__).parent.parent / "static"
+app.mount(
+    "/static/locales",
+    StaticFiles(directory=str(static_path / "locales")),
+    name="locales",
+)
 _STATIC_PAGE_NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",
@@ -307,6 +314,15 @@ _STATIC_PAGE_NO_CACHE_HEADERS = {
 
 def _static_page_response(file_path: Path) -> FileResponse:
     return FileResponse(str(file_path), headers=_STATIC_PAGE_NO_CACHE_HEADERS)
+
+
+@app.get("/static/i18n.js", include_in_schema=False)
+async def i18n_script():
+    return FileResponse(
+        str(static_path / "i18n.js"),
+        media_type="application/javascript",
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

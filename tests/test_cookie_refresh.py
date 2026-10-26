@@ -308,6 +308,114 @@ class TokenCookieRefreshTests(unittest.IsolatedAsyncioTestCase):
         self.login.stop()
         self.temp.cleanup()
 
+    async def test_validation_rotations_are_persisted_after_protocol_refresh(self):
+        import hashlib
+
+        final_cookies = NEW_COOKIES.replace("session-new", "session-validated")
+        self.flow.st_to_at.return_value["google_cookies"] = final_cookies
+        token = await self.db.get_token(self.token_id)
+
+        await self.manager._save_refreshed_cookies(
+            self.token_id, token, {"google_cookies": NEW_COOKIES, "email": EMAIL}
+        )
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, final_cookies)
+        self.assertEqual(
+            saved.st, "frontend-" + hashlib.sha256(final_cookies.encode()).hexdigest()[:32]
+        )
+
+    def prepare_at_fallback(self):
+        self.flow.FRONTEND_ACCESS_TOKEN = "flow-frontend-cookie"
+        self.flow.st_to_at.return_value["google_cookies"] = NEW_COOKIES
+        self.flow.get_credits = AsyncMock(
+            return_value={"credits": 42, "userPaygateTier": "PAYGATE_TIER_ONE"}
+        )
+
+    async def test_scheduled_fallback_saves_rotated_cookies(self):
+        import hashlib
+
+        self.prepare_at_fallback()
+        await self.db.update_token(self.token_id, at="flow-frontend-cookie")
+        with patch.object(self.manager, "_try_refresh_st", AsyncMock(return_value=None)):
+            self.assertTrue(await self.manager._refresh_at_inner(self.token_id))
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, NEW_COOKIES)
+        self.assertEqual(
+            saved.st, "frontend-" + hashlib.sha256(NEW_COOKIES.encode()).hexdigest()[:32]
+        )
+        self.assertEqual(saved.last_st_refresh_result, "success")
+
+    async def test_fallback_verifies_and_saves_the_latest_cookie_snapshot(self):
+        self.prepare_at_fallback()
+        final_cookies = NEW_COOKIES.replace("session-new", "session-final")
+        self.flow.get_updated_flow_cookies.side_effect = (
+            lambda original: final_cookies if original == NEW_COOKIES else original
+        )
+
+        self.assertTrue(await self.manager._do_refresh_at(self.token_id, "frontend-old"))
+
+        self.assertEqual(
+            self.flow.get_credits.call_args.kwargs["google_cookies"], NEW_COOKIES
+        )
+        self.assertEqual(
+            (await self.db.get_token(self.token_id)).google_cookies, final_cookies
+        )
+
+    async def test_fallback_cannot_overwrite_a_concurrent_plugin_push(self):
+        self.prepare_at_fallback()
+
+        async def push_during_verification(*args, **kwargs):
+            await self.db.update_token(
+                self.token_id,
+                google_cookies="newer-plugin-push",
+                st="newer-st",
+                at="newer-at",
+            )
+            return {"credits": 42}
+
+        self.flow.get_credits.side_effect = push_during_verification
+
+        self.assertFalse(await self.manager._do_refresh_at(self.token_id, "frontend-old"))
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, "newer-plugin-push")
+        self.assertEqual(saved.st, "newer-st")
+        self.assertEqual(saved.at, "newer-at")
+
+    async def test_fallback_auth_rejection_does_not_save_candidate_credentials(self):
+        self.prepare_at_fallback()
+        self.flow.get_credits.side_effect = RuntimeError("rpc=nzlxg, code=401")
+
+        self.assertFalse(await self.manager._do_refresh_at(self.token_id, "frontend-old"))
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, COOKIES)
+        self.assertEqual(saved.st, "frontend-old")
+        self.assertEqual(saved.at, "old-at")
+
+    async def test_fallback_network_error_keeps_the_authenticated_cookie_snapshot(self):
+        self.prepare_at_fallback()
+        self.flow.get_credits.side_effect = TimeoutError("connection timed out")
+
+        self.assertTrue(await self.manager._do_refresh_at(self.token_id, "frontend-old"))
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, NEW_COOKIES)
+        self.assertEqual(saved.at, "flow-frontend-cookie")
+
+    async def test_legacy_at_refresh_preserves_cookie_and_session_fields(self):
+        self.flow.st_to_at.return_value = {"access_token": "legacy-at"}
+        self.flow.get_credits = AsyncMock(return_value={"credits": 42})
+
+        self.assertTrue(await self.manager._do_refresh_at(self.token_id, "frontend-old"))
+
+        saved = await self.db.get_token(self.token_id)
+        self.assertEqual(saved.google_cookies, COOKIES)
+        self.assertEqual(saved.st, "frontend-old")
+        self.assertEqual(saved.at, "legacy-at")
+
     async def test_manual_refresh_saves_cookies_and_validates_new_snapshot(self):
         self.assertTrue(await self.manager.refresh_cookies(self.token_id))
         latest = await self.db.get_token(self.token_id)

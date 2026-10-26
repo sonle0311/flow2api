@@ -15,6 +15,7 @@ from src.core.config import (
     normalize_captcha_method,
 )
 from src.services.flow_client import FlowClient
+from src.services.flow_cookies import FlowCookieJar
 
 
 PROXY = "http://user:pass@host:10000"
@@ -183,6 +184,31 @@ class TeamCaptchaSolveTests(unittest.IsolatedAsyncioTestCase):
         flow = FlowClient.__new__(FlowClient)
         flow._resolve_flow_frontend_cookie_storage = AsyncMock(return_value="")
         self.assertEqual(await flow._build_team_captcha_cookie_map(None), {})
+
+    async def test_team_cookie_map_uses_current_flow_snapshot(self):
+        flow = FlowClient.__new__(FlowClient)
+        original = "SID=account; OSID=old-session"
+        flow._resolve_flow_frontend_cookie_storage = AsyncMock(return_value=original)
+        flow._remember_flow_cookies(
+            original, FlowCookieJar("SID=account; OSID=rotated-session")
+        )
+
+        cookie_map = await flow._build_team_captcha_cookie_map(7)
+
+        self.assertEqual(cookie_map, {"SID": "account", "OSID": "rotated-session"})
+
+    async def test_team_cookie_map_does_not_reuse_another_accounts_snapshot(self):
+        flow = FlowClient.__new__(FlowClient)
+        flow._remember_flow_cookies(
+            "SID=first; OSID=old-first", FlowCookieJar("SID=first; OSID=new-first")
+        )
+        flow._resolve_flow_frontend_cookie_storage = AsyncMock(
+            return_value="SID=second; OSID=second-session"
+        )
+
+        cookie_map = await flow._build_team_captcha_cookie_map(8)
+
+        self.assertEqual(cookie_map, {"SID": "second", "OSID": "second-session"})
 
     async def test_supported_api_method_set_includes_team(self):
         from src.api import admin as admin_mod
