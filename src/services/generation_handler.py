@@ -1832,7 +1832,7 @@ class GenerationHandler:
                 debug_logger.log_warning(
                     f"[GENERATION] 生成未成功，不扣次数: {error_msg}"
                 )
-                if token:
+                if token and self._should_count_token_error(error_msg):
                     await self.token_manager.record_error(token.id)
                 duration = time.time() - start_time
                 record_generation_result(generation_type, "failed", duration)
@@ -1999,10 +1999,10 @@ class GenerationHandler:
         else:
             return "没有可用的Token进行视频生成。所有Token都处于禁用、冷却、配额耗尽或已过期状态。"
 
-    def _should_count_token_error(self, error: Exception) -> bool:
+    def _should_count_token_error(self, error: Exception | str) -> bool:
         """判断失败是否应计入 token 连续错误。
 
-        reCAPTCHA 获取失败、验证码供应商错误、打码资源不足等问题通常不是账号本身异常；
+        内容或音频过滤、reCAPTCHA 获取失败、验证码供应商错误等不是账号本身异常；
         若将其纳入连续错误，会在回归测试或代理波动时把 token 自动打成 inactive。
         """
         error_text = str(error or "").strip().lower()
@@ -2015,6 +2015,10 @@ class GenerationHandler:
             "recaptcha 验证失败",
             "recaptcha 错误",
             "public_error_unusual_activity",
+            "public_error_danger_filter",
+            "public_error_minor",
+            "public_error_audio_filtered",
+            "public_error_sexual",
             "too much traffic",
             "error_no_slot_available",
             "打码服务资源不足",
@@ -3236,8 +3240,8 @@ class GenerationHandler:
                         checked_operations, f"{error_message} (code: {error_code})"
                     )
                     
-                    # 返回友好的错误消息，提示用户重试
-                    friendly_error = f"视频生成失败: {error_message}，请重试"
+                    # 保留上游拒绝原因，不把内容过滤描述为需要重复提交的错误。
+                    friendly_error = f"视频生成失败: {error_message}"
                     self._mark_generation_failed(generation_result, friendly_error)
                     if stream:
                         yield self._create_stream_chunk(f"错误: {friendly_error}\n")
