@@ -26,6 +26,11 @@ from src.core.i18n import I18nMiddleware, negotiate_language, translate_message
         ("en;q=0,zh;q=0.5", "zh-CN"),
         ("fr-FR,en;q=invalid", "zh-CN"),
         ("en;q=2,zh-CN", "zh-CN"),
+        ("vi-VN,vi;q=0.9,en;q=0.8", "vi"),
+        ("vi;q=0.2,en;q=0.9", "en"),
+        ("en;q=0.2,vi-VN;q=0.9", "vi"),
+        ("vi;q=0,zh;q=0.5", "zh-CN"),
+        ("vi;q=invalid", "zh-CN"),
     ],
 )
 def test_language_negotiation(header, expected):
@@ -36,14 +41,15 @@ def test_catalogs_have_matching_keys_and_interpolation_parameters():
     root = Path(__file__).resolve().parents[1] / "static" / "locales"
     for path in [*root.glob("*.json"), root.parents[1] / "extension" / "locales.json"]:
         catalog = json.loads(path.read_text(encoding="utf-8"))
-        assert catalog["zh-CN"].keys() == catalog["en"].keys(), path.name
-        for language in ("zh-CN", "en"):
+        assert catalog["zh-CN"].keys() == catalog["en"].keys() == catalog["vi"].keys(), path.name
+        for language in ("zh-CN", "en", "vi"):
             for key, translation in catalog[language].items():
                 assert sorted(re.findall(r"\{\w+\}", key)) == sorted(
                     re.findall(r"\{\w+\}", translation)
                 ), (path.name, language, key)
-        for key, translation in catalog["en"].items():
-            assert not re.search(r"[\u4e00-\u9fff]", translation), (path.name, key)
+        for language in ("en", "vi"):
+            for key, translation in catalog[language].items():
+                assert not re.search(r"[\u4e00-\u9fff]", translation), (path.name, language, key)
 
 
 def test_translation_preserves_interpolated_values_and_unknown_diagnostics():
@@ -82,7 +88,8 @@ def test_nested_errors_translate_without_changing_other_parameters():
 
 @pytest.mark.parametrize("path", ["/v1/models", "/v1beta/models", "/models"])
 @pytest.mark.parametrize(
-    ("language", "message"), [("en", "Invalid API key"), ("zh-CN", "API Key 无效")]
+    ("language", "message"),
+    [("en", "Invalid API key"), ("zh-CN", "API Key 无效"), ("vi", "API Key không hợp lệ")],
 )
 def test_model_list_aliases_localize_authentication_errors(path, language, message):
     app = FastAPI()
@@ -103,6 +110,26 @@ def test_model_list_aliases_localize_authentication_errors(path, language, messa
             assert response.json() == {"detail": message}
             assert response.headers["content-language"] == language
             assert "Accept-Language" in response.headers["vary"]
+
+    asyncio.run(check())
+
+
+def test_vietnamese_api_preserves_user_data():
+    app = FastAPI()
+    app.add_middleware(I18nMiddleware)
+
+    @app.get("/api/vietnamese")
+    async def message():
+        return {"message": "Token已启用", "data": {"message": "Token已启用"}, "remark": "保存"}
+
+    async def check():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+        ) as client:
+            response = await client.get("/api/vietnamese", headers={"Accept-Language": "en;q=0.2,vi-VN;q=0.9"})
+        catalog = json.loads((Path(__file__).resolve().parents[1] / "static/locales/backend.json").read_text(encoding="utf-8"))
+        assert response.headers["content-language"] == "vi"
+        assert response.json() == {"message": catalog["vi"]["Token已启用"], "data": {"message": "Token已启用"}, "remark": "保存"}
 
     asyncio.run(check())
 

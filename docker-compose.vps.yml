@@ -1,0 +1,45 @@
+name: flow2api-vps
+
+services:
+  flow2api-vps:
+    init: true
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile.vps
+    image: flow2api:vps
+    ports:
+      - "${FLOW2API_BIND_ADDRESS:-127.0.0.1}:${FLOW2API_PORT:-8000}:8000"
+    volumes:
+      - flow2api-vps-data:/app/data
+      - flow2api-vps-tmp:/app/tmp
+    environment:
+      FLOW2API_INITIAL_ADMIN_USERNAME: ${FLOW2API_INITIAL_ADMIN_USERNAME:-admin}
+      FLOW2API_INITIAL_ADMIN_PASSWORD: ${FLOW2API_INITIAL_ADMIN_PASSWORD:?Run the VPS setup script to generate initial credentials}
+      FLOW2API_INITIAL_API_KEY: ${FLOW2API_INITIAL_API_KEY:?Run the VPS setup script to generate initial credentials}
+      FLOW2API_DESKTOP_ENABLED: "true"
+      FLOW2API_NOVNC_ROOT: /usr/share/novnc
+      FLOW2API_CHROME_SANDBOX: "true"
+      FORWARDED_ALLOW_IPS: ${FLOW2API_TRUSTED_PROXY_IPS:-127.0.0.1}
+      DISPLAY: :99
+      XVFB_SCREEN: ${XVFB_SCREEN:-1440x900x24}
+      ALLOW_DOCKER_HEADED_CAPTCHA: "true"
+    # Playwright's published Docker seccomp profile permits Chrome user
+    # namespaces while retaining an explicit syscall allow list.
+    # Source: https://github.com/microsoft/playwright/blob/main/utils/docker/seccomp_profile.json
+    # Upstream license: Apache-2.0. No privileged mode or extra capabilities.
+    security_opt:
+      - seccomp=./docker/seccomp.chrome.json
+    shm_size: "2gb"
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  flow2api-vps-data:
+  flow2api-vps-tmp:

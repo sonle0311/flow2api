@@ -124,7 +124,7 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
 </head>
 <body>
 <div class="container">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><select data-language-select aria-label="Language" style="padding:6px 10px;border-radius:6px;border:1px solid #2a2b3a;background:#1a1b26;color:#e1e1e6;"><option value="zh-CN">中文</option><option value="en">English</option></select></div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><select data-language-select aria-label="Language" style="padding:6px 10px;border-radius:6px;border:1px solid #2a2b3a;background:#1a1b26;color:#e1e1e6;"><option value="zh-CN">中文</option><option value="en">English</option><option value="vi">Tiếng Việt</option></select></div>
   <h1><span data-i18n="🧪 Flow2API 模型测试">🧪 Flow2API 模型测试</span></h1>
   <p class="subtitle"><span data-i18n="选择模型，输入提示词，测试生成效果">选择模型，输入提示词，测试生成效果</span></p>
 
@@ -176,15 +176,28 @@ const STATE = { selectedModel: null, modelConfig: null, images: [], generating: 
     I18n.ready.then(() => {
 
 // Model categories for sidebar
-const MODEL_CATEGORIES = {
-  "Gemini 3.1 Flash 图片": { filter: m => m.startsWith("gemini-3.1-flash-image") },
-  "Nano Banana 2 Lite 图片": { filter: m => m.startsWith("gemini-3.1-flash-lite-image") },
-  "Gemini 3.0 Pro 图片": { filter: m => m.startsWith("gemini-3.0-pro-image") },
-  "Veo 3.1 文生视频 (T2V)": { filter: m => m.startsWith("veo_3_1_t2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 图生视频 (I2V)": { filter: m => m.startsWith("veo_3_1_i2v") && !m.includes("4k") && !m.includes("1080p") },
-  "Veo 3.1 多图视频 (R2V)": { filter: m => m.startsWith("veo_3_1_r2v") && !m.includes("4k") && !m.includes("1080p") },
-  "视频放大 (Upsample)": { filter: m => !m.includes("image") && (m.includes("4k") || m.includes("1080p")) },
-};
+const MODEL_CATEGORIES = [
+  "Gemini 3.1 Flash 图片", "Nano Banana 2 Lite 图片", "Gemini 3.0 Pro 图片",
+  "Veo 3.1 文生视频 (T2V)", "Veo 3.1 图生视频 (I2V)", "Veo 3.1 多图视频 (R2V)",
+  "Omni 视频", "视频续写 (Extend)", "视频放大 (Upsample)", "其他图片模型", "其他视频模型",
+];
+
+function getModelCategory(modelId) {
+  const id = modelId.toLowerCase();
+  if (getModelType(id) === 'image') {
+    if (id.startsWith('gemini-3.1-flash-lite-image')) return 'Nano Banana 2 Lite 图片';
+    if (id.startsWith('gemini-3.1-flash-image')) return 'Gemini 3.1 Flash 图片';
+    if (id.startsWith('gemini-3.0-pro-image')) return 'Gemini 3.0 Pro 图片';
+    return '其他图片模型';
+  }
+  if (id.includes('4k') || id.includes('1080p')) return '视频放大 (Upsample)';
+  if (/^omni(?:[_.-]|$)/.test(id)) return 'Omni 视频';
+  if (id.includes('extend')) return '视频续写 (Extend)';
+  if (id.includes('i2v') || id.includes('interpolation')) return 'Veo 3.1 图生视频 (I2V)';
+  if (id.includes('r2v')) return 'Veo 3.1 多图视频 (R2V)';
+  if (/^veo(?:_|-)/.test(id)) return 'Veo 3.1 文生视频 (T2V)';
+  return '其他视频模型';
+}
 
 const FALLBACK_MODELS = {
   "gemini-3.1-flash-image": "Image generation (alias) - aspects: landscape, portrait, square, four-three, three-four; sizes: 2k, 4k",
@@ -315,7 +328,7 @@ function renderSidebarFallback() {
 }
 
 function getModelType(modelId) {
-  if (modelId.includes("image")) return "image";
+  if (modelId.toLowerCase().includes("image")) return "image";
   return "video";
 }
 
@@ -323,12 +336,13 @@ function getModelMeta(modelId) {
   // Determine supports_images, min/max from model name patterns
   const isI2V = modelId.includes("i2v");
   const isR2V = modelId.includes("r2v");
-  const isT2V = modelId.includes("t2v");
   const isImage = getModelType(modelId) === "image";
 
   if (isImage) return { type: "image", supportsImages: true, minImages: 0, maxImages: 5 };
-  if (isI2V) return { type: "video", supportsImages: true, minImages: 1, maxImages: 2 };
-  if (isR2V) return { type: "video", supportsImages: true, minImages: 0, maxImages: 3 };
+  if (modelId.includes('interpolation')) return { type: 'video', supportsImages: true, minImages: 2, maxImages: 2 };
+  if (isI2V) return { type: "video", supportsImages: true, minImages: 1, maxImages: modelId.includes('i2v_lite') ? 1 : 2 };
+  if (isR2V) return { type: "video", supportsImages: true, minImages: modelId.startsWith('veo-') ? 1 : 0, maxImages: 3 };
+  if (/^omni(?:[_.-]|$)/i.test(modelId)) return { type: 'video', supportsImages: true, minImages: 0, maxImages: 3 };
   return { type: "video", supportsImages: false, minImages: 0, maxImages: 0 };
 }
 
@@ -342,8 +356,8 @@ function renderSidebar() {
     return;
   }
 
-  for (const [catName, catDef] of Object.entries(MODEL_CATEGORIES)) {
-    const models = modelIds.filter(catDef.filter);
+  for (const catName of MODEL_CATEGORIES) {
+    const models = modelIds.filter(modelId => getModelCategory(modelId) === catName);
     if (models.length === 0) continue;
 
     const section = document.createElement("div");
@@ -365,7 +379,12 @@ function renderSidebar() {
 
       const type = getModelType(modelId);
       const shortName = modelId.replace("gemini-3.1-flash-image-", "").replace("gemini-3.1-flash-lite-image-", "").replace("gemini-3.0-pro-image-", "");
-      item.innerHTML = `<span>${shortName}</span><span class="model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}">${type === 'image' ? I18n.t("图片") : I18n.t("视频")}</span>`;
+      const name = document.createElement('span');
+      name.textContent = shortName;
+      const tag = document.createElement('span');
+      tag.className = `model-tag ${type === 'image' ? 'tag-image' : 'tag-video'}`;
+      tag.textContent = I18n.t(type === 'image' ? '图片' : '视频');
+      item.append(name, tag);
       item.onclick = () => selectModel(modelId);
       list.appendChild(item);
     });

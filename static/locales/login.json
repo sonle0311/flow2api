@@ -22,5 +22,17 @@
     "登录中...": "Signing in...",
     "登录失败": "Sign-in failed",
     "网络错误,请稍后重试": "Network error. Please try again later."
+  },
+  "vi": {
+    "登录 - Flow2API": "Đăng nhập - Flow2API",
+    "管理员控制台": "Bảng điều khiển quản trị",
+    "账户": "Tài khoản",
+    "请输入账户": "Nhập tài khoản",
+    "密码": "Mật khẩu",
+    "请输入密码": "Nhập mật khẩu",
+    "登录": "Đăng nhập",
+    "登录中...": "Đang đăng nhập...",
+    "登录失败": "Đăng nhập thất bại",
+    "网络错误,请稍后重试": "Lỗi mạng, vui lòng thử lại sau."
   }
 }

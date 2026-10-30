@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 
-SUPPORTED_LANGUAGES = ("zh-CN", "en")
+SUPPORTED_LANGUAGES = ("zh-CN", "en", "vi")
 
 
 def negotiate_language(header: str = "") -> str:
@@ -28,6 +28,8 @@ def negotiate_language(header: str = "") -> str:
             choices.append((quality, -index, "zh-CN"))
         elif language == "en" or language.startswith("en-"):
             choices.append((quality, -index, "en"))
+        elif language == "vi" or language.startswith("vi-"):
+            choices.append((quality, -index, "vi"))
     return max(choices)[2] if choices else "zh-CN"
 
 

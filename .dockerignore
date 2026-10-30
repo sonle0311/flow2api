@@ -12,6 +12,8 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+backups/
+backup/
 downloads/
 eggs/
 .eggs/
@@ -45,11 +47,21 @@ ENV/
 .DS_Store
 
 # Project specific
+data/
+tmp/
+browser_data/
+browser_data_rt/
+dist/
+config/setting.toml
+config/setting_warp.toml
 data/*.db
 data/*.db-journal
 tmp/*
 logs/*
+logs.txt
 *.log
+*.db*
+*.sqlite*
 
 # Docker
 Dockerfile

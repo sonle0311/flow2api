@@ -36,5 +36,24 @@
     "保存失败：{error}": "Unable to save settings: {error}",
     "已保存，后台连接会自动重连。": "Settings saved. The background connection will reconnect automatically.",
     "语言偏好保存失败：{error}": "Unable to save language preference: {error}"
+  },
+  "vi": {
+    "Flow2API Captcha Worker Settings": "Cài đặt trình xử lý CAPTCHA Flow2API",
+    "界面语言": "Ngôn ngữ giao diện",
+    "给当前浏览器实例设置一个独立的路由键，Flow2API 后端就能把对应账号的验证码请求固定发到这个实例。": "Đặt khóa định tuyến riêng cho phiên trình duyệt hiện tại để Flow2API gửi yêu cầu CAPTCHA của tài khoản tương ứng đến đúng phiên này.",
+    "Route Key": "Khóa định tuyến",
+    "Client Label": "Tên phiên trình duyệt",
+    "WebSocket URL": "Địa chỉ WebSocket",
+    "例如 9223": "Ví dụ: 9223",
+    "例如 browser-9223": "Ví dụ: browser-9223",
+    "管理后台里的 API Key": "Khóa API trong bảng quản trị",
+    "保存": "Lưu",
+    "管理台 token 里填写同样的": "Điền cùng một",
+    "，比如 9223 对 9223。后端会使用 API Key 校验 WebSocket 连接。": " trong cài đặt Token, ví dụ cả hai đều là 9223. Máy chủ dùng khóa API để xác thực kết nối WebSocket.",
+    "WebSocket URL 必须以 ws:// 或 wss:// 开头。": "Địa chỉ WebSocket phải bắt đầu bằng ws:// hoặc wss://.",
+    "请填写 Flow2API API Key。": "Vui lòng nhập khóa API Flow2API.",
+    "保存失败：{error}": "Không thể lưu cài đặt: {error}",
+    "已保存，后台连接会自动重连。": "Đã lưu. Kết nối nền sẽ tự động kết nối lại.",
+    "语言偏好保存失败：{error}": "Không thể lưu ngôn ngữ ưu tiên: {error}"
   }
 }

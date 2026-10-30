@@ -47,6 +47,7 @@
 - 🎬 **文生视频** / **图生视频**
 - 🎞️ **首尾帧视频**
 - 🔄 **Cookie 自动刷新** - 定时刷新完整 Google/Flow Cookie 并验证登录态，支持 browser/personal 浏览器兜底；登录失效后需重新同步 Cookie
+- 🌐 **独立浏览器登录** - 尚未添加账号时，点击列表顶部「通过浏览器添加账号」，只需输入邮箱即可创建等待登录的账号并打开浏览器，无需先导入 Cookie；验证成功前账号保持停用。已有账号可在账号行点击「登录浏览器」，再选择「打开浏览器登录」。系统使用普通 Chrome（或 Edge）在运行 Flow2API 的机器上打开独立账号窗口，登录过程不由 Playwright/CDP 控制。用户自行完成 Google/Flow 登录后关闭该窗口，系统随后在后台验证账号身份和 Flow 会话并同步 Cookie，并仅在此次交互登录成功时恢复账号。每个账号使用独立的持久化 profile，重启后可继续使用，与验证码服务配置无关。后台同步遵循全局会话自动检查、账号自动刷新开关及账号刷新周期；「停止浏览器同步」关闭窗口并保留 profile。Google 撤销会话或要求验证时，仍需再次手动登录。远程服务器需要可操作的桌面环境；Docker 可使用已有的有头/虚拟显示部署方式。
 - 📊 **余额显示** - 实时查询和显示 VideoFX Credits
 - 🚀 **负载均衡** - 多 Token 轮询和并发控制
 - 🌐 **代理支持** - 支持 HTTP/SOCKS5 代理
@@ -54,6 +55,8 @@
 - 🎨 **图片生成连续对话**
 - 🧩 **Gemini 官方请求体兼容** - 支持 `generateContent` / `streamGenerateContent`、`systemInstruction`、`contents.parts.text/inlineData/fileData`
 - ✅ **Gemini 官方格式已实测出图** - 已使用真实 Token 验证 `/models/{model}:generateContent` 可正常返回官方 `candidates[].content.parts[].inlineData`
+
+手动浏览器登录完成后，请关闭该账号专用 profile 的全部浏览器窗口，系统才会开始验证和同步。此登录方式仅支持不含用户名和密码的代理；带认证的代理会返回明确提示。
 
 ## 🚀 快速开始
 
@@ -100,6 +103,12 @@ docker-compose -f docker-compose.proxy.yml up -d
 # 查看日志
 docker-compose -f docker-compose.proxy.yml logs -f
 ```
+
+#### Linux VPS：普通 Chrome 登录和 noVNC 桌面
+
+已提供独立的 `Dockerfile.vps` 与 `docker-compose.vps.yml`，使用非 root Chrome、Xvfb 和经管理会话验证的 noVNC。首次运行 `bash docker/setup-vps.sh` 自动生成初始凭据并构建本地代码。默认只监听 VPS 本机 `127.0.0.1:8000`，通过 SSH tunnel 访问，无需公开 VNC 端口。仅支持 Linux amd64/x86_64。
+
+详细越南语部署、首次登录、更新和备份步骤：[VPS 部署指南](docs/DEPLOY_VPS_VI.md)。Chrome 窗口在 VPS 上打开；通过「打开 VPS 桌面」登录 Google/Flow，关闭该 profile 窗口后同步 Cookie。关闭 noVNC 标签页不会关闭 Chrome。
 
 #### Docker 有头打码模式（browser / personal）
 
@@ -168,19 +177,19 @@ Prometheus 可直接抓 `/metrics`。如果部署到 Kubernetes，建议只在�
 
 ## 🌐 界面语言 / Interface language
 
-登录页、管理后台和模型测试页均支持 **简体中文 / English**。使用页面右上角的语言选择器切换；首次访问会匹配浏览器语言，手动选择后保存在当前浏览器，跨页面及重新访问时继续生效。切换语言不会刷新页面，也不会清空表单、上传图片或中断生成任务。
+登录页、管理后台和模型测试页均支持 **简体中文 / English / Tiếng Việt**。使用页面右上角的语言选择器切换；首次访问会匹配浏览器语言，手动选择后保存在当前浏览器，跨页面及重新访问时继续生效。切换语言不会刷新页面，也不会清空表单、上传图片或中断生成任务。
 
-The sign-in page, admin console, and model tester support **Simplified Chinese and English**. Use the language selector in the top-right corner. The initial language follows your browser, and your selection is saved locally. Switching languages preserves form inputs, uploaded images, and active generation tasks.
+The sign-in page, admin console, and model tester support **Simplified Chinese, English, and Vietnamese**. Use the language selector in the top-right corner. The initial language follows your browser, and your selection is saved locally. Switching languages preserves form inputs, uploaded images, and active generation tasks.
 
-浏览器验证码扩展的设置页也提供中英文切换，偏好保存在扩展本地存储中，切换时保留未保存的配置。The captcha extension's settings page also supports both languages and stores its preference separately, preserving unsaved settings when switching.
+浏览器验证码扩展的设置页也提供中文、英文和越南文切换，偏好保存在扩展本地存储中，切换时保留未保存的配置。The captcha extension's settings page also supports all three languages and stores its preference separately, preserving unsaved settings when switching.
 
-管理接口的提示和错误支持 `Accept-Language: zh-CN` / `Accept-Language: en`，并返回 `Content-Language`。未支持的语言回退至简体中文。账号信息、提示词、生成内容、日志原文和未知的上游错误保持原样；生成结果及 SSE 流不会经过翻译。
+管理接口的提示和错误支持 `Accept-Language: zh-CN` / `Accept-Language: en` / `Accept-Language: vi`，并返回 `Content-Language`。未支持的语言回退至简体中文。账号信息、提示词、生成内容、日志原文和未知的上游错误保持原样；生成结果及 SSE 流不会经过翻译。
 
-API messages and errors honor `Accept-Language: zh-CN` or `Accept-Language: en` and return `Content-Language`. Unsupported languages fall back to Simplified Chinese. Account data, prompts, generated content, raw logs, and unknown upstream diagnostics remain unchanged. Generation results and SSE streams are passed through unchanged.
+API messages and errors honor `Accept-Language: zh-CN`, `Accept-Language: en`, or `Accept-Language: vi` (including `vi-VN`) and return `Content-Language`. Unsupported languages fall back to Simplified Chinese. Account data, prompts, generated content, raw logs, and unknown upstream diagnostics remain unchanged. Generation results and SSE streams are passed through unchanged.
 
-翻译词典位于 `static/locales/`：`common.json` 为共享文案，`login.json` / `manage.json` / `test.json` 对应三个页面，`backend.json` 对应 API 提示。每个词典包含 `zh-CN` 和 `en`，使用原文作为消息键；新增译文时需保留 `{0}` 等占位符。
+翻译词典位于 `static/locales/`：`common.json` 为共享文案，`login.json` / `manage.json` / `test.json` 对应三个页面，`backend.json` 对应 API 提示。每个词典包含 `zh-CN`、`en` 和 `vi`，使用原文作为消息键；新增译文时需保留 `{0}` 等占位符。
 
-Translation catalogs live in `static/locales/`. Each catalog contains `zh-CN` and `en` entries keyed by the source message. Keep interpolation placeholders such as `{0}` unchanged when editing translations.
+Translation catalogs live in `static/locales/`. Each catalog contains `zh-CN`, `en`, and `vi` entries keyed by the source message. Keep interpolation placeholders such as `{0}` unchanged when editing translations.
 
 扩展的词典位于 `extension/locales.json`。The extension catalog is `extension/locales.json`.
 

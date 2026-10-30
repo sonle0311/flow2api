@@ -74,7 +74,11 @@ def browser_page(ui_server):
             path = urlsplit(route.request.url).path
             data = {"success": True}
             status = 200
-            if path == "/api/stats":
+            if path == "/api/integration/reference":
+                from src.core.integration_reference import build_integration_reference
+                from src.main import app
+                data = build_integration_reference(app)
+            elif path == "/api/stats":
                 if "/login" in route.request.headers.get("referer", ""):
                     status = 401
                 data = {"total_tokens": 1, "active_tokens": 1}
@@ -117,7 +121,11 @@ def browser_page(ui_server):
             elif path == "/api/captcha/config":
                 data = {"captcha_method": "yescaptcha"}
             elif path == "/api/token-refresh/config":
-                data = {"enabled": True, "refresh_interval_minutes": 120}
+                data = {"success": True, "config": {
+                    "at_auto_refresh_enabled": True,
+                    "protocol_refresh_enabled": True,
+                    "refresh_interval_minutes": 120,
+                }}
             route.fulfill(
                 status=status, content_type="application/json", body=json.dumps(data)
             )
@@ -580,6 +588,7 @@ def test_extension_language_preserves_settings_and_translates_status(browser_pag
     page.wait_for_load_state("networkidle")
     playwright_api.expect(page.locator("#saveBtn")).to_have_text("Save")
     assert page.locator("#routeKey").input_value() == "保存"
+
     page.locator("#saveBtn").click()
     playwright_api.expect(page.locator("#status")).to_have_text(
         "Enter your Flow2API API key."
@@ -599,3 +608,277 @@ def test_extension_language_preserves_settings_and_translates_status(browser_pag
         "Settings saved. The background connection will reconnect automatically."
     )
     assert page.locator("#routeKey").input_value() == "保存"
+
+
+@pytest.mark.parametrize("name", ["login", "manage", "test"])
+def test_vietnamese_selection_persists_and_switches_back(browser_page, name):
+    page, base = browser_page
+    page.add_init_script("if (!localStorage.getItem('flow2api.language')) localStorage.setItem('flow2api.language', 'vi-VN')")
+    open_page(page, base + "/" + name)
+    assert page.locator("html").get_attribute("lang") == "vi"
+    selector = page.locator("[data-language-select]")
+    assert selector.input_value() == "vi"
+    assert selector.locator('option[value="vi"]').inner_text() == "Tiếng Việt"
+    catalog = json.loads((ROOT / f"static/locales/{name}.json").read_text(encoding="utf-8"))
+    label = page.locator("[data-i18n]").filter(has_text=re.compile(".+")).first
+    source = label.get_attribute("data-i18n")
+    field = {"login": "#username", "manage": "#cfgAdminUsername", "test": "#promptInput"}[name]
+    if name == "manage":
+        page.evaluate("switchTab('settings')")
+        page.wait_for_load_state("networkidle")
+    page.locator(field).fill("Giữ nguyên 保存")
+    for language in ["en", "zh-CN", "vi", "en", "vi"]:
+        selector.select_option(language)
+        assert page.locator(field).input_value() == "Giữ nguyên 保存"
+        assert page.evaluate("I18n.locale") == language
+        assert page.evaluate("localStorage.getItem('flow2api.language')") == language
+        assert label.inner_text() == catalog[language][source]
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    assert page.locator("html").get_attribute("lang") == "vi"
+
+
+def test_vietnamese_messages_translate_back_from_all_aliases(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/login")
+    catalog = json.loads((ROOT / "static/locales/backend.json").read_text(encoding="utf-8"))
+    for source, params in [("Token已启用", {}), ("生成失败: {error}", {"error": "raw 保存 rpc=as29s"})]:
+        for original in ("zh-CN", "en", "vi"):
+            text = catalog[original][source]
+            for key, value in params.items():
+                text = text.replace("{" + key + "}", value)
+            for target in ("vi", "en", "zh-CN"):
+                page.evaluate("language => I18n.setLanguage(language)", target)
+                expected = catalog[target][source]
+                for key, value in params.items():
+                    expected = expected.replace("{" + key + "}", value)
+                assert page.evaluate("text => I18n.translateError(text)", text) == expected
+
+
+def test_extension_normalizes_vietnamese_and_persists_selection(browser_page):
+    page, base = browser_page
+    page.add_init_script("""
+        window.testSettings = {uiLanguage:'vi-VN', routeKey:'Giữ nguyên 保存'};
+        Object.defineProperty(window, 'chrome', {value: {
+            runtime: {lastError: null},
+            storage: {local: {
+                get(defaults, callback) {queueMicrotask(() => callback({...defaults,...window.testSettings}));},
+                set(values, callback) {Object.assign(window.testSettings,values); if(callback) queueMicrotask(callback);}
+            }}
+        }});
+    """)
+    page.goto(base + "/extension/options.html")
+    page.wait_for_load_state("networkidle")
+    catalog = json.loads((ROOT / "extension/locales.json").read_text(encoding="utf-8"))
+    assert page.locator("html").get_attribute("lang") == "vi"
+    page.locator("#saveBtn").click()
+    for language in ["vi", "en", "zh-CN", "vi"]:
+        page.locator("#language").select_option(language)
+        playwright_api.expect(page.locator("#status")).to_have_text(catalog[language]["请填写 Flow2API API Key。"])
+        assert page.locator("#routeKey").input_value() == "Giữ nguyên 保存"
+        assert page.evaluate("window.testSettings.uiLanguage") == language
+
+
+def test_integration_guide_tab_copies_complete_instructions_without_secrets(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/manage")
+    page.locator("[data-language-select]").select_option("vi")
+    page.evaluate("""() => {
+        document.getElementById('cfgCurrentAPIKey').value = 'private-api-key-do-not-copy';
+        Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {
+            writeText: async text => { window.copiedIntegrationGuide = text; }
+        }});
+    }""")
+    requests = []
+    page.on("request", lambda request: requests.append(urlsplit(request.url).path))
+    page.locator("#tabIntegration").click(timeout=3000)
+    playwright_api.expect(page.locator("#panelIntegration")).to_be_visible()
+    playwright_api.expect(page.locator("#panelTokens")).to_be_hidden()
+    guide = page.locator("#integrationGuide").input_value()
+    assert base in guide
+    for contract in ("/v1/models", "/v1/chat/completions", "FLOW2API_API_KEY",
+                     "Authorization: Bearer", "image_url", "reasoning_content",
+                     "[DONE]", "generateContent", "inlineData"):
+        assert contract in guide
+    examples = [json.loads(block) for block in re.findall(r"```json\n(.*?)\n```", guide, re.S)]
+    assert examples[0]["stream"] is False
+    assert examples[0]["messages"][0]["role"] == "user"
+    assert examples[1][1]["type"] == "image_url"
+    assert examples[2]["contents"][0]["parts"][0]["text"] == "<PROMPT>"
+    assert "private-api-key-do-not-copy" not in guide
+    page.locator("#copyIntegrationGuide").click()
+    assert page.evaluate("window.copiedIntegrationGuide") == guide
+    assert not any(path.startswith("/api/admin/") or path.endswith("/chat/completions") for path in requests)
+    page.locator("#tabTokens").click()
+    playwright_api.expect(page.locator("#panelIntegration")).to_be_hidden()
+
+
+def test_integration_guide_preserves_server_and_handles_invalid_urls(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/manage")
+    page.locator("#tabIntegration").click(timeout=3000)
+    server = page.locator("#integrationServerUrl")
+    server.fill("https://api.example.com/flow/")
+    for locale in ("vi", "zh-CN", "en"):
+        page.locator("[data-language-select]").select_option(locale)
+        assert server.input_value() == "https://api.example.com/flow/"
+        guide = page.locator("#integrationGuide").input_value()
+        assert "https://api.example.com/flow/v1" in guide
+        assert "https://api.example.com/flow//v1" not in guide
+        assert not re.search(r"\bintegration\.(title|agentTask|connectionHelp|resultHelp)\b", guide)
+    for invalid in ("javascript:alert(1)", "https://user:pass@example.com", "https://example.com?key=secret"):
+        server.fill(invalid)
+        playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_disabled()
+        assert page.locator("#integrationGuide").input_value() == ""
+        assert server.get_attribute("aria-invalid") == "true"
+    server.fill(base)
+    playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
+    assert server.get_attribute("aria-invalid") == "false"
+
+
+def test_integration_clipboard_fallback_and_manual_recovery(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/manage")
+    page.locator("#tabIntegration").click(timeout=3000)
+    page.evaluate("""() => {
+        Object.defineProperty(navigator, 'clipboard', {configurable: true, value: undefined});
+        document.execCommand = command => {
+            window.fallbackGuide = document.activeElement.value;
+            return command === 'copy';
+        };
+    }""")
+    page.locator("#copyIntegrationGuide").click()
+    assert page.evaluate("window.fallbackGuide") == page.locator("#integrationGuide").input_value()
+    page.evaluate("document.execCommand = () => false")
+    page.locator("#copyIntegrationGuide").click()
+    assert page.locator("#integrationCopyStatus").inner_text()
+    page.locator("#selectIntegrationGuide").click()
+    selection = page.locator("#integrationGuide").evaluate("el => el.selectionEnd - el.selectionStart")
+    assert selection == len(page.locator("#integrationGuide").input_value())
+
+
+def test_integration_reference_lists_every_endpoint_model_and_filters(browser_page):
+    from src.services.generation_handler import MODEL_CONFIG
+    page, base = browser_page
+    open_page(page, base + "/manage#integration")
+    playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
+    guide = page.locator("#integrationGuide").input_value()
+    for model_id in MODEL_CONFIG:
+        assert model_id in guide
+    for path in ("/api/tokens/import", "/api/cache/config", "/api/plugin/check-tokens", "/captcha_ws", "/v1/models/aliases"):
+        assert path in guide
+    assert "ChatCompletionRequest" in guide
+    assert "ADMIN" in guide or "admin_session" in guide
+    assert page.locator("#integrationModelRows tr").count() == len(MODEL_CONFIG)
+    page.locator("#integrationReferenceSearch").fill("/api/cache")
+    assert page.locator("#integrationEndpointRows tr").count() > 0
+    assert all("/api/cache" in line for line in page.locator("#integrationEndpointRows tr").all_text_contents())
+    page.locator("#integrationReferenceSearch").fill("gemini-3.1-flash-image-landscape-2k")
+    assert page.locator("#integrationModelRows tr").count() == 1
+    assert page.locator("#integrationGuide").input_value() == guide
+
+
+def test_integration_reference_failure_disables_partial_copy_and_can_retry(browser_page):
+    page, base = browser_page
+    page.route("**/api/integration/reference", lambda route: route.fulfill(status=503, json={"detail": "unavailable"}))
+    open_page(page, base + "/manage#integration")
+    playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_disabled()
+    assert page.locator("#integrationGuide").input_value() == ""
+    assert page.locator("#integrationReferenceStatus").inner_text()
+    page.unroute("**/api/integration/reference")
+    page.locator("#reloadIntegrationReference").click()
+    playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
+    assert "/api/tokens/import" in page.locator("#integrationGuide").input_value()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_background_refresh_toggle_uses_its_own_setting(browser_page, enabled):
+    page, base = browser_page
+    page.route("**/api/token-refresh/config", lambda route: route.fulfill(json={
+        "success": True, "config": {"at_auto_refresh_enabled": True,
+        "protocol_refresh_enabled": enabled, "refresh_interval_minutes": 47}}))
+    open_page(page, base + "/manage")
+    assert page.locator("#atAutoRefreshToggle").is_checked() is enabled
+    assert page.locator("#globalRefreshIntervalMinutes").input_value() == "47"
+
+
+def test_background_refresh_toggle_persists_after_reload(browser_page):
+    page, base = browser_page
+    state = {"enabled": False}
+    writes = []
+    page.route("**/api/token-refresh/config", lambda route: route.fulfill(json={
+        "success": True, "config": {"at_auto_refresh_enabled": True,
+        "protocol_refresh_enabled": state["enabled"], "refresh_interval_minutes": 30}}))
+    def save(route):
+        body = route.request.post_data_json
+        writes.append(body)
+        state["enabled"] = body["enabled"]
+        route.fulfill(json={"success": True})
+    page.route("**/api/token-refresh/enabled", save)
+    open_page(page, base + "/manage")
+    toggle = page.locator("#atAutoRefreshToggle")
+    for enabled in (True, False):
+        toggle.set_checked(enabled)
+        page.wait_for_load_state("networkidle")
+        assert writes[-1] == {"enabled": enabled}
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        assert toggle.is_checked() is enabled
+
+
+@pytest.mark.parametrize("failure", ["network", "rejected", "http"])
+def test_background_refresh_toggle_rolls_back_failed_save(browser_page, failure):
+    page, base = browser_page
+    page.route("**/api/token-refresh/config", lambda route: route.fulfill(json={
+        "success": True, "config": {"at_auto_refresh_enabled": True,
+        "protocol_refresh_enabled": True, "refresh_interval_minutes": 30}}))
+    def save(route):
+        if failure == "network":
+            route.abort("failed")
+        else:
+            route.fulfill(status=500 if failure == "http" else 200,
+                          json={"success": False, "detail": "Unable to save"})
+    page.route("**/api/token-refresh/enabled", save)
+    open_page(page, base + "/manage")
+    toggle = page.locator("#atAutoRefreshToggle")
+    toggle.uncheck()
+    playwright_api.expect(toggle).to_be_checked()
+    playwright_api.expect(toggle).to_be_enabled()
+
+
+def test_authenticated_model_catalog_shows_all_current_image_and_video_models(browser_page):
+    from src.api.routes import _get_openai_model_catalog
+    page, base = browser_page
+    catalog = _get_openai_model_catalog()
+    page.route("**/v1/models", lambda route: route.fulfill(json={"object": "list", "data": catalog}))
+    open_page(page, base + "/test")
+    page.locator("#apiKey").fill("test-api-key")
+    page.locator("#apiKey").dispatch_event("change")
+    page.wait_for_load_state("networkidle")
+    expected = {model["id"] for model in catalog}
+    playwright_api.expect(page.locator(".model-item[data-model]")).to_have_count(len(expected))
+    for language in ("en", "vi", "zh-CN"):
+        page.locator("[data-language-select]").select_option(language)
+        rendered = page.locator(".model-item[data-model]").evaluate_all("items => items.map(item => item.dataset.model)")
+        assert set(rendered) == expected
+        assert len(rendered) == len(expected)
+    page.locator('.model-item[data-model="veo-3.1-fast-4s-landscape"]').click()
+    assert page.evaluate("STATE.selectedModel") == "veo-3.1-fast-4s-landscape"
+    assert page.evaluate("STATE.modelConfig.type") == "video"
+
+
+def test_model_sidebar_keeps_legacy_and_unknown_ids_and_omni_image_inputs(browser_page):
+    page, base = browser_page
+    ids = ["veo_3_1_t2v_fast", "veo_3_1_interpolation_lite_8s", "omni-1.1-flash-4s-landscape",
+           "veo-3.1-fast-extend-8s-landscape", "future-image-model", "future-video-model"]
+    page.route("**/v1/models", lambda route: route.fulfill(json={"data": [{"id": model, "description": model} for model in ids]}))
+    open_page(page, base + "/test")
+    page.locator("#apiKey").fill("test-api-key")
+    page.evaluate("loadModels()")
+    assert page.locator(".model-item[data-model]").count() == len(ids)
+    assert set(page.locator(".model-item[data-model]").evaluate_all("items => items.map(item => item.dataset.model)")) == set(ids)
+    page.locator('.model-item[data-model="omni-1.1-flash-4s-landscape"]').click()
+    playwright_api.expect(page.locator("#imageUploadGroup")).to_be_visible()
+    assert page.evaluate("STATE.modelConfig.maxImages") == 3
+    assert page.evaluate("getModelMeta('veo_3_1_interpolation_lite_8s').minImages") == 2
+    assert page.evaluate("getModelMeta('veo-3.1-fast-r2v-8s-landscape').minImages") == 1

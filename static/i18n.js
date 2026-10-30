@@ -3,9 +3,9 @@
     'use strict';
 
     const storageKey = 'flow2api.language';
-    const supported = ['zh-CN', 'en'];
-    const messages = { 'zh-CN': Object.create(null), en: Object.create(null) };
-    const errorMessages = { 'zh-CN': Object.create(null), en: Object.create(null) };
+    const supported = ['zh-CN', 'en', 'vi'];
+    const messages = Object.fromEntries(supported.map(language => [language, Object.create(null)]));
+    const errorMessages = Object.fromEntries(supported.map(language => [language, Object.create(null)]));
     const bindings = new WeakMap();
     const messageBindings = new WeakMap();
     const errorBindings = new WeakMap();
@@ -18,6 +18,7 @@
         const value = String(language || '').toLowerCase();
         if (/^zh(?:-|$)/.test(value)) return 'zh-CN';
         if (/^en(?:-|$)/.test(value)) return 'en';
+        if (/^vi(?:-|$)/.test(value)) return 'vi';
         return null;
     }
 
@@ -50,7 +51,7 @@
     function indexMessages(catalog, aliasMap) {
         const variants = [];
         for (const source of Object.keys(catalog['zh-CN'])) {
-            for (const text of new Set([source, catalog['zh-CN'][source], catalog.en[source]])) {
+            for (const text of new Set([source, ...supported.map(language => catalog[language]?.[source])])) {
                 if (typeof text !== 'string') continue;
                 if (/\{\w+\}/.test(text)) variants.push({ source, text });
                 else if (!aliasMap.has(text)) aliasMap.set(text, source);
@@ -202,7 +203,8 @@
     });
     const page = document.documentElement.dataset.i18nPage;
     const catalogs = ['common', 'backend'];
-    if (['login', 'manage', 'test'].includes(page)) catalogs.push(page);
+    if (['login', 'manage', 'test', 'desktop'].includes(page)) catalogs.push(page);
+    if (page === 'manage') catalogs.push('integration');
 
     const catalogReady = Promise.all(catalogs.map(async name => {
         try {

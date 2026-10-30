@@ -10,6 +10,13 @@ let locale = "zh-CN";
 let translations = {};
 let statusMessage = null;
 
+function normalizeLanguage(value) {
+  if (/^en(-|$)/i.test(value || "")) return "en";
+  if (/^vi(-|$)/i.test(value || "")) return "vi";
+  if (/^zh(-|$)/i.test(value || "")) return "zh-CN";
+  return null;
+}
+
 function translate(source, params = {}) {
   const message = translations[locale]?.[source] || source;
   return message.replace(/\{(\w+)\}/g, (match, key) =>
@@ -46,8 +53,7 @@ async function loadLanguage() {
   const [settings, messages] = await Promise.all([stored, catalog]);
   translations = messages;
   const candidates = [settings.uiLanguage, ...(navigator.languages || [navigator.language])];
-  const language = candidates.find((value) => /^(zh|en)(-|$)/i.test(value || ""));
-  locale = /^en(-|$)/i.test(language || "") ? "en" : "zh-CN";
+  locale = candidates.map(normalizeLanguage).find(Boolean) || "zh-CN";
   renderLanguage();
 }
 
@@ -117,7 +123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadSettings();
   $("saveBtn").addEventListener("click", saveSettings);
   $("language").addEventListener("change", () => {
-    locale = $("language").value === "en" ? "en" : "zh-CN";
+    locale = normalizeLanguage($("language").value) || "zh-CN";
     renderLanguage();
     chrome.storage.local.set({ uiLanguage: locale }, () => {
       if (chrome.runtime.lastError) {

@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import re
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List
@@ -12,6 +14,20 @@ from ..core.logger import debug_logger
 from ..core.monitoring import record_token_refresh
 from .flow_client import FlowClient
 from .proxy_manager import ProxyManager
+
+
+def normalize_browser_account_email(value: str) -> str:
+    """Validate the identity of a pending browser account without credentials."""
+    if not isinstance(value, str):
+        raise ValueError("invalid_email")
+    email = value.strip().lower()
+    if len(email) > 254 or not re.fullmatch(
+        r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", email
+    ):
+        raise ValueError("invalid_email")
+    if len(email.split("@", 1)[0]) > 64:
+        raise ValueError("invalid_email")
+    return email
 
 
 class TokenManager:
@@ -28,6 +44,7 @@ class TokenManager:
         self._at_validation_cache: dict[int, float] = {}
         self._last_at_refresh_error: dict[int, str] = {}
         self._protocol_refresher_task: Optional[asyncio.Task] = None
+        self.managed_browser = None
 
     async def _get_token_lock(
         self,
@@ -319,6 +336,8 @@ class TokenManager:
 
     async def delete_token(self, token_id: int):
         """Delete token"""
+        if self.managed_browser is not None:
+            await self.managed_browser.forget(token_id)
         token = await self.db.get_token(token_id)
         project_ids: List[str] = []
         if token:
@@ -359,6 +378,9 @@ class TokenManager:
 
     async def enable_token(self, token_id: int):
         """Enable a token and reset error count"""
+        token = await self.db.get_token(token_id)
+        if token and token.st.startswith("browser-pending-"):
+            raise ValueError("请先完成浏览器登录并验证 Cookie")
         # Enable the token
         await self.db.update_token(
             token_id, is_active=True, ban_reason=None, banned_at=None
@@ -371,6 +393,28 @@ class TokenManager:
         await self.db.update_token(token_id, is_active=False)
 
     # ========== Token添加 (支持Project创建) ==========
+
+    async def prepare_browser_account(self, email: str) -> tuple[Token, bool]:
+        """Prepare an inactive identity for normal browser login, with no RPCs."""
+        email = normalize_browser_account_email(email)
+        existing = await self.db.get_token_by_email(email)
+        if existing is not None:
+            return existing, False
+        token = Token(
+            st="browser-pending-" + secrets.token_urlsafe(24),
+            email=email, login_account=email, name=email.split("@", 1)[0],
+            is_active=False, at=None, google_cookies="", protocol_mode="session",
+        )
+        try:
+            token.id = await self.db.add_token(token)
+        except ValueError:
+            # Another request/import may have registered the same identity.
+            # Database.add_token checks email and login_account atomically.
+            existing = await self.db.get_token_by_email(email)
+            if existing is None:
+                raise
+            return existing, False
+        return token, True
 
     async def add_token(
         self,
@@ -787,6 +831,9 @@ class TokenManager:
 
     async def _refresh_at_inner(self, token_id: int) -> bool:
         """Perform exactly one real AT refresh attempt."""
+        managed_result = await self._refresh_managed_browser(token_id)
+        if managed_result is not None:
+            return managed_result
         refresh_lock = await self._get_token_lock(
             self._refresh_locks,
             self._refresh_lock_guard,
@@ -1060,7 +1107,7 @@ class TokenManager:
         self._mark_at_valid(token_id)
 
     async def _save_refreshed_cookies(
-        self, token_id: int, token: Token, result: Dict[str, Any]
+        self, token_id: int, token: Token, result: Dict[str, Any], *, strict_identity: bool = False
     ) -> str:
         """Validate the current account RPC before atomically saving its Cookie jar."""
         from .browser_cookie_utils import validate_flow_cookie_storage
@@ -1118,8 +1165,9 @@ class TokenManager:
                 or self._is_placeholder_email(current_name)
             ):
                 updates["name"] = observed_raw.split("@")[0]
+        identity_guard = {"expected_identity": (token.email, token.login_account)} if strict_identity else {}
         saved = await self.db.update_token_if_cookie_matches(
-            token_id, token.google_cookies, **updates
+            token_id, token.google_cookies, **identity_guard, **updates
         )
         if not saved:
             raise RuntimeError("Cookie 在刷新期间已更新，请使用最新登录态重试")
@@ -1128,6 +1176,37 @@ class TokenManager:
         record_token_refresh("st", "success")
         debug_logger.log_info(f"[COOKIE_REFRESH] Token {token_id}: Cookie 刷新并验证成功")
         return new_st
+
+    async def save_managed_browser_cookies(
+        self, token_id: int, result: Dict[str, Any], *, reactivate: bool = False
+    ) -> bool:
+        """Validate an isolated profile snapshot without changing its account identity."""
+        refresh_lock = await self._get_token_lock(
+            self._refresh_locks, self._refresh_lock_guard, token_id
+        )
+        async with refresh_lock:
+            token = await self.db.get_token(token_id)
+            if token is None:
+                raise ValueError("Token不存在")
+            expected = str(token.login_account or token.email or "").strip().casefold()
+            observed = str(result.get("email") or "").strip().casefold()
+            if not expected or observed != expected:
+                raise ValueError("identity_mismatch")
+            await self._save_refreshed_cookies(token_id, token, result, strict_identity=True)
+            if reactivate and not token.is_active:
+                await self.enable_token(token_id)
+            return True
+
+    async def _refresh_managed_browser(self, token_id: int) -> Optional[bool]:
+        """Use an opted-in profile before acquiring the token save lock."""
+        service = self.managed_browser
+        if service is None:
+            return None
+        status = await service.get_status(token_id)
+        if not status.get("enabled"):
+            return None
+        result = await service.sync(token_id)
+        return result.get("status") == "ready"
 
     async def _record_cookie_refresh_failure(self, token: Token, error: str) -> None:
         await self.db.update_token_if_cookie_matches(
@@ -1192,6 +1271,9 @@ class TokenManager:
 
     async def refresh_cookies(self, token_id: int) -> bool:
         """Explicitly renew current-Flow Cookies even when the AT marker is valid."""
+        managed_result = await self._refresh_managed_browser(token_id)
+        if managed_result is not None:
+            return managed_result
         refresh_lock = await self._get_token_lock(
             self._refresh_locks, self._refresh_lock_guard, token_id
         )
@@ -1233,10 +1315,17 @@ class TokenManager:
         if not refresh_config or not refresh_config.enabled:
             return
 
+        if self.managed_browser is not None:
+            await self.managed_browser.run_due_once()
+
         tokens = await self.db.get_active_tokens()
         now = datetime.now(timezone.utc)
         for token in tokens:
             try:
+                if self.managed_browser is not None:
+                    status = await self.managed_browser.get_status(token.id)
+                    if status.get("enabled"):
+                        continue
                 if not token.auto_refresh_enabled:
                     continue
                 if not (token.google_cookies or "").strip():

@@ -1239,7 +1239,10 @@ async def delete_token(token_id: int, token: str = Depends(verify_admin_token)):
 @router.post("/api/tokens/{token_id}/enable")
 async def enable_token(token_id: int, token: str = Depends(verify_admin_token)):
     """Enable token"""
-    await token_manager.enable_token(token_id)
+    try:
+        await token_manager.enable_token(token_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, "message": "Token已启用"}
 
 

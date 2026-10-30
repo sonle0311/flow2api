@@ -45,6 +45,8 @@ logs.txt
 # Environment
 .env
 .env.local
+.env.vps
+backups/
 
 # Config (optional)
 # config/setting.toml

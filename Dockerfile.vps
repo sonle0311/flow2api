@@ -1,0 +1,45 @@
+# Chrome's Linux packages are published for amd64. Build this explicit VPS image
+# rather than the upstream image, which does not contain the local browser flow.
+FROM python:3.11-slim-bookworm
+
+ARG TARGETARCH
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/home/app \
+    DISPLAY=:99 \
+    BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
+    ALLOW_DOCKER_HEADED_CAPTCHA=true \
+    PERSONAL_BROWSER_HEADLESS=0 \
+    FLOW2API_DESKTOP_ENABLED=true \
+    FLOW2API_NOVNC_ROOT=/usr/share/novnc \
+    FLOW2API_CHROME_SANDBOX=true
+
+RUN test "${TARGETARCH:-amd64}" = "amd64" \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg bash \
+        xvfb fluxbox x11-utils x11vnc novnc \
+        fonts-liberation fonts-noto-color-emoji \
+    && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+        | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && printf '%s\n' 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main' \
+        > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home --shell /bin/bash app
+
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
+
+COPY --chown=app:app . .
+RUN mkdir -p /app/data /app/tmp /app/config \
+    && chown app:app /app /app/data /app/tmp /app/config \
+    && sed -i 's/\r$//' /app/docker/entrypoint.vps.sh \
+    && chmod 0755 /app/docker/entrypoint.vps.sh
+
+USER app
+EXPOSE 8000
+ENTRYPOINT ["/app/docker/entrypoint.vps.sh"]

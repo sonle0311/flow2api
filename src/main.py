@@ -5,8 +5,8 @@ import os
 import sys
 import warnings
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -19,10 +19,11 @@ from .core.monitoring import CONTENT_TYPE_LATEST, render_main_metrics
 from .services.flow_client import FlowClient
 from .services.proxy_manager import ProxyManager
 from .services.token_manager import TokenManager
+from .services.managed_browser import ManagedBrowserService
 from .services.load_balancer import LoadBalancer
 from .services.concurrency_manager import ConcurrencyManager
 from .services.generation_handler import GenerationHandler
-from .api import routes, admin
+from .api import routes, admin, browser_sessions, browser_desktop
 
 
 _LOCAL_NO_PROXY_HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -121,6 +122,7 @@ async def lifespan(app: FastAPI):
 
     # 启动时统一把数据库配置同步到内存，避免 personal/brower 相关运行时配置遗漏。
     await db.reload_config_to_memory()
+    await managed_browser.initialize()
     generation_handler.file_cache.set_timeout(config.cache_timeout)
     cache_cleanup_enabled = await generation_handler.file_cache.refresh_cleanup_task()
     captcha_config = await db.get_captcha_config()
@@ -242,6 +244,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await token_manager.stop_protocol_refresher()
+    await managed_browser.shutdown()
     # Close browser if initialized
     if browser_service:
         await browser_service.close()
@@ -256,6 +259,8 @@ db = Database()
 proxy_manager = ProxyManager(db)
 flow_client = FlowClient(proxy_manager, db)
 token_manager = TokenManager(db, flow_client)
+managed_browser = ManagedBrowserService(db, token_manager)
+token_manager.managed_browser = managed_browser
 concurrency_manager = ConcurrencyManager()
 load_balancer = LoadBalancer(token_manager, concurrency_manager)
 generation_handler = GenerationHandler(
@@ -278,6 +283,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.managed_browser = managed_browser
 
 # CORS middleware
 app.add_middleware(
@@ -292,6 +298,8 @@ app.add_middleware(I18nMiddleware)
 # Include routers
 app.include_router(routes.router)
 app.include_router(admin.router)
+app.include_router(browser_sessions.router)
+app.include_router(browser_desktop.router)
 
 # Static files - serve tmp directory for cached files
 tmp_dir = Path(__file__).parent.parent / "tmp"
@@ -322,6 +330,53 @@ async def i18n_script():
         str(static_path / "i18n.js"),
         media_type="application/javascript",
         headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/integration.js", include_in_schema=False)
+async def integration_script():
+    return FileResponse(
+        str(static_path / "integration.js"),
+        media_type="application/javascript",
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/integration-recipes.js", include_in_schema=False)
+async def integration_recipes_script():
+    return FileResponse(
+        str(static_path / "integration-recipes.js"),
+        media_type="application/javascript",
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/managed-browser.js", include_in_schema=False)
+async def managed_browser_script():
+    return FileResponse(
+        str(static_path / "managed-browser.js"),
+        media_type="application/javascript",
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/browser-desktop.js", include_in_schema=False)
+async def browser_desktop_script():
+    return FileResponse(
+        str(static_path / "browser-desktop.js"),
+        media_type="application/javascript",
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/api/integration/reference")
+async def integration_reference(request: Request, token: str = Depends(admin.verify_admin_token)):
+    """Complete endpoint contracts, schemas and model capabilities for integration agents."""
+    from .core.integration_reference import build_integration_reference
+
+    return JSONResponse(
+        content=build_integration_reference(request.app),
+        headers={"Cache-Control": "no-store"},
     )
 
 

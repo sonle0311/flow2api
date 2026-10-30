@@ -1355,7 +1355,7 @@ class Database:
                 await db.commit()
 
     async def update_token_if_cookie_matches(
-        self, token_id: int, expected_cookies: str, **kwargs
+        self, token_id: int, expected_cookies: str, *, expected_identity=None, **kwargs
     ) -> bool:
         """Save a refresh without overwriting a newer account Cookie push."""
         allowed = {
@@ -1367,9 +1367,13 @@ class Database:
             raise ValueError("Invalid cookie refresh fields")
         async with self._connect(write=True) as db:
             assignments = ", ".join(f"{key} = ?" for key in kwargs)
+            predicate = "id = ? AND COALESCE(google_cookies, '') = ?"
+            values = [*kwargs.values(), token_id, expected_cookies or ""]
+            if expected_identity is not None:
+                predicate += " AND COALESCE(email, '') = ? AND COALESCE(login_account, '') = ?"
+                values.extend(value or "" for value in expected_identity)
             cursor = await db.execute(
-                f"UPDATE tokens SET {assignments} WHERE id = ? AND COALESCE(google_cookies, '') = ?",
-                [*kwargs.values(), token_id, expected_cookies or ""],
+                f"UPDATE tokens SET {assignments} WHERE {predicate}", values,
             )
             await db.commit()
             return cursor.rowcount > 0
