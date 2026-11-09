@@ -7,6 +7,10 @@ from pathlib import Path
 
 
 SUPPORTED_LANGUAGES = ("zh-CN", "en", "vi")
+_FAILOVER_SUMMARY_TEMPLATES = {
+    "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）",
+    "{error}（已尝试 {count} 个账号均失败: {details}）",
+}
 
 
 def negotiate_language(header: str = "") -> str:
@@ -78,6 +82,16 @@ def translate_message(message: str, language: str = "zh-CN", *, _depth: int = 0)
                 params["error"] = translate_message(
                     params["error"], language, _depth=_depth + 1
                 )
+            if source in _FAILOVER_SUMMARY_TEMPLATES:
+                # These entries are generated locally as "#ID <reason>".
+                # Unknown diagnostics and user-provided text remain untouched.
+                details = []
+                for detail in params["details"].split(", "):
+                    reason = re.fullmatch(r"(#\d+) (配额耗尽|触发风控)", detail)
+                    details.append(
+                        f"{reason[1]} {catalog[reason[2]]}" if reason else detail
+                    )
+                params["details"] = ", ".join(details)
             return re.sub(
                 r"\{(\w+)\}",
                 lambda item: params.get(item[1], item[0]),

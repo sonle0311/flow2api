@@ -204,7 +204,13 @@
     "Token不存在": "Token不存在",
     "浏览器会话服务不可用": "浏览器会话服务不可用",
     "Forbidden": "禁止访问",
-    "请先完成浏览器登录并验证 Cookie": "请先完成浏览器登录并验证 Cookie"
+    "请先完成浏览器登录并验证 Cookie": "请先完成浏览器登录并验证 Cookie",
+    "配额耗尽": "配额耗尽",
+    "触发风控": "触发风控",
+    "当前账号配额已用尽，正在切换其他账号重试...\n": "当前账号配额已用尽，正在切换其他账号重试...\n",
+    "当前账号触发风控，正在切换其他账号重试...\n": "当前账号触发风控，正在切换其他账号重试...\n",
+    "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）",
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error}（已尝试 {count} 个账号均失败: {details}）"
   },
   "en": {
     "旧版本的邮箱不匹配报错直接丢弃，不再回显给前端。": "Discard legacy email-mismatch errors instead of returning them to the frontend.",
@@ -411,7 +417,13 @@
     "Token不存在": "Token not found",
     "浏览器会话服务不可用": "Browser session service is unavailable",
     "Forbidden": "Forbidden",
-    "请先完成浏览器登录并验证 Cookie": "Complete browser sign-in and cookie verification first"
+    "请先完成浏览器登录并验证 Cookie": "Complete browser sign-in and cookie verification first",
+    "配额耗尽": "quota exhausted",
+    "触发风控": "risk check triggered",
+    "当前账号配额已用尽，正在切换其他账号重试...\n": "This account's quota is exhausted; retrying with another account...\n",
+    "当前账号触发风控，正在切换其他账号重试...\n": "This account was blocked by a risk check; retrying with another account...\n",
+    "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error} (all {count} attempted accounts failed: {details}; no other account is available)",
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (all {count} attempted accounts failed: {details})"
   },
   "vi": {
     "旧版本的邮箱不匹配报错直接丢弃，不再回显给前端。": "Bỏ qua các lỗi không khớp email từ phiên bản cũ, không trả lại cho giao diện.",
@@ -618,6 +630,12 @@
     "Token不存在": "Không tìm thấy tài khoản",
     "浏览器会话服务不可用": "Dịch vụ phiên trình duyệt hiện không khả dụng",
     "Forbidden": "Không được phép truy cập",
-    "请先完成浏览器登录并验证 Cookie": "Hoàn tất đăng nhập trình duyệt và xác minh cookie trước"
+    "请先完成浏览器登录并验证 Cookie": "Hoàn tất đăng nhập trình duyệt và xác minh cookie trước",
+    "配额耗尽": "hết hạn mức",
+    "触发风控": "bị kiểm tra rủi ro chặn",
+    "当前账号配额已用尽，正在切换其他账号重试...\n": "Tài khoản hiện tại đã hết hạn mức, đang chuyển sang tài khoản khác để thử lại...\n",
+    "当前账号触发风控，正在切换其他账号重试...\n": "Tài khoản hiện tại bị kiểm tra rủi ro chặn, đang chuyển sang tài khoản khác để thử lại...\n",
+    "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error} (cả {count} tài khoản đã thử đều thất bại: {details}; không còn tài khoản khác để chuyển sang)",
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (cả {count} tài khoản đã thử đều thất bại: {details})"
   }
 }

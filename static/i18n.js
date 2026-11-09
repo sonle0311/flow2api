@@ -13,6 +13,11 @@
     const errorAliases = new Map();
     let patterns = [];
     let errorPatterns = [];
+    const failoverSummaryTemplates = new Set([
+        '{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）',
+        '{error}（已尝试 {count} 个账号均失败: {details}）',
+    ]);
+    const failoverReasons = new Set(['配额耗尽', '触发风控']);
 
     function normalize(language) {
         const value = String(language || '').toLowerCase();
@@ -89,6 +94,17 @@
                     ? translateKnown(value, errorMessages, errorAliases, errorPatterns, depth + 1)
                     : value;
             });
+            if (failoverSummaryTemplates.has(source)) {
+                // Only locally generated "#ID <reason>" entries are UI copy.
+                // Keep unknown diagnostics and user-provided text unchanged.
+                params.details = params.details.split(', ').map(detail => {
+                    const reason = /^(#\d+) (.+)$/s.exec(detail);
+                    const reasonSource = reason && errorAliases.get(reason[2]);
+                    return failoverReasons.has(reasonSource)
+                        ? `${reason[1]} ${translateKnown(reasonSource, errorMessages, errorAliases, errorPatterns, depth + 1)}`
+                        : detail;
+                }).join(', ');
+            }
             return translate(source, params);
         }
         return text;
