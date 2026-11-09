@@ -16,8 +16,8 @@
 - [x] Confirm managed browser refresh hooks survive the auto-merged `token_manager.py` and all existing integration/VPS files remain present.
 - [x] Verify Omni 1.2 catalog keys, duration/orientation restrictions, legacy aliases, and text/reference submission using isolated tests without paid upstream generation.
 - [x] Run the full suite, locale parity, JavaScript syntax, and diff checks; review the merged result.
-- [ ] Create the merge commit, fast-forward the original `main`, and clean up the temporary managed worktree.
-- [ ] Restart the local service if idle and verify `/v1/models` exposes Omni 1.2; keep all credentials and profiles local.
+- [x] Create the merge commit and fast-forward the original `main`.
+- [x] Restart the idle local service and verify `/v1/models` exposes Omni 1.2; keep all credentials and profiles local.
 
 ## Scope limits
 
@@ -33,3 +33,7 @@ Only merged upstream main is included. Open PRs #195/#196 are outside this merge
 - Browser runs use the installed global Chromium through `PLAYWRIGHT_BROWSERS_PATH`; the stable test environment lives outside Temp.
 - Vietnamese/English/Chinese failover notices and nested reasons retain IDs and unknown diagnostics; browser regression tests cover language changes in every direction.
 - JavaScript syntax, locale key/placeholder parity, and `git diff --check` passed. Independent review found no remaining merge blockers.
+- Merge commit: `e94b554`, with parents `c09f666` and upstream `2cf700d`.
+- Local service restarted from the original project on `main`; authenticated `/v1/models` returned 104 models, including 22 Omni 1.2 variants and 15-second portrait. Health retained one existing active account. Login and integration/browser assets returned HTTP 200.
+- No paid generation, remote deployment, or push was performed. Live video generation against Google remains unverified.
+- Managed worktree retained: the app refused archival because it is this task's primary checkout. The original project checkout remains on `main`; do not remove the task's protected checkout manually.
