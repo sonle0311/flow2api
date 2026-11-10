@@ -1,12 +1,14 @@
 """API routes for OpenAI-compatible and Gemini generateContent endpoints."""
 
 from dataclasses import dataclass
+import asyncio
+import ipaddress
 from typing import Any, Dict, List, Optional
 import base64
 import json
 import mimetypes
 import re
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse, urlsplit
 
 from curl_cffi.requests import AsyncSession
 from fastapi import (
@@ -21,6 +23,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..core.auth import AuthManager, verify_api_key_flexible
+from ..core.config import config
 from ..core.logger import debug_logger
 from ..core.model_resolver import get_base_model_aliases, resolve_model_name
 from ..core.models import (
@@ -37,6 +40,10 @@ router = APIRouter()
 MARKDOWN_IMAGE_RE = re.compile(r"!\[.*?\]\((.*?)\)")
 HTML_VIDEO_RE = re.compile(r"<video[^>]+src=['\"](.*?)['\"]", re.IGNORECASE)
 DATA_URL_RE = re.compile(r"^data:(?P<mime>[^;]+);base64,(?P<data>.+)$", re.DOTALL)
+CACHE_IMAGE_FILENAME_RE = re.compile(
+    r"[0-9a-f]{32}(?:_[a-z0-9-]+)?\.(?:png|jpe?g|webp|gif|avif|bmp)",
+    re.IGNORECASE,
+)
 MEDIA_PROMPT_TOOL_BLOCK_RE = re.compile(
     r"<tools>.*?</tools>", re.IGNORECASE | re.DOTALL
 )
@@ -183,21 +190,48 @@ def _guess_mime_type(uri: str, fallback: str) -> str:
     return guessed or fallback
 
 
-async def retrieve_image_data(url: str) -> Optional[bytes]:
-    """Read image bytes from local /tmp cache or remote URL."""
+async def retrieve_image_data(url: str, *, generated_output: bool = False) -> Optional[bytes]:
+    """Read local cache references or download remote input images.
+
+    Absolute input URLs are local only under the configured public cache root.
+    The output converter can also identify URLs produced by our own handler.
+    """
     file_cache = getattr(generation_handler, "file_cache", None)
     try:
-        if "/tmp/" in url and file_cache:
-            path = urlparse(url).path
-            filename = path.split("/tmp/")[-1]
-            local_file_path = file_cache.cache_dir / filename
-
-            if local_file_path.exists() and local_file_path.is_file():
-                data = local_file_path.read_bytes()
-                if data:
-                    return data
+        parsed = urlparse(url)
+        if parsed.scheme not in {"", "http", "https"}:
+            return None
+        path = unquote(parsed.path)
+        if "/tmp/" in path:
+            if "\\" in path or "\x00" in path or ".." in path.split("/"):
+                return None
+            filename = path.rsplit("/tmp/", 1)[-1]
+            public_cache = urlparse(config.cache_base_url or "")
+            configured_reference = bool(
+                public_cache.scheme in {"http", "https"}
+                and parsed.scheme == public_cache.scheme
+                and parsed.netloc.casefold() == public_cache.netloc.casefold()
+                and path == unquote(public_cache.path.rstrip("/")) + "/tmp/" + filename
+            )
+            local_reference = not parsed.scheme and not parsed.netloc
+            if (
+                file_cache
+                and (local_reference or configured_reference or generated_output)
+                and CACHE_IMAGE_FILENAME_RE.fullmatch(filename)
+            ):
+                root = file_cache.cache_dir.resolve()
+                local_file_path = (root / filename).resolve()
+                if not local_file_path.is_relative_to(root):
+                    return None
+                if local_file_path.is_file():
+                    data = await asyncio.to_thread(local_file_path.read_bytes)
+                    if data:
+                        return data
+        if not parsed.scheme:
+            return None
     except Exception as exc:
         debug_logger.log_warning(f"[CONTEXT] 本地缓存读取失败: {str(exc)}")
+        return None
 
     proxy_url = None
     try:
@@ -429,19 +463,31 @@ def _resolve_request_model(
 
 
 def _get_request_base_url(request: Request) -> Optional[str]:
-    """根据实际请求头推导对外可访问的基础地址。"""
-    forwarded_proto = (
-        (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
-    )
-    forwarded_host = (
-        (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
-    )
-    host = (forwarded_host or request.headers.get("host") or "").strip()
+    """Use a validated Host and the ASGI server's trusted scheme resolution.
 
+    Reverse proxies must preserve Host. Uvicorn handles X-Forwarded-Proto
+    only for configured trusted proxies; raw forwarded headers are not a URL.
+    """
+    host = request.headers.get("host") or ""
     if not host:
         return None
-
-    proto = forwarded_proto or request.url.scheme or "http"
+    proto = request.scope.get("scheme", "http")
+    try:
+        if proto not in {"http", "https"} or re.search(r"[\s\\/%?#@]", host):
+            raise ValueError("Invalid authority")
+        authority = urlsplit("//" + host)
+        hostname = authority.hostname
+        if not hostname or authority.path or authority.query or authority.fragment:
+            raise ValueError("Invalid authority")
+        if ":" in hostname:
+            ipaddress.IPv6Address(hostname)
+        elif not re.fullmatch(r"[A-Za-z0-9_.-]+", hostname):
+            raise ValueError("Invalid hostname")
+        # Accessing port validates its numeric form and allowed range.
+        if authority.port is not None and authority.port < 1:
+            raise ValueError("Invalid port")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid request host") from None
     return f"{proto}://{host}"
 
 
@@ -627,7 +673,7 @@ async def _build_image_parts_from_uri(uri: str) -> List[Dict[str, Any]]:
                 {"inlineData": {"mimeType": mime_type, "data": match.group("data")}}
             ]
 
-    image_bytes = await retrieve_image_data(uri)
+    image_bytes = await retrieve_image_data(uri, generated_output=True)
     if image_bytes:
         mime_type = _detect_image_mime_type(
             image_bytes,

@@ -67,6 +67,7 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
             }
 
             const capturedExecute = !!window[storageKey];
+            const enterprise = window.grecaptcha && window.grecaptcha.enterprise;
             let execute = window[storageKey];
             let executeSource = '';
             try {
@@ -74,7 +75,6 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
             } catch (error) {}
 
             if (!execute) {
-                const enterprise = window.grecaptcha && window.grecaptcha.enterprise;
                 execute = enterprise && enterprise.execute;
                 try {
                     executeSource = String(execute || '');
@@ -101,34 +101,11 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
             }
 
             let executeTarget = siteKey;
-            try {
-                if (
-                    !capturedExecute &&
-                    window.grecaptcha &&
-                    window.grecaptcha.enterprise &&
-                    typeof window.grecaptcha.enterprise.render === 'function' &&
-                    window.__flow2apiRecaptchaClientId === undefined
-                ) {
-                    window.__flow2apiRecaptchaClientId =
-                        window.grecaptcha.enterprise.render(
-                            document.documentElement,
-                            { sitekey: siteKey, action: requestedAction }
-                        );
-                }
-                if (window.__flow2apiRecaptchaClientId !== undefined) {
-                    executeTarget = window.__flow2apiRecaptchaClientId;
-                }
-            } catch (renderError) {
-                return {
-                    ok: false,
-                    error: renderError && renderError.message
-                        ? renderError.message
-                        : String(renderError)
-                };
-            }
-
-            try {
-                const token = await new Promise((resolve, reject) => {
+            let clientId;
+            let container;
+            const deadline = Date.now() + timeoutMs;
+            const runExecute = target => {
+                return new Promise((resolve, reject) => {
                     let settled = false;
                     const finish = (handler, value) => {
                         if (settled) return;
@@ -137,9 +114,9 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                     };
                     const timer = setTimeout(() => {
                         finish(reject, new Error('execute timeout'));
-                    }, timeoutMs);
+                    }, Math.max(0, deadline - Date.now()));
                     try {
-                        Promise.resolve(execute(executeTarget, { action: requestedAction }))
+                        Promise.resolve(execute.call(enterprise, target, { action: requestedAction }))
                             .then(value => {
                                 clearTimeout(timer);
                                 finish(resolve, value);
@@ -153,6 +130,33 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                         finish(reject, error);
                     }
                 });
+            };
+
+            try {
+                let token;
+                try {
+                    // Enterprise v3 can execute a site key directly. Avoid
+                    // rendering unless this available path actually fails.
+                    token = await runExecute(siteKey);
+                } catch (directError) {
+                    if (
+                        capturedExecute ||
+                        !enterprise ||
+                        typeof enterprise.render !== 'function' ||
+                        Date.now() >= deadline
+                    ) {
+                        throw directError;
+                    }
+                    container = document.createElement('div');
+                    (document.body || document.documentElement).appendChild(container);
+                    clientId = enterprise.render(container, {
+                        sitekey: siteKey,
+                        action: requestedAction,
+                        size: 'invisible'
+                    });
+                    executeTarget = clientId;
+                    token = await runExecute(clientId);
+                }
                 return { ok: true, token };
             } catch (error) {
                 const debug = {
@@ -161,7 +165,7 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                     renderType: window.grecaptcha && window.grecaptcha.enterprise
                         ? typeof window.grecaptcha.enterprise.render
                         : 'missing',
-                    clientId: String(window.__flow2apiRecaptchaClientId),
+                    clientId: String(clientId),
                     executeTarget: String(executeTarget),
                     url: location.href
                 };
@@ -170,6 +174,11 @@ RECAPTCHA_EXECUTE_SOURCE = r"""(async (siteKey, requestedAction, timeoutMs) => {
                     error: (error && error.message ? error.message : String(error))
                         + ' | ' + JSON.stringify(debug)
                 };
+            } finally {
+                if (clientId !== undefined && enterprise && typeof enterprise.reset === 'function') {
+                    try { enterprise.reset(clientId); } catch (error) {}
+                }
+                if (container) container.remove();
             }
         })(__SITE_KEY__, __REQUESTED_ACTION__, __TIMEOUT_MS__)"""
 

@@ -1595,14 +1595,17 @@ class GenerationHandler:
         return model_key, None
 
     async def _fail_video_task(
-        self, operations: Optional[List[Dict[str, Any]]], error_message: str
+        self,
+        operations: Optional[List[Dict[str, Any]]],
+        error_message: str,
+        persisted_task_id: Optional[str] = None,
     ):
         """将视频任务收口到失败态，避免残留 processing。"""
-        if not operations:
+        if not operations and not persisted_task_id:
             return
 
         operation = operations[0] if operations else {}
-        task_id = (operation.get("operation") or {}).get("name")
+        task_id = persisted_task_id or (operation.get("operation") or {}).get("name")
         if not task_id:
             return
 
@@ -2529,7 +2532,12 @@ class GenerationHandler:
                         
                         # 检查是否是可重试错误（403、reCAPTCHA、超时等）
                         retry_reason = self.flow_client._get_retry_reason(error_str)
-                        if retry_reason and retry_attempt < max_retries - 1:
+                        if (
+                            retry_reason
+                            and retry_attempt < max_retries - 1
+                            and not getattr(e, "submission_uncertain", False)
+                            and not getattr(e, "outcome_unknown", False)
+                        ):
                             if stream:
                                 yield self._create_stream_chunk(
                                     f"⚠️ 放大遇到{retry_reason}，正在重试 ({retry_attempt + 2}/{max_retries})...\n"
@@ -2964,8 +2972,6 @@ class GenerationHandler:
 
             direct_video_url = str(result.get("video_url") or "").strip()
             if result.get("direct_media") and direct_video_url:
-                await self.token_manager.record_usage(token.id, is_video=True)
-                await self.token_manager.record_success(token.id)
                 if getattr(self, "load_balancer", None):
                     self.load_balancer.clear_quota_cooldown(token.id, "video")
                 if self.proxy_manager and hasattr(
@@ -3082,6 +3088,7 @@ class GenerationHandler:
                 response_state,
                 request_log_state,
                 extend_source_media_id=extend_source_id,
+                persisted_task_id=task_id,
             ):
                 yield chunk
 
@@ -3099,6 +3106,7 @@ class GenerationHandler:
         response_state: Optional[Dict[str, Any]] = None,
         request_log_state: Optional[Dict[str, Any]] = None,
         extend_source_media_id: Optional[str] = None,
+        persisted_task_id: Optional[str] = None,
     ) -> AsyncGenerator:
         """轮询视频生成结果
         
@@ -3108,6 +3116,8 @@ class GenerationHandler:
 
         if response_state is None:
             response_state = self._create_response_state()
+        if persisted_task_id is None and operations:
+            persisted_task_id = (operations[0].get("operation") or {}).get("name")
 
         normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
         poll_interval = max(0.1, float(config.poll_interval))
@@ -3183,7 +3193,9 @@ class GenerationHandler:
                         debug_logger.log_warning(
                             f"[VIDEO POLL] 获取视频URL失败: media={media_name}, error={redirect_error}"
                         )
-                        await self._fail_video_task(checked_operations, error_msg)
+                        await self._fail_video_task(
+                            checked_operations, error_msg, persisted_task_id
+                        )
                         self._mark_generation_failed(generation_result, error_msg)
                         yield self._create_error_response(error_msg, status_code=502)
                         return
@@ -3239,7 +3251,9 @@ class GenerationHandler:
 
                     if not video_url:
                         error_msg = "视频生成成功但未获取到媒体地址"
-                        await self._fail_video_task(checked_operations, error_msg)
+                        await self._fail_video_task(
+                            checked_operations, error_msg, persisted_task_id
+                        )
                         self._mark_generation_failed(generation_result, error_msg)
                         yield self._create_error_response(error_msg, status_code=502)
                         return
@@ -3294,6 +3308,7 @@ class GenerationHandler:
                                     generation_result,
                                     response_state,
                                     request_log_state,
+                                    persisted_task_id=persisted_task_id,
                                 ):
                                     yield chunk
                                 return
@@ -3356,7 +3371,7 @@ class GenerationHandler:
                             )
 
                     # 更新数据库
-                    task_id = operation["operation"]["name"]
+                    task_id = persisted_task_id or operation["operation"]["name"]
                     await self.db.update_task(
                         task_id,
                         status="completed",
@@ -3401,7 +3416,9 @@ class GenerationHandler:
                     
                     # 更新数据库任务状态
                     await self._fail_video_task(
-                        checked_operations, f"{error_message} (code: {error_code})"
+                        checked_operations,
+                        f"{error_message} (code: {error_code})",
+                        persisted_task_id,
                     )
                     
                     # 保留上游拒绝原因，不把内容过滤描述为需要重复提交的错误。
@@ -3415,7 +3432,9 @@ class GenerationHandler:
                 elif status.startswith("MEDIA_GENERATION_STATUS_ERROR"):
                     # ??????
                     error_msg = f"视频生成失败: {status}"
-                    await self._fail_video_task(checked_operations, error_msg)
+                    await self._fail_video_task(
+                        checked_operations, error_msg, persisted_task_id
+                    )
                     self._mark_generation_failed(generation_result, error_msg)
                     yield self._create_error_response(error_msg, status_code=502)
                     return
@@ -3426,7 +3445,7 @@ class GenerationHandler:
                 debug_logger.log_error(f"Poll error: {str(e)}")
                 if consecutive_poll_errors >= max_consecutive_poll_errors:
                     error_msg = f"视频状态查询失败: {self._normalize_error_message(e)}"
-                    await self._fail_video_task(operations, error_msg)
+                    await self._fail_video_task(operations, error_msg, persisted_task_id)
                     self._mark_generation_failed(generation_result, error_msg)
                     if stream:
                         yield self._create_stream_chunk(f"错误: {error_msg}\n")
@@ -3439,7 +3458,7 @@ class GenerationHandler:
             error_msg = f"视频状态查询持续失败: {self._normalize_error_message(last_poll_error)}"
         else:
             error_msg = f"视频生成超时 (超过 {int(poll_budget_seconds)} 秒仍未完成)"
-        await self._fail_video_task(operations, error_msg)
+        await self._fail_video_task(operations, error_msg, persisted_task_id)
         self._mark_generation_failed(generation_result, error_msg)
         yield self._create_error_response(error_msg, status_code=504)
 

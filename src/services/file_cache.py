@@ -39,6 +39,7 @@ class FileCache:
         self.flow_client = flow_client
         self._cleanup_task = None
         self._download_locks: Dict[str, asyncio.Lock] = {}
+        self._active_download_paths: set[Path] = set()
 
     def _is_cleanup_disabled(self) -> bool:
         return self.default_timeout <= 0
@@ -236,6 +237,8 @@ class FileCache:
             removed_count = 0
 
             for file_path in self.cache_dir.iterdir():
+                if file_path.resolve() in self._active_download_paths:
+                    continue
                 timeout = self.get_timeout()
                 if timeout <= 0:
                     debug_logger.log_info(
@@ -286,6 +289,61 @@ class FileCache:
             message = message.split(":", 1)[1].strip() or "未知错误"
 
         return message
+
+    async def _run_download_command(
+        self, command: list[str], file_path: Path, output_flag: str, **run_kwargs
+    ):
+        """Keep partial output private and own the worker through cancellation."""
+        import subprocess
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{file_path.name}.",
+            suffix=".part",
+            dir=self.cache_dir,
+            delete=False,
+        ) as output:
+            temp_path = Path(output.name).resolve()
+        self._active_download_paths.add(temp_path)
+        command = list(command)
+        command[command.index(output_flag) + 1] = str(temp_path)
+        worker = asyncio.create_task(
+            asyncio.to_thread(subprocess.run, command, **run_kwargs)
+        )
+        cancelled = False
+        try:
+            while True:
+                try:
+                    result = await asyncio.shield(worker)
+                    break
+                except asyncio.CancelledError:
+                    if worker.cancelled():
+                        raise
+                    # subprocess.run has its own bounded timeout. Keep the
+                    # download lock until it stops, even on repeated cancels.
+                    cancelled = True
+                except Exception:
+                    if cancelled:
+                        raise asyncio.CancelledError()
+                    raise
+            if cancelled:
+                raise asyncio.CancelledError()
+            if (
+                result.returncode == 0
+                and temp_path.exists()
+                and temp_path.stat().st_size > 0
+            ):
+                temp_path.replace(file_path)
+            return result
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError as error:
+                debug_logger.log_warning(
+                    f"Failed to clean download staging file: {error}"
+                )
+            finally:
+                self._active_download_paths.discard(temp_path)
 
     async def download_and_cache(self, url: str, media_type: str) -> str:
         """
@@ -352,8 +410,6 @@ class FileCache:
 
             # Try method 2: wget command
             try:
-                import subprocess
-
                 wget_cmd = [
                     "wget",
                     "-q",
@@ -387,8 +443,8 @@ class FileCache:
                     env = None
 
                 wget_cmd.append(url)
-                result = subprocess.run(
-                    wget_cmd, capture_output=True, timeout=90, env=env
+                result = await self._run_download_command(
+                    wget_cmd, file_path, "-O", capture_output=True, timeout=90, env=env
                 )
 
                 if result.returncode == 0 and file_path.exists():
@@ -414,8 +470,6 @@ class FileCache:
 
             # Try method 3: system curl command
             try:
-                import subprocess
-
                 curl_cmd = [
                     "curl",
                     "-L",
@@ -450,7 +504,9 @@ class FileCache:
                     curl_cmd.extend(["-x", proxy_url])
 
                 curl_cmd.append(url)
-                result = subprocess.run(curl_cmd, capture_output=True, timeout=90)
+                result = await self._run_download_command(
+                    curl_cmd, file_path, "-o", capture_output=True, timeout=90
+                )
 
                 if result.returncode == 0 and file_path.exists():
                     file_size = file_path.stat().st_size

@@ -89,9 +89,11 @@
     "⚠️ 放大失败: {0}，返回原始视频\n": "⚠️ 放大失败: {0}，返回原始视频\n",
     "⚠️ 缓存失败: {0}，返回内联图片...\n": "⚠️ 缓存失败: {0}，返回内联图片...\n",
     "Omni 视频": "Omni 视频",
-    "视频续写 (Extend)": "视频续写 (Extend)",
     "其他图片模型": "其他图片模型",
-    "其他视频模型": "其他视频模型"
+    "其他视频模型": "其他视频模型",
+    "响应流格式无效。": "响应流格式无效。",
+    "响应流意外结束，请检查结果和日志后再重试。": "响应流意外结束，请检查结果和日志后再重试。",
+    "未收到生成结果，请检查日志。": "未收到生成结果，请检查日志。"
   },
   "en": {
     "Flow2API 模型测试": "Flow2API Model Tester",
@@ -119,7 +121,7 @@
     "Veo 3.1 图生视频 (I2V)": "Veo 3.1 Image-to-Video (I2V)",
     "Veo 3.1 多图视频 (R2V)": "Veo 3.1 Multi-reference video (R2V)",
     "Omni 1.1 Flash 视频": "Omni 1.1 Flash Videos",
-    "视频续写 (Extend)": "Video extension (Extend)",
+    "视频续写 (Extend)": "Video continuation (Extend)",
     "视频放大 (Upsample)": "Video upscaling (Upsample)",
     "使用内置候选模型列表:": "Using built-in model suggestions:",
     "加载模型失败:": "Failed to load models:",
@@ -183,9 +185,11 @@
     "⚠️ 放大失败: {0}，返回原始视频\n": "⚠️ Upscaling failed: {0}. Returning the original video.\n",
     "⚠️ 缓存失败: {0}，返回内联图片...\n": "⚠️ Caching failed: {0}. Returning the inline image...\n",
     "Omni 视频": "Omni video",
-    "视频续写 (Extend)": "Video continuation (Extend)",
     "其他图片模型": "Other image models",
-    "其他视频模型": "Other video models"
+    "其他视频模型": "Other video models",
+    "响应流格式无效。": "The response stream format is invalid.",
+    "响应流意外结束，请检查结果和日志后再重试。": "The response stream ended unexpectedly. Check the result and logs before retrying.",
+    "未收到生成结果，请检查日志。": "No generation result was received. Check the logs."
   },
   "vi": {
     "源视频媒体 ID": "ID media của video nguồn",
@@ -278,6 +282,9 @@
     "Omni 视频": "Video Omni",
     "视频续写 (Extend)": "Tạo tiếp video (Extend)",
     "其他图片模型": "Model ảnh khác",
-    "其他视频模型": "Model video khác"
+    "其他视频模型": "Model video khác",
+    "响应流格式无效。": "Định dạng luồng phản hồi không hợp lệ.",
+    "响应流意外结束，请检查结果和日志后再重试。": "Luồng phản hồi bị ngắt. Hãy kiểm tra kết quả và nhật ký trước khi thử lại.",
+    "未收到生成结果，请检查日志。": "Chưa nhận được kết quả tạo. Hãy kiểm tra nhật ký."
   }
 }

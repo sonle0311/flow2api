@@ -9,6 +9,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List
 from ..core.database import Database
 from ..core.config import config
+from ..core.account_tiers import (
+    PAYGATE_TIER_NOT_PAID, PAYGATE_TIER_ONE, PAYGATE_TIER_TWO,
+)
 from ..core.models import Token, Project
 from ..core.logger import debug_logger
 from ..core.monitoring import record_token_refresh
@@ -238,6 +241,13 @@ class TokenManager:
             ),
         )
 
+    def _verified_tier_updates(self, result: Dict[str, Any]) -> Dict[str, str]:
+        """Only verified entitlement metadata may replace the stored tier."""
+        tier = result.get("userPaygateTier")
+        if tier in (PAYGATE_TIER_NOT_PAID, PAYGATE_TIER_ONE, PAYGATE_TIER_TWO):
+            return {"user_paygate_tier": tier}
+        return {}
+
     async def get_personal_warmup_project_ids(
         self,
         tokens: Optional[List[Token]] = None,
@@ -390,7 +400,9 @@ class TokenManager:
 
     async def disable_token(self, token_id: int):
         """Disable a token"""
-        await self.db.update_token(token_id, is_active=False)
+        await self.db.update_token(
+            token_id, is_active=False, ban_reason=None, banned_at=None
+        )
 
     # ========== Token添加 (支持Project创建) ==========
 
@@ -496,7 +508,9 @@ class TokenManager:
                 google_cookies=google_cookies,
             )
             credits = credits_result.get("credits", 0)
-            user_paygate_tier = credits_result.get("userPaygateTier")
+            user_paygate_tier = self._verified_tier_updates(credits_result).get(
+                "user_paygate_tier"
+            )
         except Exception:
             credits = 0
             user_paygate_tier = None
@@ -627,11 +641,10 @@ class TokenManager:
         auto_refresh_enabled: Optional[bool] = None,
         refresh_interval_minutes: Optional[int] = None,
         auto_enable_on_update: bool = True,
+        *,
+        _verified_user_paygate_tier: Optional[str] = None,
     ):
-        """Update token (支持修改project_id和project_name)
-
-        当用户编辑保存token时，如果token未过期，自动清空429禁用状态
-        """
+        """Update metadata, reactivating only an intended credential update."""
         update_fields = {}
         credential_updated = any(value is not None for value in (st, at, at_expires))
 
@@ -684,8 +697,26 @@ class TokenManager:
                 self._normalize_refresh_interval(refresh_interval_minutes)
             )
 
-        # 检查token是否因429被禁用，如果是且未过期，则清空429状态
         token = await self.db.get_token(token_id)
+        identity_changed = bool(token) and (
+            (email is not None and email.strip().casefold() != str(token.email or "").strip().casefold())
+            or (
+                login_account is not None
+                and login_account.strip()
+                and login_account.strip().casefold()
+                != str(token.login_account or token.email or "").strip().casefold()
+            )
+        )
+        cookies_replaced = bool(
+            token and google_cookies and google_cookies.strip()
+            != str(token.google_cookies or "").strip()
+        )
+        if identity_changed or cookies_replaced:
+            # A claimed email cannot establish which account a replacement jar owns.
+            update_fields["user_paygate_tier"] = None
+        update_fields.update(self._verified_tier_updates({
+            "userPaygateTier": _verified_user_paygate_tier,
+        }))
         if auto_enable_on_update and credential_updated and token and not token.is_active:
             debug_logger.log_info(
                 f"[UPDATE_TOKEN] Token {token_id} 已更新凭证，自动恢复为启用状态"
@@ -694,27 +725,8 @@ class TokenManager:
             update_fields["ban_reason"] = None
             update_fields["banned_at"] = None
 
-        if token and token.ban_reason == "429_rate_limit":
-            # 检查token是否过期
-            is_expired = False
-            if token.at_expires:
-                now = datetime.now(timezone.utc)
-                if token.at_expires.tzinfo is None:
-                    at_expires_aware = token.at_expires.replace(tzinfo=timezone.utc)
-                else:
-                    at_expires_aware = token.at_expires
-                is_expired = at_expires_aware <= now
-
-            # 如果未过期，清空429禁用状态
-            if not is_expired:
-                debug_logger.log_info(
-                    f"[UPDATE_TOKEN] Token {token_id} 编辑保存，清空429禁用状态"
-                )
-                update_fields["ban_reason"] = None
-                update_fields["banned_at"] = None
-
         if update_fields:
-            if credential_updated:
+            if credential_updated or identity_changed or cookies_replaced:
                 self._clear_at_validation_cache(token_id)
             await self.db.update_token(token_id, **update_fields)
 
@@ -791,7 +803,7 @@ class TokenManager:
                 await self.db.update_token(
                     token.id,
                     credits=credits_result.get("credits", 0),
-                    user_paygate_tier=credits_result.get("userPaygateTier"),
+                    **self._verified_tier_updates(credits_result),
                 )
                 self._mark_at_valid(token.id)
                 return await self.db.get_token(token.id) or token
@@ -900,7 +912,7 @@ class TokenManager:
         """Coalesce concurrent AT refresh calls for the same token."""
         existing_task = self._refresh_futures.get(token_id)
         if existing_task:
-            return await existing_task
+            return await asyncio.shield(existing_task)
 
         async def runner() -> bool:
             try:
@@ -912,7 +924,7 @@ class TokenManager:
 
         task = asyncio.create_task(runner())
         self._refresh_futures[token_id] = task
-        return await task
+        return await asyncio.shield(task)
 
     async def _do_refresh_at(
         self, token_id: int, st: str, token: Optional[Token] = None
@@ -1006,8 +1018,7 @@ class TokenManager:
                 validated = credits_result if credits_result is not None else result
                 if "credits" in validated:
                     updates["credits"] = validated["credits"]
-                if "userPaygateTier" in validated:
-                    updates["user_paygate_tier"] = validated["userPaygateTier"]
+                updates.update(self._verified_tier_updates(validated))
                 saved = await self.db.update_token_if_cookie_matches(
                     token_id, token.google_cookies, **updates
                 )
@@ -1017,7 +1028,7 @@ class TokenManager:
                 await self.db.update_token(
                     token_id,
                     credits=credits_result.get("credits", 0),
-                    user_paygate_tier=credits_result.get("userPaygateTier"),
+                    **self._verified_tier_updates(credits_result),
                 )
 
             if credits_result is not None:
@@ -1152,9 +1163,9 @@ class TokenManager:
         }
         if "credits" in session:
             updates["credits"] = session["credits"]
-        if "userPaygateTier" in session:
-            updates["user_paygate_tier"] = session["userPaygateTier"]
+        updates.update(self._verified_tier_updates(session))
         if identity_changed:
+            updates.setdefault("user_paygate_tier", None)
             updates["email"] = observed_raw
             updates["login_account"] = observed_raw
             current_name = str(token.name or "").strip()
@@ -1420,7 +1431,7 @@ class TokenManager:
 
     async def record_usage(self, token_id: int, is_video: bool = False):
         """Record token usage"""
-        await self.db.update_token(token_id, use_count=1, last_used_at=datetime.now())
+        await self.db.increment_token_usage(token_id)
 
         if is_video:
             await self.db.increment_token_stats(token_id, "video")
@@ -1467,62 +1478,59 @@ class TokenManager:
         )
 
     async def auto_unban_429_tokens(self):
-        """自动解禁因429被禁用的token
-
-        规则:
-        - 距离禁用时间12小时后自动解禁
-        - 仅解禁未过期的token
-        - 仅解禁因429被禁用的token
-        """
+        """Recover eligible 429 bans, revalidating current-Flow Cookie sessions."""
         all_tokens = await self.db.get_all_tokens()
         now = datetime.now(timezone.utc)
 
         for token in all_tokens:
-            # 跳过非429禁用的token
-            if token.ban_reason != "429_rate_limit":
+            if token.ban_reason != "429_rate_limit" or token.is_active or not token.banned_at:
+                continue
+            banned_at = self._as_utc(token.banned_at)
+            if now - banned_at < timedelta(hours=12):
                 continue
 
-            # 跳过未禁用的token
-            if token.is_active:
-                continue
+            updates: Dict[str, Any] = {}
+            if self._is_frontend_session_at(token):
+                if not str(token.google_cookies or "").strip():
+                    continue
+                try:
+                    # st_to_at validates the Cookie session using the current Flow RPC.
+                    # A failure, including a network failure, cannot establish recovery.
+                    session = await self._st_to_at_for_token(token, token.st)
+                    at = str(session.get("access_token") or "").strip()
+                    if not at:
+                        raise RuntimeError("Flow 登录态验证响应缺少 access_token")
+                    cookies = session.get("google_cookies") or token.google_cookies
+                    from .browser_cookie_utils import validate_flow_cookie_storage
 
-            # 跳过没有禁用时间的token
-            if not token.banned_at:
-                continue
-
-            # 检查token是否已过期
-            if token.at_expires:
-                # 确保时区一致
-                if token.at_expires.tzinfo is None:
-                    at_expires_aware = token.at_expires.replace(tzinfo=timezone.utc)
-                else:
-                    at_expires_aware = token.at_expires
-
-                # 如果已过期，跳过
-                if at_expires_aware <= now:
+                    validate_flow_cookie_storage(cookies)
+                    updates = {
+                        "at": at,
+                        "at_expires": self._parse_at_expires(session.get("expires")),
+                        "google_cookies": cookies,
+                        "st": "frontend-" + hashlib.sha256(cookies.encode("utf-8")).hexdigest()[:32],
+                        "last_st_refresh_at": now,
+                        "last_st_refresh_result": "success",
+                        **self._verified_tier_updates(session),
+                    }
+                    if "credits" in session:
+                        updates["credits"] = session["credits"]
+                except Exception as exc:
                     debug_logger.log_info(
-                        f"[AUTO_UNBAN] Token {token.id} 已过期，跳过解禁"
+                        f"[AUTO_UNBAN] Token {token.id} Cookie 校验失败，保留禁用状态: {exc}"
                     )
                     continue
+            elif token.at_expires and self._as_utc(token.at_expires) <= now:
+                continue
 
-            # 确保banned_at时区一致
-            if token.banned_at.tzinfo is None:
-                banned_at_aware = token.banned_at.replace(tzinfo=timezone.utc)
-            else:
-                banned_at_aware = token.banned_at
-
-            # 检查是否已过12小时
-            time_since_ban = now - banned_at_aware
-            if time_since_ban.total_seconds() >= 12 * 3600:  # 12小时
-                debug_logger.log_info(
-                    f"[AUTO_UNBAN] 解禁Token {token.id} (禁用时间: {banned_at_aware}, "
-                    f"已过 {time_since_ban.total_seconds() / 3600:.1f} 小时)"
-                )
-                await self.db.update_token(
-                    token.id, is_active=True, ban_reason=None, banned_at=None
-                )
-                # 重置错误计数
+            recovered = await self.db.recover_429_token(
+                token.id, token.banned_at, token.google_cookies, **updates
+            )
+            if recovered:
+                if updates:
+                    self._mark_at_valid(token.id)
                 await self.db.reset_error_count(token.id)
+                debug_logger.log_info(f"[AUTO_UNBAN] 解禁Token {token.id} (禁用时间: {banned_at})")
 
     # ========== 余额刷新 ==========
 
@@ -1555,13 +1563,11 @@ class TokenManager:
                 token_id=token.id,
             )
             credits = result.get("credits", 0)
-            user_paygate_tier = result.get("userPaygateTier")
-
             # 更新数据库
             await self.db.update_token(
                 token_id,
                 credits=credits,
-                user_paygate_tier=user_paygate_tier,
+                **self._verified_tier_updates(result),
             )
 
             return credits

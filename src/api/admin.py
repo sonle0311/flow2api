@@ -1152,6 +1152,13 @@ async def update_token(
     """Validate current Flow cookies and update an account."""
     try:
         existing = await token_manager.get_token(token_id)
+        credential_replaced = bool(
+            (request.st and (not existing or request.st != existing.st))
+            or (
+                request.google_cookies
+                and (not existing or request.google_cookies.strip() != (existing.google_cookies or "").strip())
+            )
+        )
         session_value = request.st or (existing.st if existing else "")
         google_cookies = request.google_cookies or (
             existing.google_cookies if existing else ""
@@ -1201,6 +1208,8 @@ async def update_token(
             proxy_url=request.proxy_url,
             auto_refresh_enabled=request.auto_refresh_enabled,
             refresh_interval_minutes=request.refresh_interval_minutes,
+            auto_enable_on_update=credential_replaced,
+            _verified_user_paygate_tier=result.get("userPaygateTier"),
         )
         if request.google_cookies:
             await token_manager.mark_cookie_validated(
@@ -1415,6 +1424,7 @@ async def import_tokens(
                         proxy_url=item.proxy_url,
                         auto_refresh_enabled=item.auto_refresh_enabled,
                         refresh_interval_minutes=item.refresh_interval_minutes,
+                        _verified_user_paygate_tier=result.get("userPaygateTier"),
                     )
                     should_enable = item.is_active and not is_expired
                     if should_enable:
@@ -2399,9 +2409,11 @@ async def test_captcha_score(
                         "token_preview": _mask_token(token_value),
                         "token_elapsed_ms": token_elapsed_ms,
                         "verify_elapsed_ms": 0,
-                        "verify_http_status": 200,
-                        "score": 0.9,
-                        "verify_result": {"success": True, "message": "跳过分数校验"},
+                        "verify_http_status": None,
+                        "score": None,
+                        "verified": False,
+                        "connectivity_only": True,
+                        "verify_result": {"success": False, "skipped": True, "message": "跳过分数校验"},
                         "verify_request_meta": {},
                         "browser_proxy_enabled": browser_proxy_enabled,
                         "browser_proxy_url": browser_proxy_url
@@ -2786,6 +2798,7 @@ async def plugin_update_token(
                 google_cookies=google_cookies,
                 login_account=email,
                 auto_enable_on_update=plugin_config.auto_enable_on_update,
+                _verified_user_paygate_tier=result.get("userPaygateTier"),
             )
             await token_manager.mark_cookie_validated(existing_token.id, email)
 

@@ -1354,6 +1354,40 @@ class Database:
                 await db.execute(query, params)
                 await db.commit()
 
+    async def increment_token_usage(self, token_id: int) -> None:
+        """Atomically record one use and its timestamp across concurrent callers."""
+        async with self._connect(write=True) as db:
+            await db.execute(
+                "UPDATE tokens SET use_count = COALESCE(use_count, 0) + 1, "
+                "last_used_at = ? WHERE id = ?",
+                (datetime.now().isoformat(sep=" "), token_id),
+            )
+            await db.commit()
+
+    async def recover_429_token(
+        self, token_id: int, expected_banned_at: datetime, expected_cookies: str,
+        **validated_session,
+    ) -> bool:
+        """Recover only the exact ban/Cookie snapshot that was validated."""
+        allowed = {
+            "at", "at_expires", "st", "google_cookies", "credits", "user_paygate_tier",
+            "last_st_refresh_at", "last_st_refresh_result",
+        }
+        if not set(validated_session).issubset(allowed):
+            raise ValueError("Invalid recovery fields")
+        assignments = ["is_active = 1", "ban_reason = NULL", "banned_at = NULL"]
+        assignments.extend(f"{key} = ?" for key in validated_session)
+        async with self._connect(write=True) as db:
+            cursor = await db.execute(
+                f"UPDATE tokens SET {', '.join(assignments)} "
+                "WHERE id = ? AND is_active = 0 AND ban_reason = '429_rate_limit' "
+                "AND banned_at = ? AND COALESCE(google_cookies, '') = ?",
+                [*validated_session.values(), token_id,
+                 expected_banned_at.isoformat(sep=" "), expected_cookies or ""],
+            )
+            await db.commit()
+            return cursor.rowcount > 0
+
     async def update_token_if_cookie_matches(
         self, token_id: int, expected_cookies: str, *, expected_identity=None, **kwargs
     ) -> bool:

@@ -1080,3 +1080,83 @@ def test_model_tester_displays_all_published_models(browser_page):
     assert sorted(
         items.evaluate_all("items => items.map(item => item.dataset.model)")
     ) == sorted(model["id"] for model in models)
+
+
+def _open_model_tester(page, base):
+    page.goto(base + "/test", wait_until="networkidle")
+    page.wait_for_function("typeof window.selectModel === 'function'")
+    page.evaluate("selectModel('omni-1.2-flash')")
+    page.locator("#apiKey").fill("synthetic-key")
+
+
+def test_reference_batch_reserves_slots_and_retains_selection_order(browser_page):
+    page, base = browser_page
+    _open_model_tester(page, base)
+    page.evaluate("""() => {
+        window.pendingReaders = [];
+        window.FileReader = class {
+            readAsDataURL(file) { this.file = file; window.pendingReaders.push(this); }
+        };
+        handleFiles(Array.from({length: 5}, (_, i) =>
+            new File(['image'], 'image' + i + '.png', {type: 'image/png'})));
+    }""")
+    assert page.evaluate("window.pendingReaders.length") == 3
+    page.evaluate("""() => {
+        [...window.pendingReaders].reverse().forEach(reader =>
+            reader.onload({target: {result: 'data:image/png;base64,' + btoa(reader.file.name)}}));
+    }""")
+    page.wait_for_function("STATE.images.length === 3")
+    assert page.evaluate("STATE.images.map(value => atob(value.split(',')[1]))") == [
+        "image0.png", "image1.png", "image2.png",
+    ]
+
+
+def test_old_reference_reader_cannot_append_to_new_model_selection(browser_page):
+    page, base = browser_page
+    _open_model_tester(page, base)
+    page.evaluate("""() => {
+        window.FileReader = class {
+            readAsDataURL() { window.oldReader = this; }
+        };
+        handleFiles([new File(['image'], 'old.png', {type: 'image/png'})]);
+        selectModel('omni-1.2-flash-8s-portrait');
+        window.oldReader.onload({target: {result: 'data:image/png;base64,c3RhbGU='}});
+    }""")
+    assert page.evaluate("STATE.images") == []
+    assert page.locator(".image-preview-item").count() == 0
+
+
+@pytest.mark.parametrize("stream, expected_success", [
+    ('data: {"error":{"message":"Synthetic failure","status_code":503}}\n\ndata: [DONE]\n\n', False),
+    ('data: {"choices":[{"delta":{"content":"completed"}}]}\n\n', False),
+    ('data: [DONE]\n\n', False),
+    ('data: {"choices":[{"delta":{"content":"completed"}}]}\r\n\r\ndata: [DONE]\r\n\r\n', False),
+    ('data: {"choices":[{"delta":{"content":"![Result](/synthetic.png)"}}]}\r\n\r\ndata: [DONE]\r\n\r\n', True),
+    ('data: ' + json.dumps({"choices": [{"delta": {"content": "<video src='/synthetic.mp4'></video>"}}]}) + '\n\ndata: [DONE]\n\n', True),
+    ('data: {"choices":[{"delta":{"content":"![Result](/synthetic.png)"}}]}\n\ndata: [DONE]', False),
+])
+def test_model_tester_distinguishes_failed_and_completed_streams(browser_page, stream, expected_success):
+    page, base = browser_page
+    page.route("**/v1/chat/completions", lambda route: route.fulfill(
+        content_type="text/event-stream", body=stream,
+    ))
+    _open_model_tester(page, base)
+    page.locator("#promptInput").fill("Synthetic scene")
+    page.evaluate("generate()")
+    assert page.locator("#statusDot").get_attribute("class") == (
+        "status-dot status-done" if expected_success else "status-dot status-error"
+    )
+    if "Synthetic failure" in stream:
+        assert "Synthetic failure" in page.locator("#outputLog").inner_text()
+
+
+def test_unknown_account_entitlement_is_not_displayed_as_free(browser_page):
+    page, base = browser_page
+    page.route("**/api/tokens", lambda route: route.fulfill(json=[{
+        "id": 1, "email": "unknown@example.com", "is_active": True,
+        "user_paygate_tier": None,
+    }]))
+    page.goto(base + "/manage", wait_until="networkidle")
+    playwright_api.expect(page.locator("#tokenTableBody")).to_contain_text("unknown@example.com")
+    assert "Unknown" in page.locator("#tokenTableBody").inner_text()
+    assert "Free" not in page.locator("#tokenTableBody").inner_text()

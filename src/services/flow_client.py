@@ -9,13 +9,14 @@ import random
 import base64
 import gzip
 import ssl
+import socket
 import re
 from typing import Dict, Any, Optional, List, Union, Callable, Awaitable
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 import urllib.error
 import urllib.request
 from http.cookiejar import CookieJar
-from curl_cffi import CurlInfo, CurlOpt
+from curl_cffi import CurlECode, CurlError, CurlInfo, CurlOpt
 from curl_cffi.requests import AsyncSession
 from ..core.logger import debug_logger
 from ..core.config import (
@@ -852,6 +853,8 @@ class _FlowClientBase(FlowFrontendMixin):
             )
 
         start_time = time.time()
+        post_started = False
+        response_rejected = False
 
         try:
             session_kwargs: Dict[str, Any] = {"trust_env": False}
@@ -884,8 +887,10 @@ class _FlowClientBase(FlowFrontendMixin):
                         request_kwargs["data"] = raw_body
                     else:
                         request_kwargs["json"] = json_data
+                    post_started = True
                     response = await session.post(url, **request_kwargs)
 
+                response_rejected = response.status_code >= 400
                 if cookie_jar is not None:
                     # 兼容自定义/旧版 flow_frontend：缺少该方法时跳过快照回写
                     updater = getattr(self, "_update_flow_cookie_jar", None)
@@ -948,7 +953,45 @@ class _FlowClientBase(FlowFrontendMixin):
                     f"[API FAILED] Request Body: {request_body_for_log}"
                 )
                 debug_logger.log_error(f"[API FAILED] Exception: {error_msg}")
-            raise Exception(f"Flow API text request failed: {error_msg}")
+            wrapped_error = Exception(f"Flow API text request failed: {error_msg}")
+            for marker in ("submission_uncertain", "outcome_unknown"):
+                if getattr(e, marker, False):
+                    setattr(wrapped_error, marker, True)
+            known_pre_send_failure = isinstance(
+                e, (ConnectionRefusedError, socket.gaierror)
+            ) or (
+                isinstance(e, CurlError)
+                and e.code in {
+                    CurlECode.COULDNT_RESOLVE_PROXY,
+                    CurlECode.COULDNT_RESOLVE_HOST,
+                    CurlECode.COULDNT_CONNECT,
+                    CurlECode.SSL_CONNECT_ERROR,
+                }
+            )
+            error_response = getattr(e, "response", None)
+            if error_response is not None and (
+                getattr(error_response, "status_code", 0)
+                or getattr(error_response, "redirect_count", 0)
+            ):
+                # A redirect can fail to connect after the initial POST ran.
+                known_pre_send_failure = False
+            if known_pre_send_failure:
+                wrapped_error.request_not_sent = True
+            parsed_url = urlparse(url)
+            rpc_ids = parse_qs(parsed_url.query).get("rpcids", [])
+            read_only_rpcs = {"nzlxg", "as29s", "jwpduf", "mrlkwd", "GN0Bre"}
+            if (
+                post_started
+                and not response_rejected
+                and not known_pre_send_failure
+                and parsed_url.hostname == "flow.google.com"
+                and parsed_url.path.endswith("/data/batchexecute")
+                and any(rpc_id not in read_only_rpcs for rpc_id in rpc_ids)
+            ):
+                # Once POST transport starts, a lost response cannot establish
+                # whether a mutating RPC was accepted. Never submit it again.
+                wrapped_error.submission_uncertain = True
+            raise wrapped_error from e
 
     def _should_fallback_to_urllib(self, error_message: str) -> bool:
         """判断是否应从 curl_cffi 回退到 urllib。"""
@@ -4579,7 +4622,9 @@ class _FlowClientBase(FlowFrontendMixin):
     ) -> bool:
         """统一处理生成链路的重试判定与打码自愈通知。"""
         error_str = str(error)
-        retry_reason = self._get_retry_reason(error_str)
+        retry_reason = self._get_retry_reason(error_str) or (
+            "网络/TLS错误" if getattr(error, "request_not_sent", False) else None
+        )
         retry_delay = self._get_retry_delay_seconds(error_str, retry_attempt)
 
         effective_max_retries = self._resolve_generation_retry_budget(
@@ -4602,7 +4647,11 @@ class _FlowClientBase(FlowFrontendMixin):
                 error_message=error_str,
             )
 
-        if not retry_reason or getattr(error, "submission_uncertain", False):
+        if (
+            not retry_reason
+            or getattr(error, "submission_uncertain", False)
+            or getattr(error, "outcome_unknown", False)
+        ):
             return False
 
         if is_terminal_attempt:

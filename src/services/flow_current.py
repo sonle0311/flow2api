@@ -196,6 +196,21 @@ class CurrentFlowClientMixin:
             project_id=project_id,
         )
 
+    @staticmethod
+    def _find_explicit_paygate_tier(payload: Any) -> Optional[str]:
+        """Read only named provider entitlements, never infer one from credits."""
+        known_tiers = {"PAYGATE_TIER_NOT_PAID", "PAYGATE_TIER_ONE", "PAYGATE_TIER_TWO"}
+        pending = [payload]
+        while pending:
+            value = pending.pop()
+            if isinstance(value, str) and value in known_tiers:
+                return value
+            if isinstance(value, dict):
+                pending.extend(reversed(list(value.values())))
+            elif isinstance(value, list):
+                pending.extend(reversed(value))
+        return None
+
     async def get_credits(
         self,
         at: str = "",
@@ -219,9 +234,9 @@ class CurrentFlowClientMixin:
         )
         return {
             "credits": credits,
-            "userPaygateTier": (
-                "PAYGATE_TIER_ONE" if credits > 0 else "PAYGATE_TIER_NOT_PAID"
-            ),
+            # nzlxg can return only a balance. None means the entitlement was
+            # not supplied; callers must preserve a previously verified tier.
+            "userPaygateTier": self._find_explicit_paygate_tier(payload),
             "frontendRpc": "nzlxg",
         }
 
@@ -599,6 +614,10 @@ class CurrentFlowClientMixin:
                 )
             except Exception as error:
                 last_error = error
+                if getattr(error, "submission_uncertain", False) or getattr(
+                    error, "outcome_unknown", False
+                ):
+                    raise
                 # MODEL_ACCESS_DENIED 为账号权限拒绝，重试不会改变结果
                 if "MODEL_ACCESS_DENIED" in str(error):
                     raise

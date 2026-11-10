@@ -210,7 +210,8 @@
     "当前账号配额已用尽，正在切换其他账号重试...\n": "当前账号配额已用尽，正在切换其他账号重试...\n",
     "当前账号触发风控，正在切换其他账号重试...\n": "当前账号触发风控，正在切换其他账号重试...\n",
     "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）",
-    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error}（已尝试 {count} 个账号均失败: {details}）"
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error}（已尝试 {count} 个账号均失败: {details}）",
+    "Invalid request host": "请求主机地址无效"
   },
   "en": {
     "旧版本的邮箱不匹配报错直接丢弃，不再回显给前端。": "Discard legacy email-mismatch errors instead of returning them to the frontend.",
@@ -423,7 +424,8 @@
     "当前账号配额已用尽，正在切换其他账号重试...\n": "This account's quota is exhausted; retrying with another account...\n",
     "当前账号触发风控，正在切换其他账号重试...\n": "This account was blocked by a risk check; retrying with another account...\n",
     "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error} (all {count} attempted accounts failed: {details}; no other account is available)",
-    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (all {count} attempted accounts failed: {details})"
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (all {count} attempted accounts failed: {details})",
+    "Invalid request host": "Invalid request host"
   },
   "vi": {
     "旧版本的邮箱不匹配报错直接丢弃，不再回显给前端。": "Bỏ qua các lỗi không khớp email từ phiên bản cũ, không trả lại cho giao diện.",
@@ -636,6 +638,7 @@
     "当前账号配额已用尽，正在切换其他账号重试...\n": "Tài khoản hiện tại đã hết hạn mức, đang chuyển sang tài khoản khác để thử lại...\n",
     "当前账号触发风控，正在切换其他账号重试...\n": "Tài khoản hiện tại bị kiểm tra rủi ro chặn, đang chuyển sang tài khoản khác để thử lại...\n",
     "{error}（已尝试 {count} 个账号均失败: {details}；没有其他可切换的账号）": "{error} (cả {count} tài khoản đã thử đều thất bại: {details}; không còn tài khoản khác để chuyển sang)",
-    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (cả {count} tài khoản đã thử đều thất bại: {details})"
+    "{error}（已尝试 {count} 个账号均失败: {details}）": "{error} (cả {count} tài khoản đã thử đều thất bại: {details})",
+    "Invalid request host": "Địa chỉ máy chủ trong yêu cầu không hợp lệ"
   }
 }

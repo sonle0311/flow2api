@@ -176,7 +176,7 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
 </div>
 
 <script>
-const STATE = { selectedModel: null, modelConfig: null, images: [], generating: false };
+const STATE = { selectedModel: null, modelConfig: null, images: [], generating: false, imageEpoch: 0, pendingImages: 0 };
 </script>
 <script>
     I18n.ready.then(() => {
@@ -438,6 +438,9 @@ function selectModel(modelId) {
   STATE.selectedModel = modelId;
   STATE.modelConfig = getModelMeta(modelId);
   STATE.images = [];
+  STATE.imageEpoch++;
+  STATE.pendingImages = 0;
+  imageReadQueue = Promise.resolve();
 
   // Update sidebar active state
   document.querySelectorAll(".model-item").forEach(el => {
@@ -468,13 +471,14 @@ function selectModel(modelId) {
 
   // Enable button
   const btn = document.getElementById("btnGenerate");
-  btn.disabled = false;
+  btn.disabled = STATE.generating;
   I18n.setMessage(btn, meta.type === "image" ? I18n.t("🎨 生成图片") : I18n.t("🎬 生成视频"));
 }
 
 // Image upload handling
 const uploadArea = document.getElementById("imageUploadArea");
 const fileInput = document.getElementById("imageFileInput");
+let imageReadQueue = Promise.resolve();
 
 uploadArea.onclick = (e) => {
   if (e.target.closest(".remove-btn")) return;
@@ -493,17 +497,29 @@ fileInput.onchange = () => { handleFiles(fileInput.files); fileInput.value = "";
 
 function handleFiles(files) {
   const maxImages = STATE.modelConfig ? STATE.modelConfig.maxImages : 5;
-  for (const file of files) {
-    if (STATE.images.length >= maxImages) break;
-    if (!file.type.startsWith("image/")) continue;
-
+  const available = Math.max(0, maxImages - STATE.images.length - STATE.pendingImages);
+  const selected = Array.from(files).filter(file => file.type.startsWith('image/')).slice(0, available);
+  if (!selected.length) return imageReadQueue;
+  const epoch = STATE.imageEpoch;
+  STATE.pendingImages += selected.length;
+  document.getElementById('btnGenerate').disabled = true;
+  const batch = Promise.all(selected.map(file => new Promise(resolve => {
     const reader = new FileReader();
-    reader.onload = (e) => {
-      STATE.images.push(e.target.result);
-      renderImagePreviews();
-    };
-    reader.readAsDataURL(file);
-  }
+    reader.onload = event => resolve(event.target.result);
+    reader.onerror = reader.onabort = () => resolve(null);
+    try { reader.readAsDataURL(file); } catch (_) { resolve(null); }
+  })));
+  // Read concurrently, but commit batches in selection order. A model change
+  // invalidates every old callback without altering the new model's slots.
+  imageReadQueue = imageReadQueue.then(async () => {
+    const results = await batch;
+    if (epoch !== STATE.imageEpoch) return;
+    STATE.pendingImages -= selected.length;
+    STATE.images.push(...results.filter(result => typeof result === 'string'));
+    renderImagePreviews();
+    document.getElementById('btnGenerate').disabled = STATE.generating || STATE.pendingImages > 0;
+  });
+  return imageReadQueue;
 }
 
 function renderImagePreviews() {
@@ -529,7 +545,7 @@ function removeImage(idx) {
 document.getElementById("btnGenerate").onclick = generate;
 
 async function generate() {
-  if (!STATE.selectedModel || STATE.generating) return;
+  if (!STATE.selectedModel || STATE.generating || STATE.pendingImages > 0) return;
 
   const baseUrl = (document.getElementById("baseUrl").value || "").trim();
   const apiKey = (document.getElementById("apiKey").value || "").trim();
@@ -593,47 +609,59 @@ async function generate() {
     const decoder = new TextDecoder();
     let fullContent = "";
     let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") continue;
-
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.error) {
-            appendLog(I18n.t("\n❌ 错误: {0}\n", {"0": (JSON.stringify(parsed.error))}));
-            continue;
-          }
-          const choices = parsed.choices || [];
-          if (choices.length > 0) {
-            const delta = choices[0].delta || {};
-            if (delta.reasoning_content) appendLog(I18n.translateMessage(delta.reasoning_content));
-            const content = delta.content || "";
-            if (content) {
-              fullContent += content;
-              appendLog(content);
-            }
-          }
-        } catch (e) {
-          // skip unparseable chunks
+    let sawDone = false;
+    function consumeFrame(frame) {
+      const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).replace(/^ /, '')).join('\n').trim();
+      if (!data) return;
+      if (data === '[DONE]') { sawDone = true; return; }
+      let parsed;
+      try { parsed = JSON.parse(data); }
+      catch (_) { throw new Error(I18n.t('响应流格式无效。')); }
+      if (parsed.error) {
+        const error = parsed.error.message || JSON.stringify(parsed.error);
+        throw new Error(I18n.translateError(error));
+      }
+      for (const choice of parsed.choices || []) {
+        const delta = choice.delta || {};
+        if (delta.reasoning_content) appendLog(I18n.translateMessage(delta.reasoning_content));
+        if (typeof delta.content === 'string') {
+          fullContent += delta.content;
+          appendLog(delta.content);
         }
       }
+    }
+    function drainFrames() {
+      let separator;
+      while (!sawDone && (separator = /\r?\n\r?\n/.exec(buffer))) {
+        const frame = buffer.slice(0, separator.index);
+        buffer = buffer.slice(separator.index + separator[0].length);
+        consumeFrame(frame);
+      }
+    }
+    try {
+      while (!sawDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        drainFrames();
+      }
+      buffer += decoder.decode();
+      drainFrames();
+      if (!sawDone) throw new Error(I18n.t('响应流意外结束，请检查结果和日志后再重试。'));
+      if (!fullContent.trim()) throw new Error(I18n.t('未收到生成结果，请检查日志。'));
+      renderResult(fullContent);
+      if (!document.getElementById('outputResult').querySelector('img, video')) {
+        throw new Error(I18n.t('未收到生成结果，请检查日志。'));
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     appendLog(I18n.t("\n\n[{0}] 完成，耗时 {1}s\n", {"0": (new Date().toLocaleTimeString(I18n.locale)), "1": (elapsed)}));
 
-    // Render result
-    renderResult(fullContent);
     dot.className = "status-dot status-done";
     I18n.setMessage(document.getElementById("statusText"), I18n.t("完成 ({0}s)", {"0": (elapsed)}));
 
@@ -643,7 +671,7 @@ async function generate() {
     I18n.setMessage(document.getElementById("statusText"), I18n.t("失败"));
   } finally {
     STATE.generating = false;
-    btn.disabled = false;
+    btn.disabled = STATE.pendingImages > 0;
     const meta = STATE.modelConfig;
     I18n.setMessage(btn, meta && meta.type === "image" ? I18n.t("🎨 生成图片") : I18n.t("🎬 生成视频"));
   }

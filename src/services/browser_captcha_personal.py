@@ -6635,20 +6635,6 @@ class BrowserCaptchaService:
             if target_url.lower() != PERSONAL_COOKIE_PREBIND_URL
             else target_url
         )
-        if not self.headless:
-            # 有头模式下不再为内部打码页创建独立可见 browser context 窗口。
-            # 直接复用默认 context 的单一浏览器窗口，通过新标签页承载 resident/legacy 页面。
-            tab = await self._open_visible_browser_tab(
-                target_url,
-                label=f"{label}:headed_tab",
-                timeout_seconds=timeout_seconds,
-            )
-            try:
-                tab._browser = browser
-            except Exception:
-                pass
-            return tab, None
-
         from nodriver import cdp
 
         if not await self._browser_has_page_targets():
@@ -6748,7 +6734,7 @@ class BrowserCaptchaService:
             raise RuntimeError(
                 f"target not found after create_target (target_id={target_id}, context_id={browser_context_id})"
             )
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if browser_context_id is not None:
                 await self._dispose_browser_context_quietly(browser_context_id)
             raise
@@ -6759,21 +6745,17 @@ class BrowserCaptchaService:
         timeout_seconds: Optional[float] = None,
         browser_context_id: Any = None,
     ):
-        if browser_context_id is not None and self.browser:
-            try:
-                from nodriver import cdp
+        if browser_context_id is not None:
+            from nodriver import cdp
 
-                return await self._run_with_timeout(
-                    self.browser.send(
-                        cdp.storage.get_cookies(browser_context_id=browser_context_id)
-                    ),
-                    timeout_seconds or self._command_timeout_seconds,
-                    label,
-                )
-            except Exception as e:
-                debug_logger.log_warning(
-                    f"[BrowserCaptcha] 按 context 读取 cookies 失败，回退全局 cookie jar ({label}): {e}"
-                )
+            # An account-context failure must never export the default profile.
+            return await self._run_with_timeout(
+                self.browser.send(
+                    cdp.storage.get_cookies(browser_context_id=browser_context_id)
+                ),
+                timeout_seconds or self._command_timeout_seconds,
+                label,
+            )
 
         return await self._run_with_timeout(
             self.browser.cookies.get_all(),
@@ -7334,6 +7316,19 @@ class BrowserCaptchaService:
         target = getattr(tab, "target", None)
         return getattr(target, "browser_context_id", None) if target else None
 
+    def _resolve_resident_browser_context_id(self, resident_info) -> Any:
+        tab_context_id = self._extract_tab_browser_context_id(resident_info.tab)
+        context_id = resident_info.browser_context_id
+        target = getattr(resident_info.tab, "target", None)
+        if target is not None and hasattr(target, "browser_context_id") and tab_context_id is None:
+            return None
+        if context_id is not None and tab_context_id is not None:
+            if str(context_id) != str(tab_context_id):
+                return None
+        context_id = context_id if context_id is not None else tab_context_id
+        resident_info.browser_context_id = context_id
+        return context_id
+
     async def _dispose_browser_context_quietly(
         self, browser_context_id: Any, browser_instance=None
     ):
@@ -7441,8 +7436,11 @@ class BrowserCaptchaService:
         from nodriver import cdp
 
         if browser_context_id is None and tab is not None:
-            # Headed resident tabs reuse the default browser context. Sending the
-            # Network command to that tab keeps cookies in the same profile session.
+            browser_context_id = self._extract_tab_browser_context_id(tab)
+
+        if browser_context_id is None and tab is not None:
+            # Explicit default-profile startup/manual-login operations stay on
+            # their tab. Account-bound residents require an isolated context.
             cookie_command = cdp.network.set_cookies(cookie_params)
         else:
             cookie_command = cdp.storage.set_cookies(
@@ -7633,11 +7631,7 @@ class BrowserCaptchaService:
         ):
             return False
 
-        browser_context_id = (
-            resident_info.browser_context_id
-            or self._extract_tab_browser_context_id(resident_info.tab)
-        )
-        resident_info.browser_context_id = browser_context_id
+        browser_context_id = self._resolve_resident_browser_context_id(resident_info)
         if browser_context_id is None:
             return False
 
@@ -7705,39 +7699,46 @@ class BrowserCaptchaService:
         if resident_info is None or not resident_info.tab or not token_key:
             return False
 
+        browser_context_id = self._resolve_resident_browser_context_id(resident_info)
+        if browser_context_id is None:
+            return False
+
         cookie_text = await self._load_token_cookie(int(token_key))
         cookie_signature = self._normalize_cookie_signature(cookie_text)
 
-        if not cookie_signature:
-            self._remember_token_affinity(
-                int(token_key), resident_info.slot_id, resident_info
-            )
-            resident_info.cookie_signature = None
-            return False
-
         if (
             not force
+            and cookie_signature
             and resident_info.token_id == int(token_key)
             and resident_info.cookie_signature == cookie_signature
         ):
             return True
 
-        browser_cookies = self._build_personal_cookie_targets(cookie_text)
-        if not browser_cookies:
+        browser_cookies = (
+            self._build_personal_cookie_targets(cookie_text) if cookie_signature else []
+        )
+        if cookie_signature and not browser_cookies:
             return False
 
         try:
-            browser_context_id = resident_info.browser_context_id
-            if self.headless:
-                browser_context_id = (
-                    browser_context_id
-                    or self._extract_tab_browser_context_id(resident_info.tab)
-                )
-            else:
-                browser_context_id = None
-            resident_info.browser_context_id = browser_context_id
-
             async def apply_cookie_update():
+                if (
+                    not cookie_signature
+                    or resident_info.token_id != int(token_key)
+                    or resident_info.cookie_signature != cookie_signature
+                ):
+                    from nodriver import cdp
+
+                    resident_info.cookie_signature = None
+                    resident_info.session_cookies = None
+                    resident_info.session_cookies_fetched_at = 0.0
+                    await self._run_with_timeout(
+                        self.browser.send(
+                            cdp.storage.clear_cookies(browser_context_id=browser_context_id)
+                        ),
+                        timeout_seconds=8.0,
+                        label=f"storage.clear_cookies:{label}:{token_key}",
+                    )
                 return await self._set_browser_cookie_targets(
                     browser_cookies,
                     label=f"storage.set_cookies:{label}:{token_key}",
@@ -7910,11 +7911,7 @@ class BrowserCaptchaService:
         if resident_info is None or not resident_info.tab:
             return False
 
-        browser_context_id = (
-            resident_info.browser_context_id
-            or self._extract_tab_browser_context_id(resident_info.tab)
-        )
-        resident_info.browser_context_id = browser_context_id
+        browser_context_id = self._resolve_resident_browser_context_id(resident_info)
         if browser_context_id is None:
             return False
 
@@ -8019,13 +8016,18 @@ class BrowserCaptchaService:
         if not token_key:
             return True
 
+        browser_context_id = self._resolve_resident_browser_context_id(resident_info)
+        if browser_context_id is None:
+            return False
+
         desired_cookie_text = await self._load_token_cookie(int(token_key))
         desired_cookie_signature = self._normalize_cookie_signature(desired_cookie_text)
         current_token_id = resident_info.token_id
         current_cookie_signature = resident_info.cookie_signature
 
         if (
-            current_token_id == int(token_key)
+            desired_cookie_signature
+            and current_token_id == int(token_key)
             and current_cookie_signature == desired_cookie_signature
         ):
             self._remember_token_affinity(
@@ -8034,36 +8036,18 @@ class BrowserCaptchaService:
             return True
 
         if not desired_cookie_signature:
-            if current_token_id == int(token_key) and not current_cookie_signature:
-                self._remember_token_affinity(
-                    int(token_key), resident_info.slot_id, resident_info
-                )
-                resident_info.cookie_signature = None
-                return True
-
             try:
                 from nodriver import cdp
 
-                browser_context_id = resident_info.browser_context_id
-                if self.headless and browser_context_id is None:
-                    browser_context_id = self._extract_tab_browser_context_id(
-                        resident_info.tab
-                    )
-                else:
-                    browser_context_id = None
-                resident_info.browser_context_id = browser_context_id
-
                 async with resident_info.solve_lock:
-                    if browser_context_id is None:
-                        clear_cookie_command = cdp.network.clear_browser_cookies()
-                        clear_target = resident_info.tab
-                    else:
-                        clear_cookie_command = cdp.storage.clear_cookies(
-                            browser_context_id=browser_context_id
-                        )
-                        clear_target = self.browser
+                    resident_info.cookie_signature = None
+                    resident_info.session_cookies = None
+                    resident_info.session_cookies_fetched_at = 0.0
+                    clear_cookie_command = cdp.storage.clear_cookies(
+                        browser_context_id=browser_context_id
+                    )
                     await self._run_with_timeout(
-                        clear_target.send(clear_cookie_command),
+                        self.browser.send(clear_cookie_command),
                         timeout_seconds=8.0,
                         label=f"storage.clear_cookies:{label}:{token_key}",
                     )
@@ -12727,12 +12711,14 @@ class BrowserCaptchaService:
             "OTZ",
         }
 
-        bcid = getattr(getattr(tab, "target", None), "browser_context_id", None)
-        for method, kwargs in (
-            (cdp.storage.get_cookies, {}),
-            (cdp.storage.get_cookies, {"browser_context_id": bcid}),
-            (cdp.network.get_all_cookies, {}),
+        bcid = self._resolve_resident_browser_context_id(resident_info)
+        if bcid is None:
+            return None
+        for target, method, kwargs in (
+            (self.browser, cdp.storage.get_cookies, {"browser_context_id": bcid}),
+            (tab, cdp.network.get_all_cookies, {}),
             (
+                tab,
                 cdp.network.get_cookies,
                 {
                     "urls": [
@@ -12746,7 +12732,7 @@ class BrowserCaptchaService:
         ):
             try:
                 effective_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-                raw = await tab.send(method(**effective_kwargs))
+                raw = await target.send(method(**effective_kwargs))
                 if raw:
                     for cookie in raw:
                         cname = str(getattr(cookie, "name", "") or "").strip()
@@ -13183,6 +13169,19 @@ class BrowserCaptchaService:
                     debug_logger.log_warning(
                         f"[BrowserCaptcha] 共享标签页 cookie 绑定校验失败，准备重建 (slot={slot_id}, project={project_id}, token_id={token_id})"
                     )
+                    await self._mark_resident_slot_unavailable(
+                        slot_id, resident_info, reason=f"cookie_binding_failed:{project_id}"
+                    )
+                    await release_reserved_slot()
+                    slot_id, resident_info = await self._rebuild_resident_tab(
+                        project_id, token_id=token_id, slot_id=slot_id,
+                        reserve_for_solve=True, return_slot_key=True,
+                    )
+                    reserved_slot_id = slot_id or None
+                    if resident_info is None or not await self._ensure_resident_token_binding(
+                        resident_info, token_id, label=f"get_token_rebound:{slot_id}"
+                    ):
+                        return finish_result(None)
 
             if resident_info and not resident_info.recaptcha_ready:
                 debug_logger.log_info(
@@ -13558,7 +13557,7 @@ class BrowserCaptchaService:
                 label=f"resident_browser_create_context:{slot_id}",
                 create_timeout_seconds=self._navigation_timeout_seconds,
             )
-            if browser_context_id is None and self.headless:
+            if browser_context_id is None:
                 browser_context_id = self._extract_tab_browser_context_id(tab)
 
             # 等待页面加载完成（减少等待时间）
@@ -13604,12 +13603,14 @@ class BrowserCaptchaService:
                 browser_context_id=browser_context_id,
             )
 
-            await self._apply_token_cookie_binding(
+            cookie_bound = await self._apply_token_cookie_binding(
                 resident_info,
                 token_id,
                 label=f"resident_init:{slot_id}",
                 force=True,
             )
+            if token_id is not None and not cookie_bound:
+                raise RuntimeError("account cookie binding failed")
 
             if not await self._open_labs_bootstrap_page(
                 tab, label=f"resident_init:{slot_id}"
@@ -13759,7 +13760,7 @@ class BrowserCaptchaService:
                         label=f"legacy_browser_create_context:{project_id}",
                         create_timeout_seconds=self._navigation_timeout_seconds,
                     )
-                    if browser_context_id is None and self.headless:
+                    if browser_context_id is None:
                         browser_context_id = (
                             self._extract_tab_browser_context_id(tab)
                         )
@@ -13770,12 +13771,14 @@ class BrowserCaptchaService:
                         token_id=token_id,
                         browser_context_id=browser_context_id,
                     )
-                    await self._apply_token_cookie_binding(
+                    cookie_bound = await self._apply_token_cookie_binding(
                         legacy_info,
                         token_id,
                         label=f"legacy:{project_id}",
                         force=True,
                     )
+                    if token_id is not None and not cookie_bound:
+                        return None, None
 
                     if not await self._open_labs_bootstrap_page(
                         tab, label=f"legacy:{project_id}"
