@@ -5,6 +5,8 @@ import asyncio
 import hashlib
 import time
 import mimetypes
+import threading
+import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -40,6 +42,7 @@ class FileCache:
         self._cleanup_task = None
         self._download_locks: Dict[str, asyncio.Lock] = {}
         self._active_download_paths: set[Path] = set()
+        self._cache_io_slots = asyncio.Semaphore(4)
 
     def _is_cleanup_disabled(self) -> bool:
         return self.default_timeout <= 0
@@ -183,6 +186,80 @@ class FileCache:
                 except Exception:
                     pass
 
+    async def _run_owned_cache_work(self, operation):
+        """Bound blocking workers and retain ownership through cancellation."""
+        async with self._cache_io_slots:
+            state_lock = threading.Lock()
+            state = {"started": False, "cancelled": False}
+
+            def run():
+                with state_lock:
+                    if state["cancelled"]:
+                        return None
+                    state["started"] = True
+                return operation()
+
+            # A Future, rather than a background Task, is not independently
+            # cancelled by asyncio's task shutdown while its thread still runs.
+            worker = asyncio.get_running_loop().run_in_executor(None, run)
+            cancelled = False
+            while True:
+                try:
+                    result = await asyncio.shield(worker)
+                    break
+                except asyncio.CancelledError:
+                    cancelled = True
+                    with state_lock:
+                        queued = not state["started"]
+                        if queued:
+                            state["cancelled"] = True
+                    if queued:
+                        # The locked flag also prevents a thread that has just
+                        # dequeued this operation from starting any file I/O.
+                        worker.cancel()
+                        raise
+                    if worker.cancelled():
+                        raise
+                    # An executing write/process cannot be abandoned. Keep
+                    # its slot and staging ownership, even on repeated cancel.
+                except Exception:
+                    if cancelled:
+                        raise asyncio.CancelledError() from None
+                    raise
+            if cancelled:
+                raise asyncio.CancelledError()
+            return result
+
+    async def _cache_content(self, file_path: Path, content=None, *, encoded=None) -> int:
+        """Decode/write privately off-loop; publish only for a live owner."""
+        staging = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.part")
+        staging_paths = {
+            staging.resolve(),
+            staging.with_suffix(staging.suffix + ".part").resolve(),
+        }
+        self._active_download_paths.update(staging_paths)
+
+        def prepare():
+            import base64
+
+            data = base64.b64decode(encoded) if encoded is not None else content
+            self._write_cached_content(staging, data)
+            return len(data)
+
+        try:
+            size = await self._run_owned_cache_work(prepare)
+            # No await between completion and atomic publication: cancellation
+            # cannot publish a final file after its caller has already left.
+            staging.replace(file_path)
+            return size
+        finally:
+            for path in staging_paths:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as error:
+                    debug_logger.log_warning(f"Failed to clean cache staging file: {error}")
+            self._active_download_paths.difference_update(staging_paths)
+
     async def start_cleanup_task(self):
         """Start background cleanup task"""
         if self._is_cleanup_disabled():
@@ -307,27 +384,10 @@ class FileCache:
         self._active_download_paths.add(temp_path)
         command = list(command)
         command[command.index(output_flag) + 1] = str(temp_path)
-        worker = asyncio.create_task(
-            asyncio.to_thread(subprocess.run, command, **run_kwargs)
-        )
-        cancelled = False
         try:
-            while True:
-                try:
-                    result = await asyncio.shield(worker)
-                    break
-                except asyncio.CancelledError:
-                    if worker.cancelled():
-                        raise
-                    # subprocess.run has its own bounded timeout. Keep the
-                    # download lock until it stops, even on repeated cancels.
-                    cancelled = True
-                except Exception:
-                    if cancelled:
-                        raise asyncio.CancelledError()
-                    raise
-            if cancelled:
-                raise asyncio.CancelledError()
+            result = await self._run_owned_cache_work(
+                lambda: subprocess.run(command, **run_kwargs)
+            )
             if (
                 result.returncode == 0
                 and temp_path.exists()
@@ -396,7 +456,7 @@ class FileCache:
                     )
 
                     if response.status_code == 200 and response.content:
-                        self._write_cached_content(file_path, response.content)
+                        await self._cache_content(file_path, response.content)
                         debug_logger.log_info(
                             f"File cached (curl_cffi): {filename} ({len(response.content)} bytes)"
                         )
@@ -550,18 +610,14 @@ class FileCache:
         Returns:
             Local cache filename
         """
-        import base64 as _b64
-        import uuid as _uuid
-
-        unique_id = hashlib.md5(f"{_uuid.uuid4()}{time.time()}".encode()).hexdigest()
+        unique_id = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode()).hexdigest()
         filename = f"{unique_id}.mp4"
         file_path = self.cache_dir / filename
 
         try:
-            video_data = _b64.b64decode(base64_data)
-            self._write_cached_content(file_path, video_data)
+            size = await self._cache_content(file_path, encoded=base64_data)
             debug_logger.log_info(
-                f"Base64 video cached: {filename} ({len(video_data)} bytes)"
+                f"Base64 video cached: {filename} ({size} bytes)"
             )
             return filename
         except Exception as e:
@@ -583,9 +639,6 @@ class FileCache:
         Returns:
             Local cache filename
         """
-        import base64
-        import uuid
-
         # Generate unique filename
         unique_id = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode()).hexdigest()
         suffix = f"_{resolution}" if resolution else ""
@@ -593,12 +646,9 @@ class FileCache:
         file_path = self.cache_dir / filename
 
         try:
-            # Decode base64 and save to file
-            image_data = base64.b64decode(base64_data)
-            with open(file_path, "wb") as f:
-                f.write(image_data)
+            size = await self._cache_content(file_path, encoded=base64_data)
             debug_logger.log_info(
-                f"Base64 image cached: {filename} ({len(image_data)} bytes)"
+                f"Base64 image cached: {filename} ({size} bytes)"
             )
             return filename
         except Exception as e:
@@ -627,6 +677,8 @@ class FileCache:
         try:
             removed_count = 0
             for file_path in self.cache_dir.iterdir():
+                if file_path.resolve() in self._active_download_paths:
+                    continue
                 if file_path.is_file():
                     try:
                         file_path.unlink()

@@ -1389,9 +1389,10 @@ class Database:
             return cursor.rowcount > 0
 
     async def update_token_if_cookie_matches(
-        self, token_id: int, expected_cookies: str, *, expected_identity=None, **kwargs
+        self, token_id: int, expected_cookies: str, *, expected_identity=None,
+        expected_at: Optional[str] = None, **kwargs
     ) -> bool:
-        """Save a refresh without overwriting a newer account Cookie push."""
+        """Save only while the expected Cookie, identity and optional AT still match."""
         allowed = {
             "google_cookies", "st", "at", "at_expires", "credits",
             "user_paygate_tier", "last_st_refresh_at", "last_st_refresh_result",
@@ -1406,6 +1407,9 @@ class Database:
             if expected_identity is not None:
                 predicate += " AND COALESCE(email, '') = ? AND COALESCE(login_account, '') = ?"
                 values.extend(value or "" for value in expected_identity)
+            if expected_at is not None:
+                predicate += " AND COALESCE(at, '') = ?"
+                values.append(expected_at)
             cursor = await db.execute(
                 f"UPDATE tokens SET {assignments} WHERE {predicate}", values,
             )

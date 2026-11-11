@@ -250,7 +250,7 @@ def test_management_switch_preserves_forms_and_log_payload(browser_page):
     page, base = browser_page
     open_page(page, base + "/manage")
     page.wait_for_function("typeof window.openAddModal === 'function'")
-    playwright_api.expect(page.locator("#tabTokens")).to_have_text("Token Management")
+    playwright_api.expect(page.locator("#tabTokens")).to_have_text("Accounts")
     page.evaluate("openAddModal()")
     page.locator("#addTokenRemark").fill("保存")
     page.locator("#addTokenGoogleCookies").fill("SID=local-test")
@@ -732,10 +732,14 @@ def test_integration_guide_tab_copies_complete_instructions_without_secrets(brow
                      "[DONE]", "generateContent", "inlineData"):
         assert contract in guide
     examples = [json.loads(block) for block in re.findall(r"```json\n(.*?)\n```", guide, re.S)]
-    assert examples[0]["stream"] is False
-    assert examples[0]["messages"][0]["role"] == "user"
-    assert examples[1][1]["type"] == "image_url"
-    assert examples[2]["contents"][0]["parts"][0]["text"] == "<PROMPT>"
+    requests_examples = [item for item in examples if isinstance(item, dict) and "messages" in item]
+    assert requests_examples[0]["model"] == "omni-1.2-flash"
+    assert requests_examples[0]["stream"] is False
+    assert requests_examples[0]["generationConfig"]["videoConfig"] == {
+        "durationSeconds": 8, "aspectRatio": "16:9", "mode": "auto"
+    }
+    assert any(isinstance(item, list) and item[1]["type"] == "image_url" for item in examples)
+    assert any(isinstance(item, dict) and item.get("contents", [{}])[0].get("parts", [{}])[0].get("text") == "<PROMPT>" for item in examples)
     assert "private-api-key-do-not-copy" not in guide
     page.locator("#copyIntegrationGuide").click()
     assert page.evaluate("window.copiedIntegrationGuide") == guide
@@ -760,7 +764,9 @@ def test_integration_guide_preserves_server_and_handles_invalid_urls(browser_pag
     for invalid in ("javascript:alert(1)", "https://user:pass@example.com", "https://example.com?key=secret"):
         server.fill(invalid)
         playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_disabled()
+        playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_disabled()
         assert page.locator("#integrationGuide").input_value() == ""
+        assert page.locator("#integrationRequest").input_value() == ""
         assert server.get_attribute("aria-invalid") == "true"
     server.fill(base)
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
@@ -801,6 +807,7 @@ def test_integration_reference_lists_every_endpoint_model_and_filters(browser_pa
     assert "ChatCompletionRequest" in guide
     assert "ADMIN" in guide or "admin_session" in guide
     assert page.locator("#integrationModelRows tr").count() == len(MODEL_CONFIG)
+    page.locator("#integrationAdvanced > summary").click()
     page.locator("#integrationReferenceSearch").fill("/api/cache")
     assert page.locator("#integrationEndpointRows tr").count() > 0
     assert all("/api/cache" in line for line in page.locator("#integrationEndpointRows tr").all_text_contents())
@@ -814,12 +821,109 @@ def test_integration_reference_failure_disables_partial_copy_and_can_retry(brows
     page.route("**/api/integration/reference", lambda route: route.fulfill(status=503, json={"detail": "unavailable"}))
     open_page(page, base + "/manage#integration")
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_disabled()
+    playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_disabled()
     assert page.locator("#integrationGuide").input_value() == ""
+    assert page.locator("#integrationRequest").input_value() == ""
     assert page.locator("#integrationReferenceStatus").inner_text()
     page.unroute("**/api/integration/reference")
     page.locator("#reloadIntegrationReference").click()
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
     assert "/api/tokens/import" in page.locator("#integrationGuide").input_value()
+
+
+@pytest.mark.parametrize("locale", ["en", "vi", "zh-CN"])
+def test_integration_parameter_preview_uses_simple_models_and_registered_choices(browser_page, locale):
+    from src.core.integration_reference import build_integration_reference
+    from src.core.model_resolver import resolve_model_name
+    from src.core.models import ChatCompletionRequest, GeminiGenerateContentRequest
+    from src.main import app
+    from src.services.generation_handler import MODEL_CONFIG
+
+    page, base = browser_page
+    requests = []
+    page.on("request", lambda request: requests.append((request.method, urlsplit(request.url).path)))
+    open_page(page, base + "/manage#integration")
+    page.locator("[data-language-select]").select_option(locale)
+    playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_enabled()
+    assert not page.locator("#integrationAdvanced").evaluate("element => element.open")
+    assert page.locator("#integrationModel").input_value() == "omni-1.2-flash"
+    assert page.locator("#integrationModel option").all_text_contents() == [
+        item["id"] for item in build_integration_reference(app)["model_parameters"] if item["listed"]
+    ]
+
+    def preview():
+        value = json.loads(page.locator("#integrationRequest").input_value())
+        assert "integration." not in page.locator("#panelIntegration").inner_text()
+        return value
+
+    assert preview()["generationConfig"]["videoConfig"] == {
+        "durationSeconds": 8, "aspectRatio": "16:9", "mode": "auto"
+    }
+    page.locator("#integrationDuration").select_option("6")
+    page.locator("#integrationAspect").select_option("9:16")
+    assert preview()["model"] == "omni-1.2-flash"
+    page.locator("#integrationProtocol").select_option("gemini")
+    request = GeminiGenerateContentRequest.model_validate(preview())
+    assert resolve_model_name("omni-1.2-flash", request, MODEL_CONFIG) == "omni-1.2-flash-6s-portrait"
+    assert page.locator("#integrationRequestEndpoint").inner_text().endswith("/omni-1.2-flash:generateContent")
+
+    page.locator("#integrationModel").select_option("veo-3.1-quality")
+    assert set(page.locator("#integrationMode option").all_text_contents()) == {"t2v", "i2v", "extend"}
+    page.locator("#integrationMode").select_option("i2v")
+    assert page.locator("#integrationDuration").input_value() == "4"
+    assert "fileData" in json.dumps(preview())
+    page.locator("#integrationMode").select_option("extend")
+    assert page.locator("#integrationProtocol").input_value() == "openai"
+    assert page.locator("#integrationProtocol option[value=gemini]").is_disabled()
+    assert page.locator("#integrationDuration option").all_text_contents() == ["8"]
+    assert set(page.locator("#integrationAspect option").all_text_contents()) == {"16:9", "9:16"}
+    assert "extend://" in json.dumps(preview())
+
+    page.locator("#integrationModel").select_option("veo-3.1-lite")
+    page.locator("#integrationMode").select_option("r2v")
+    assert page.locator("#integrationDuration option").all_text_contents() == ["8"]
+    request = ChatCompletionRequest.model_validate(preview())
+    assert request.model == "veo-3.1-lite"
+    assert resolve_model_name(request.model, request, MODEL_CONFIG) == "veo-3.1-lite-r2v-8s-landscape"
+
+    page.locator("#integrationModel").select_option("gemini-3.1-flash-image")
+    playwright_api.expect(page.locator("#integrationModeField")).to_be_hidden()
+    playwright_api.expect(page.locator("#integrationDurationField")).to_be_hidden()
+    page.locator("#integrationAspect").select_option("9:16")
+    page.locator("#integrationImageSize").select_option("2K")
+    payload = preview()
+    assert payload["generationConfig"] == {"imageConfig": {"aspectRatio": "9:16", "imageSize": "2K"}}
+    request = ChatCompletionRequest.model_validate(payload)
+    assert resolve_model_name(request.model, request, MODEL_CONFIG) == "gemini-3.1-flash-image-portrait-2k"
+    page.evaluate("""() => {
+        Object.defineProperty(navigator, 'clipboard', {configurable: true,
+            value: {writeText: async text => {window.copiedRequest = text;}}});
+    }""")
+    page.locator("#copyIntegrationRequest").click()
+    assert json.loads(page.evaluate("window.copiedRequest")) == payload
+    assert not any(method == "POST" or path.endswith(("/chat/completions", ":generateContent")) for method, path in requests)
+
+
+def test_integration_parameter_preview_never_invents_variant_combinations(browser_page):
+    """A sparse registry must not produce a cross product of independent options."""
+    from src.core.integration_reference import build_integration_reference
+    from src.main import app
+
+    page, base = browser_page
+    reference = build_integration_reference(app)
+    contract = next(item for item in reference["model_parameters"] if item["id"] == "omni-1.2-flash")
+    contract["variants"] = [item for item in contract["variants"] if
+                            (item["durationSeconds"], item["aspectRatio"]) in {(4, "9:16"), (8, "16:9")}]
+    page.route("**/api/integration/reference", lambda route: route.fulfill(json=reference))
+    open_page(page, base + "/manage#integration")
+    playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_enabled()
+    assert page.locator("#integrationDuration").input_value() == "8"
+    assert page.locator("#integrationAspect option").all_text_contents() == ["16:9"]
+    page.locator("#integrationDuration").select_option("4")
+    assert page.locator("#integrationAspect option").all_text_contents() == ["9:16"]
+    assert json.loads(page.locator("#integrationRequest").input_value())["generationConfig"]["videoConfig"] == {
+        "durationSeconds": 4, "aspectRatio": "9:16", "mode": "auto"
+    }
 
 
 @pytest.mark.parametrize("enabled", [False, True])

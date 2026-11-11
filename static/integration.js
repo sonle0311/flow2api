@@ -12,18 +12,134 @@
         const referenceStatus = document.getElementById('integrationReferenceStatus');
         const reloadButton = document.getElementById('reloadIntegrationReference');
         const search = document.getElementById('integrationReferenceSearch');
+        const modelSelect = document.getElementById('integrationModel');
+        const protocolSelect = document.getElementById('integrationProtocol');
+        const modeSelect = document.getElementById('integrationMode');
+        const durationSelect = document.getElementById('integrationDuration');
+        const aspectSelect = document.getElementById('integrationAspect');
+        const sizeSelect = document.getElementById('integrationImageSize');
+        const requestPreview = document.getElementById('integrationRequest');
+        const requestCopy = document.getElementById('copyIntegrationRequest');
+        const requestStatus = document.getElementById('integrationRequestCopyStatus');
         if (!server || !preview || !copyButton || !selectButton || !status || !validation) return;
 
-        const t = key => I18n.t(`integration.${key}`);
+        const t = (key, params) => I18n.t(`integration.${key}`, params);
         const code = (language, value) => `\`\`\`${language}\n${value}\n\`\`\``;
         let copyState = '';
         let reference = null;
         let loading = false;
         let loadFailed = false;
+        let selectedModel = null;
+        let selectedVariant = null;
         const localized = value => value?.[I18n.locale] || value?.en || '';
 
+        function options(select, values, preferred) {
+            const fragment = document.createDocumentFragment();
+            for (const value of [...new Set(values.map(String))]) {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                fragment.appendChild(option);
+            }
+            select.replaceChildren(fragment);
+            if (values.some(value => String(value) === String(preferred))) select.value = String(preferred);
+        }
+
+        function renderParameters(resetModel = false, resetMode = false) {
+            const models = reference?.model_parameters?.filter(item => item.listed !== false) || [];
+            const previous = modelSelect.value;
+            options(modelSelect, models.map(item => item.id), previous || 'omni-1.2-flash');
+            selectedModel = models.find(item => item.id === modelSelect.value) || null;
+            const available = Boolean(selectedModel && !loading && !loadFailed);
+            for (const control of [modelSelect, protocolSelect, modeSelect, durationSelect, aspectSelect, sizeSelect]) control.disabled = !available;
+            if (!available) {
+                selectedVariant = null;
+                renderRequest();
+                return;
+            }
+            const isVideo = selectedModel.type === 'video';
+            document.getElementById('integrationModeField').hidden = !isVideo;
+            document.getElementById('integrationDurationField').hidden = !isVideo;
+            document.getElementById('integrationImageSizeField').hidden = isVideo;
+            let variants = selectedModel.variants;
+            if (isVideo) {
+                const mode = resetModel ? selectedModel.defaults.mode : modeSelect.value;
+                options(modeSelect, variants.map(item => item.mode), mode || selectedModel.defaults.mode);
+                variants = variants.filter(item => item.mode === modeSelect.value);
+                const defaults = selectedModel.mode_defaults?.[modeSelect.value] || selectedModel.defaults;
+                const duration = resetModel || resetMode ? defaults.durationSeconds : durationSelect.value;
+                options(durationSelect, variants.map(item => item.durationSeconds), duration);
+                variants = variants.filter(item => String(item.durationSeconds) === durationSelect.value);
+            }
+            const aspect = resetModel || resetMode ? selectedModel.defaults.aspectRatio : aspectSelect.value;
+            options(aspectSelect, variants.map(item => item.aspectRatio), aspect);
+            variants = variants.filter(item => item.aspectRatio === aspectSelect.value);
+            if (!isVideo) {
+                options(sizeSelect, variants.map(item => item.imageSize), resetModel ? selectedModel.defaults.imageSize : sizeSelect.value);
+                variants = variants.filter(item => item.imageSize === sizeSelect.value);
+            }
+            selectedVariant = variants[0] || null;
+            const geminiOption = protocolSelect.querySelector('option[value="gemini"]');
+            geminiOption.disabled = selectedVariant?.mode === 'extend';
+            if (geminiOption.disabled) protocolSelect.value = 'openai';
+            renderRequest();
+        }
+
+        function selectedRequest(protocol = protocolSelect.value) {
+            if (!selectedModel || !selectedVariant) return null;
+            const video = selectedModel.type === 'video';
+            const config = video
+                ? { durationSeconds: selectedVariant.durationSeconds, aspectRatio: selectedVariant.aspectRatio, mode: selectedVariant.mode }
+                : { aspectRatio: selectedVariant.aspectRatio, imageSize: selectedVariant.imageSize };
+            const generationConfig = { [video ? 'videoConfig' : 'imageConfig']: config };
+            const prompt = '<PROMPT>';
+            const images = Math.max(selectedVariant.min_images || 0, ['i2v', 'r2v'].includes(selectedVariant.mode) ? 1 : 0);
+            if (protocol === 'gemini') {
+                const parts = [{ text: prompt }];
+                for (let index = 0; index < images; index++) parts.push({ fileData: { mimeType: 'image/png', fileUri: '<HTTPS_IMAGE_URL_OR_DATA_IMAGE_URI>' } });
+                return { contents: [{ role: 'user', parts }], generationConfig };
+            }
+            let content = prompt;
+            if (images || selectedVariant.mode === 'extend') {
+                content = [{ type: 'text', text: prompt }];
+                if (selectedVariant.mode === 'extend') content.push({ type: 'image_url', image_url: { url: 'extend://<FLOW_MEDIA_GENERATION_ID>' } });
+                else for (let index = 0; index < images; index++) content.push({ type: 'image_url', image_url: { url: '<HTTPS_IMAGE_URL_OR_DATA_IMAGE_URI>' } });
+            }
+            return { model: selectedModel.id, messages: [{ role: 'user', content }], stream: false, generationConfig };
+        }
+
+        function renderRequest() {
+            requestStatus.textContent = '';
+            try {
+                const root = normalizeRoot(server.value);
+                const request = selectedRequest();
+                requestPreview.value = request && !loading && !loadFailed ? JSON.stringify(request, null, 2) : '';
+                document.getElementById('integrationRequestEndpoint').textContent = !requestPreview.value ? '—'
+                    : protocolSelect.value === 'gemini' ? `POST ${root}/v1beta/models/${selectedModel.id}:generateContent`
+                        : `POST ${root}/v1/chat/completions`;
+            } catch (_) {
+                requestPreview.value = '';
+                document.getElementById('integrationRequestEndpoint').textContent = '—';
+            }
+            requestCopy.disabled = !requestPreview.value;
+            document.getElementById('integrationSelectedLimits').textContent = selectedVariant && requestPreview.value
+                ? t('selectedLimits {minimum} {maximum} {validated}', {
+                    minimum: selectedVariant.min_images ?? '?', maximum: selectedVariant.max_images ?? '?',
+                    validated: selectedVariant.locally_validated_min_images ?? '?',
+                })
+                : '';
+            document.getElementById('integrationExtensionHelp').hidden = selectedVariant?.mode !== 'extend';
+            renderGuide();
+        }
+
+        function parametersGuide() {
+            return [`## ${t('parametersTitle')}`, t('parametersHelp'), t('defaultsHelp'), t('combinationsHelp'), t('sdkHelp')].join('\n\n');
+        }
+
         function referenceGuide(root) {
-            const lines = [t('referenceSource'), `## ${t('auth')}`, t('authHelp'), `## ${t('endpoints')}`];
+            const lines = [`## ${t('advancedTitle')}`, t('referenceSource'),
+                `## ${t('parametersTitle')}`, code('json', JSON.stringify({ model_parameters: reference.model_parameters }, null, 2)),
+                `## ${t('auth')}`, t('authHelp'), `## ${t('endpoints')}`];
             for (const endpoint of reference.endpoints) {
                 lines.push(`- ${endpoint.method} ${root}${endpoint.path} [${endpoint.auth}]`);
             }
@@ -102,17 +218,15 @@
         }
 
         function buildGuide(root) {
-            const request = {
-                model: '<MODEL_ID_FROM_MODELS>',
-                messages: [{ role: 'user', content: '<PROMPT>' }],
-                stream: false,
-            };
+            const request = selectedRequest('openai');
             const reference = [{ type: 'text', text: '<PROMPT>' }, {
                 type: 'image_url', image_url: { url: '<HTTPS_IMAGE_URL_OR_DATA_IMAGE_URI>' },
             }];
-            const geminiRequest = {
+            const geminiModel = selectedVariant.mode === 'extend' ? 'omni-1.2-flash' : selectedModel.id;
+            const geminiRequest = selectedVariant.mode === 'extend' ? {
                 contents: [{ role: 'user', parts: [{ text: '<PROMPT>' }] }],
-            };
+                generationConfig: { videoConfig: { durationSeconds: 8, aspectRatio: '16:9', mode: 'auto' } },
+            } : selectedRequest('gemini');
             const quotedRoot = `'${root.replace(/'/g, "'\\''")}'`;
             return [
                 `# ${t('title')}`,
@@ -125,6 +239,10 @@
                 `## ${t('discoveryTitle')}`,
                 t('discoveryHelp'),
                 code('sh', 'curl --fail-with-body "$FLOW2API_BASE_URL/health"\n\ncurl --fail-with-body "$FLOW2API_BASE_URL/v1/models" \\\n  -H "Authorization: Bearer $FLOW2API_API_KEY"'),
+                parametersGuide(),
+                `## ${t('requestTitle')}`,
+                document.getElementById('integrationRequestEndpoint').textContent,
+                code('json', requestPreview.value),
                 `## ${t('openaiTitle')}`,
                 t('openaiHelp'),
                 `POST ${root}/v1/chat/completions\nAuthorization: Bearer <FLOW2API_API_KEY>\nContent-Type: application/json`,
@@ -138,15 +256,15 @@
                 code('text', 'stream: false -> choices[0].message.content\nstream: true  -> data: {"choices":[{"delta":{"reasoning_content":"..."}}]}\n                data: {"choices":[{"delta":{"content":"..."}}]}\n                data: [DONE]\nimage: ![Generated Image](https://... or data:image/...)\nvideo: <video src="https://..." controls></video>'),
                 `## ${t('geminiTitle')}`,
                 t('geminiHelp'),
-                `GET ${root}/v1beta/models\nPOST ${root}/v1beta/models/<MODEL_ID>:generateContent\nPOST ${root}/v1beta/models/<MODEL_ID>:streamGenerateContent?alt=sse\nx-goog-api-key: <FLOW2API_API_KEY>\nContent-Type: application/json`,
+                `GET ${root}/v1beta/models\nPOST ${root}/v1beta/models/${geminiModel}:generateContent\nPOST ${root}/v1beta/models/${geminiModel}:streamGenerateContent?alt=sse\nx-goog-api-key: <FLOW2API_API_KEY>\nContent-Type: application/json`,
                 code('json', JSON.stringify(geminiRequest, null, 2)),
                 'candidates[0].content.parts -> inlineData { mimeType, data } / fileData { mimeType, fileUri } / text',
                 `## ${t('reliabilityTitle')}`,
                 t('reliabilityHelp'),
                 `## ${t('checklistTitle')}`,
                 t('checklist'),
-                referenceGuide(root),
                 window.Flow2APIIntegrationRecipes.build(root, I18n.locale),
+                referenceGuide(root),
             ].join('\n\n');
         }
 
@@ -160,7 +278,7 @@
             renderStatus();
             try {
                 const root = normalizeRoot(server.value);
-                preview.value = reference && !loading && !loadFailed ? buildGuide(root) : '';
+                preview.value = reference && selectedVariant && !loading && !loadFailed ? buildGuide(root) : '';
                 document.getElementById('integrationOpenAIBase').textContent = `${root}/v1`;
                 validation.textContent = '';
                 server.setAttribute('aria-invalid', 'false');
@@ -181,7 +299,7 @@
             loading = true;
             loadFailed = false;
             renderReference();
-            renderGuide();
+            renderParameters();
             try {
                 const response = await fetch('/api/integration/reference', {
                     credentials: 'include', headers: I18n.headers(), cache: 'no-store',
@@ -189,7 +307,11 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 if (!Array.isArray(data.endpoints) || !Array.isArray(data.models)
-                    || !Array.isArray(data.aliases) || !data.schemas) throw new Error('Incomplete reference');
+                    || !Array.isArray(data.aliases) || !Array.isArray(data.model_parameters)
+                    || !data.model_parameters.some(item => item.listed !== false)
+                    || !data.model_parameters.every(item => item.id && ['image', 'video'].includes(item.type)
+                        && item.defaults && item.parameters && Array.isArray(item.variants) && item.variants.length)
+                    || !data.schemas) throw new Error('Incomplete reference');
                 reference = data;
             } catch (_) {
                 loadFailed = true;
@@ -197,11 +319,12 @@
             } finally {
                 loading = false;
                 renderReference();
-                renderGuide();
+                renderParameters(true);
             }
         }
 
         function selectGuide() {
+            document.getElementById('integrationAdvanced').open = true;
             preview.focus();
             preview.select();
         }
@@ -232,12 +355,30 @@
         }
 
         server.value = window.location.origin;
-        server.addEventListener('input', renderGuide);
+        server.addEventListener('input', renderRequest);
+        modelSelect.addEventListener('change', () => renderParameters(true));
+        modeSelect.addEventListener('change', () => renderParameters(false, true));
+        for (const control of [durationSelect, aspectSelect, sizeSelect]) control.addEventListener('change', () => renderParameters());
+        protocolSelect.addEventListener('change', renderRequest);
+        requestCopy.addEventListener('click', async () => {
+            const text = requestPreview.value;
+            if (!text) return;
+            let copied = false;
+            try {
+                if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; }
+            } catch (_) { /* Try the selectable preview. */ }
+            if (!copied) {
+                requestPreview.focus();
+                requestPreview.select();
+                try { copied = document.execCommand('copy'); } catch (_) { /* Leave selection for manual copying. */ }
+            }
+            if (requestPreview.value === text) requestStatus.textContent = t(copied ? 'requestCopied' : 'requestCopyFailed');
+        });
         copyButton.addEventListener('click', copyGuide);
         selectButton.addEventListener('click', selectGuide);
         reloadButton.addEventListener('click', loadReference);
         search.addEventListener('input', renderReference);
-        window.addEventListener('languagechange', () => { renderReference(); renderGuide(); });
+        window.addEventListener('languagechange', () => { renderReference(); renderParameters(); });
         renderGuide();
         loadReference();
     });

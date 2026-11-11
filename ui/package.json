@@ -1,0 +1,10 @@
+{
+  "name": "flow2api-instrument-styles",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.cjs -i instrument-utilities.css -o ../static/instrument-utilities.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

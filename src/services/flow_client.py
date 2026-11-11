@@ -29,7 +29,7 @@ from ..core.config import (
     is_yes_style_captcha_method,
 )
 from .flow_current import CurrentFlowClientMixin
-from .flow_frontend import FlowFrontendMixin
+from .flow_frontend import FlowFrontendMixin, FlowTextResponse
 from .flow_cookies import FlowCookieJar
 
 try:
@@ -51,6 +51,25 @@ def _safe_updated_flow_cookies(owner, original) -> str:
         return getter(original)
     except Exception:
         return str(original or "").strip()
+
+
+class CaptchaProviderError(RuntimeError):
+    """A completed provider failure, retaining its cause for retry decisions."""
+
+    def __init__(self, provider: str, payload: Dict[str, Any]):
+        self.provider = provider
+        self.error_id = payload.get("errorId")
+        self.error_code = str(payload.get("errorCode") or "").strip()
+        self.error_description = str(payload.get("errorDescription") or "Unknown error")
+        # Resource shortages already have a bounded retry/backoff policy.
+        self.captcha_provider_terminal = self.error_code not in {
+            "ERROR_NO_SLOT_AVAILABLE",
+            "ERROR_NO_SLOT_AVAILABLE_BLOCK",
+        }
+        cause = self.error_code or f"errorId={self.error_id}"
+        super().__init__(
+            f"CAPTCHA provider {provider} failed: {cause}: {self.error_description}"
+        )
 
 
 class _FlowClientBase(FlowFrontendMixin):
@@ -909,7 +928,11 @@ class _FlowClientBase(FlowFrontendMixin):
                     )
 
                 if response.status_code >= 400 and return_error_response:
-                    return response_text
+                    return FlowTextResponse(
+                        response_text,
+                        response.status_code,
+                        getattr(response, "headers", {}) or {},
+                    )
 
                 if response.status_code >= 400:
                     error_reason = (
@@ -4621,6 +4644,8 @@ class _FlowClientBase(FlowFrontendMixin):
         defer_browser_error_notification: bool = False,
     ) -> bool:
         """统一处理生成链路的重试判定与打码自愈通知。"""
+        if getattr(error, "captcha_provider_terminal", False):
+            return False
         error_str = str(error)
         retry_reason = self._get_retry_reason(error_str) or (
             "网络/TLS错误" if getattr(error, "request_not_sent", False) else None
@@ -4775,6 +4800,7 @@ class _FlowClientBase(FlowFrontendMixin):
             keyword in error_lower
             for keyword in [
             "http error 500",
+            "http error 503",
             "public_error",
             "internal error",
             "reason=internal",
@@ -5789,10 +5815,14 @@ class _FlowClientBase(FlowFrontendMixin):
                         f"[reCAPTCHA {method}] created task_id: {task_id}, response: {result_json}"
                     )
 
-                    if task_id:
+                    error_code = str(result_json.get("errorCode") or "").strip()
+                    has_error = (
+                        result_json.get("errorId") not in (None, 0, "0")
+                        or bool(error_code)
+                    )
+                    if task_id and not has_error:
                         break
 
-                    error_code = str(result_json.get("errorCode") or "").strip()
                     error_desc = result_json.get("errorDescription", "Unknown error")
                     last_create_error = result_json
                     if is_yes_style_captcha_method(method) and error_code in {
@@ -5812,7 +5842,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     debug_logger.log_error(
                         f"[reCAPTCHA {method}] Failed to create task: {error_desc}"
                     )
-                    return None
+                    raise CaptchaProviderError(method, result_json)
 
                 if not task_id:
                     error_desc = (last_create_error or {}).get(
@@ -5821,7 +5851,7 @@ class _FlowClientBase(FlowFrontendMixin):
                     debug_logger.log_error(
                         f"[reCAPTCHA {method}] Failed to create task: {error_desc}"
                     )
-                    return None
+                    raise CaptchaProviderError(method, last_create_error or {})
 
                 get_url = f"{base_url}/getTaskResult"
                 for i in range(40):
@@ -5843,6 +5873,12 @@ class _FlowClientBase(FlowFrontendMixin):
                     debug_logger.log_info(
                         f"[reCAPTCHA {method}] polling #{i + 1}: {result_json}"
                     )
+
+                    if (
+                        result_json.get("errorId") not in (None, 0, "0")
+                        or result_json.get("errorCode")
+                    ):
+                        raise CaptchaProviderError(method, result_json)
 
                     status = result_json.get("status")
                     if status == "ready":
@@ -5869,6 +5905,8 @@ class _FlowClientBase(FlowFrontendMixin):
                 )
                 return None
 
+        except CaptchaProviderError:
+            raise
         except Exception as e:
             debug_logger.log_error(f"[reCAPTCHA {method}] error: {str(e)}")
             return None

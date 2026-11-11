@@ -469,6 +469,7 @@ class CurrentFlowClientMixin:
                 trace["generation_attempts"].append(attempt)
                 if (
                     submission_accepted
+                    or bool(getattr(error, "captcha_provider_terminal", False))
                     or bool(getattr(error, "outcome_unknown", False))
                     or bool(getattr(error, "submission_uncertain", False))
                 ):
@@ -614,8 +615,10 @@ class CurrentFlowClientMixin:
                 )
             except Exception as error:
                 last_error = error
-                if getattr(error, "submission_uncertain", False) or getattr(
-                    error, "outcome_unknown", False
+                if (
+                    getattr(error, "captcha_provider_terminal", False)
+                    or getattr(error, "submission_uncertain", False)
+                    or getattr(error, "outcome_unknown", False)
                 ):
                     raise
                 # MODEL_ACCESS_DENIED 为账号权限拒绝，重试不会改变结果

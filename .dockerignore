@@ -60,6 +60,8 @@ tmp/*
 logs/*
 logs.txt
 *.log
+ui/node_modules/
+design-demos/
 *.db*
 *.sqlite*
 

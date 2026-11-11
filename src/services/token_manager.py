@@ -44,7 +44,8 @@ class TokenManager:
         self._refresh_locks: dict[int, asyncio.Lock] = {}
         self._project_locks: dict[int, asyncio.Lock] = {}
         self._refresh_futures: dict[int, asyncio.Task] = {}
-        self._at_validation_cache: dict[int, float] = {}
+        self._validation_futures: dict[tuple, asyncio.Task] = {}
+        self._at_validation_cache: dict[int, tuple[tuple, float]] = {}
         self._last_at_refresh_error: dict[int, str] = {}
         self._protocol_refresher_task: Optional[asyncio.Task] = None
         self.managed_browser = None
@@ -150,17 +151,39 @@ class TokenManager:
     def _clear_at_validation_cache(self, token_id: int) -> None:
         self._at_validation_cache.pop(int(token_id), None)
 
-    def _mark_at_valid(self, token_id: int, ttl_seconds: int = 300) -> None:
-        self._at_validation_cache[int(token_id)] = time.monotonic() + max(
-            30, int(ttl_seconds or 300)
+    @staticmethod
+    def _validation_key(token: Token) -> tuple:
+        """Bind validation to the exact credentials and account identity used."""
+        return (
+            token.id, token.at, token.st, token.google_cookies,
+            token.email, token.login_account, token.proxy_url,
         )
 
-    def _has_recent_at_validation(self, token_id: int) -> bool:
-        expires_at = float(self._at_validation_cache.get(int(token_id), 0.0) or 0.0)
+    def _mark_at_valid(
+        self, token_id: int, ttl_seconds: int = 300, *, token: Optional[Token] = None
+    ) -> None:
+        previous = self._at_validation_cache.get(int(token_id))
+        # An account ID alone cannot establish which credentials were validated.
+        key = (
+            self._validation_key(token)
+            if token is not None else (previous[0] if previous else None)
+        )
+        if key is not None:
+            self._at_validation_cache[int(token_id)] = (
+                key, time.monotonic() + max(30, int(ttl_seconds or 300)),
+            )
+
+    def _has_recent_at_validation(
+        self, token_id: int, token: Optional[Token] = None
+    ) -> bool:
+        cached = self._at_validation_cache.get(int(token_id))
+        if cached is None:
+            return False
+        key, expires_at = cached
         if expires_at <= time.monotonic():
             self._clear_at_validation_cache(token_id)
             return False
-        return True
+        return token is None or key == self._validation_key(token)
 
     def _is_transient_network_failure(self, reason: Optional[str]) -> bool:
         """判断刷新失败原因是否为网络/代理类瞬时错误。"""
@@ -788,30 +811,78 @@ class TokenManager:
         return self._should_refresh_at(token)
 
     async def ensure_valid_token(self, token: Optional[Token]) -> Optional[Token]:
-        """确保 token 的 AT 可用，并在必要时返回刷新后的最新对象。"""
+        """Share validation of one credential snapshot without cancelling its owner."""
         if not token:
+            return None
+        # Callers may retain an older Token object across a credential push.
+        token = await self.db.get_token(token.id)
+        if token is None:
             return None
 
         needs_refresh = self._should_refresh_at(token)
-        if not needs_refresh and self._has_recent_at_validation(token.id):
-            # 刚校验通过的登录态直接复用，避免每个请求都打上游。
+        if not needs_refresh and self._has_recent_at_validation(token.id, token):
             return token
 
+        key = self._validation_key(token)
+        task = self._validation_futures.get(key)
+        if task is None:
+            snapshot = token.model_copy(deep=True)
+            task = asyncio.create_task(
+                self._validate_token_snapshot(snapshot, needs_refresh)
+            )
+            self._validation_futures[key] = task
+
+            def completed(done: asyncio.Task) -> None:
+                if self._validation_futures.get(key) is done:
+                    self._validation_futures.pop(key, None)
+                # A lone cancelled waiter must not leave an unobserved task error.
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(completed)
+        result = await asyncio.shield(task)
+        if result is not None:
+            return result
+        latest = await self.db.get_token(token.id)
+        if latest is not None and self._validation_key(latest) != key:
+            # Retry from the waiter after the old task completes. Shared tasks
+            # must not form cycles by waiting on another credential snapshot.
+            return await self.ensure_valid_token(latest)
+        return None
+
+    async def _validate_token_snapshot(
+        self, token: Token, needs_refresh: bool
+    ) -> Optional[Token]:
+        key = self._validation_key(token)
         if not needs_refresh:
             try:
                 credits_result = await self._get_credits_for_token(token, token.at)
-                await self.db.update_token(
-                    token.id,
+                saved = await self.db.update_token_if_cookie_matches(
+                    token.id, token.google_cookies,
+                    expected_at=token.at,
+                    expected_identity=(token.email, token.login_account),
                     credits=credits_result.get("credits", 0),
                     **self._verified_tier_updates(credits_result),
                 )
-                self._mark_at_valid(token.id)
-                return await self.db.get_token(token.id) or token
+                latest = await self.db.get_token(token.id)
+                if latest is None:
+                    return None
+                if saved and self._validation_key(latest) == key:
+                    self._mark_at_valid(token.id, token=latest)
+                    return latest
+                # A credential/identity push supersedes this result, including
+                # credits. The waiter can validate the current snapshot.
+                return None
             except Exception as e:
                 debug_logger.log_warning(
                     f"[AT_CHECK] Token {token.id}: 本地判定未过期，但上游校验失败，准备刷新 AT/ST - {e}"
                 )
 
+        latest = await self.db.get_token(token.id)
+        if latest is None:
+            return None
+        if self._validation_key(latest) != key:
+            return None
         if not await self._refresh_at(token.id):
             return None
 
@@ -1032,7 +1103,14 @@ class TokenManager:
                 )
 
             if credits_result is not None:
-                self._mark_at_valid(token_id)
+                validated_token = None
+                if token is not None:
+                    validated_token = token.model_copy(update=(
+                        updates if rotated_cookies else {
+                            "at": new_at, "at_expires": new_at_expires,
+                        }
+                    ))
+                self._mark_at_valid(token_id, token=validated_token)
                 debug_logger.log_info(
                     f"[AT_REFRESH] Token {token_id}: AT 验证成功（余额: {credits_result.get('credits', 0)}）"
                 )
@@ -1182,7 +1260,7 @@ class TokenManager:
         )
         if not saved:
             raise RuntimeError("Cookie 在刷新期间已更新，请使用最新登录态重试")
-        self._mark_at_valid(token_id)
+        self._mark_at_valid(token_id, token=token.model_copy(update=updates))
         self._last_at_refresh_error.pop(token_id, None)
         record_token_refresh("st", "success")
         debug_logger.log_info(f"[COOKIE_REFRESH] Token {token_id}: Cookie 刷新并验证成功")
@@ -1528,7 +1606,7 @@ class TokenManager:
             )
             if recovered:
                 if updates:
-                    self._mark_at_valid(token.id)
+                    self._mark_at_valid(token.id, token=token.model_copy(update=updates))
                 await self.db.reset_error_count(token.id)
                 debug_logger.log_info(f"[AUTO_UNBAN] 解禁Token {token.id} (禁用时间: {banned_at})")
 

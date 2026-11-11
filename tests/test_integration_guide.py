@@ -13,7 +13,7 @@ import pytest
 from src.main import app
 from src.api import admin
 from src.services.generation_handler import MODEL_CONFIG
-from src.core.model_resolver import get_base_model_aliases
+from src.core.model_resolver import get_base_model_aliases, get_model_parameter_contracts, resolve_model_name
 from src.core.models import ChatCompletionRequest, GeminiGenerateContentRequest
 
 
@@ -85,15 +85,31 @@ def test_documented_recipes_use_supported_models_and_valid_payloads():
     script = "global.window={};require('./static/integration-recipes.js');console.log(JSON.stringify(['en','vi','zh-CN'].map(locale=>window.Flow2APIIntegrationRecipes.build('https://example.com/flow',locale))))"
     guides = json.loads(subprocess.check_output([node, "-e", script], cwd=root, encoding="utf-8"))
     supported = set(MODEL_CONFIG) | set(get_base_model_aliases())
+    contracts = {item["id"]: item for item in get_model_parameter_contracts(MODEL_CONFIG)}
     for guide in guides:
         assert "https://example.com/flow" in guide
+        demonstrated_video_models = set()
+        demonstrated_modes = set()
         for block in re.findall(r"```json\n(.*?)\n```", guide, re.S):
             payload = json.loads(block)
             if isinstance(payload, dict) and "model" in payload and "messages" in payload:
-                ChatCompletionRequest.model_validate(payload)
+                request = ChatCompletionRequest.model_validate(payload)
                 assert payload["model"] in supported
+                resolved = resolve_model_name(request.model, request, MODEL_CONFIG)
+                assert resolved in MODEL_CONFIG
+                config = payload.get("generationConfig", {}).get("videoConfig")
+                if config:
+                    assert request.model in contracts
+                    assert set(config) == {"durationSeconds", "aspectRatio", "mode"}
+                    assert any(item["id"] == resolved and all(item[key] == value for key, value in config.items())
+                               for item in contracts[request.model]["variants"])
+                    demonstrated_video_models.add(request.model)
+                    demonstrated_modes.add(config["mode"])
             elif isinstance(payload, dict) and "contents" in payload:
                 GeminiGenerateContentRequest.model_validate(payload)
+        assert demonstrated_video_models == {"veo-3.1-fast", "veo-3.1-lite", "veo-3.1-quality", "omni-1.1-flash", "omni-1.2-flash"}
+        assert demonstrated_modes == {"t2v", "i2v", "r2v", "auto", "extend"}
+        assert 'extra_body={"generationConfig": {"videoConfig":' in guide
         for block in re.findall(r"```python\n(.*?)\n```", guide, re.S):
             compile(block, "integration-recipe", "exec")
         for block in re.findall(r"```javascript\n(.*?)\n```", guide, re.S):

@@ -1743,18 +1743,16 @@ class GenerationHandler:
                 token = await self.load_balancer.select_token(
                     for_image_generation=True,
                     model=model,
-                    reserve=False,
-                    enforce_concurrency_filter=False,
-                    track_pending=True,
+                    reserve=True,
+                    track_pending=False,
                     exclude_token_ids=failed_token_ids,
                 )
             else:
                 token = await self.load_balancer.select_token(
                     for_video_generation=True,
                     model=model,
-                    reserve=False,
-                    enforce_concurrency_filter=False,
-                    track_pending=True,
+                    reserve=True,
+                    track_pending=False,
                     exclude_token_ids=failed_token_ids,
                 )
             perf_trace["token_select_ms"] = int(
@@ -1799,16 +1797,16 @@ class GenerationHandler:
                 return
 
             debug_logger.log_info(f"[GENERATION] 已选择Token: {token.id} ({token.email})")
-            pending_token_state["active"] = True
-            await self._update_request_log_progress(
-                request_log_state,
-                token_id=token.id,
-                status_text="token_selected",
-                progress=8,
-                response_extra={"token_email": token.email},
-            )
-
+            # Keep ownership independent of validation replacing/clearing token.
+            reserved_token_id = token.id
             try:
+                await self._update_request_log_progress(
+                    request_log_state,
+                    token_id=token.id,
+                    status_text="token_selected",
+                    progress=8,
+                    response_extra={"token_email": token.email},
+                )
                 # 3. 确保AT有效
                 debug_logger.log_info(f"[GENERATION] 检查Token AT有效性...")
                 if stream:
@@ -2121,16 +2119,30 @@ class GenerationHandler:
                     yield self._create_stream_chunk(f"错误: {error_msg}\n")
                 yield self._create_error_response(error_msg, status_code=500)
             finally:
-                if pending_token_state.get("active") and token and self.load_balancer:
-                    await self.load_balancer.release_pending(
-                        token.id,
-                        for_image_generation=(generation_type == "image"),
-                        for_video_generation=(generation_type == "video"),
-                    )
-                    pending_token_state["active"] = False
+                await self._release_generation_slot(reserved_token_id, generation_type)
 
             # 本次尝试已成功或以非切换类错误结束
             break
+
+    async def _release_generation_slot(self, token_id: int, generation_type: str) -> None:
+        """Retain reservation ownership until release finishes, even on repeated cancel."""
+        manager = getattr(self.load_balancer, "concurrency_manager", None)
+        if manager is None:
+            return
+        release = (
+            manager.release_image if generation_type == "image"
+            else manager.release_video
+        )
+        cleanup = asyncio.create_task(release(token_id))
+        cancellation = None
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError as error:
+                cancellation = error
+        cleanup.result()
+        if cancellation is not None:
+            raise cancellation
 
     def _get_no_token_error_message(self, generation_type: str) -> str:
         """获取无可用Token时的详细错误信息"""
@@ -2231,7 +2243,7 @@ class GenerationHandler:
             image_trace = perf_trace.setdefault("image_generation", {})
             image_trace["input_image_count"] = len(images) if images else 0
 
-        # 不在本地等待图片硬并发槽位；请求一到就直接向上游提交。
+        # The generation entry point already owns the account concurrency slot.
         normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
 
         if image_trace is not None:
@@ -2657,7 +2669,7 @@ class GenerationHandler:
             video_trace = perf_trace.setdefault("video_generation", {})
             video_trace["input_image_count"] = len(images) if images else 0
 
-        # 不在本地等待视频硬并发槽位；请求一到就直接向上游提交。
+        # The generation entry point already owns the account concurrency slot.
         normalized_tier = normalize_user_paygate_tier(token.user_paygate_tier)
 
         if video_trace is not None:

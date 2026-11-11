@@ -468,7 +468,9 @@ class LoadBalancer:
                 )
                 continue
 
-            if track_pending:
+            # A hard reservation already counts this request. Also keep the
+            # ownership handoff free of awaits after a successful acquisition.
+            if track_pending and not reserve:
                 await self._add_pending(
                     token.id, for_image_generation, for_video_generation
                 )

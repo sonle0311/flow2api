@@ -5,7 +5,7 @@ import os
 import sys
 import warnings
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -366,6 +366,38 @@ async def browser_desktop_script():
         str(static_path / "browser-desktop.js"),
         media_type="application/javascript",
         headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+_INSTRUMENT_ASSETS = {
+    "instrument.css": "text/css",
+    "instrument-utilities.css": "text/css",
+    "instrument-shell.js": "application/javascript",
+    "instrument-access.css": "text/css",
+    "instrument-studio.css": "text/css",
+}
+
+
+@app.get("/static/{asset_name}", include_in_schema=False)
+async def instrument_asset(asset_name: str):
+    """Serve only the shipped UI assets; never expose arbitrary static pages."""
+    media_type = _INSTRUMENT_ASSETS.get(asset_name)
+    asset_path = static_path / asset_name
+    if media_type is None or not asset_path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(
+        str(asset_path), media_type=media_type,
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/static/fonts/{font_name}", include_in_schema=False)
+async def instrument_font(font_name: str):
+    if font_name not in {"be-vietnam-pro-regular.ttf", "be-vietnam-pro-semibold.ttf"}:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(
+        str(static_path / "fonts" / font_name), media_type="font/ttf",
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

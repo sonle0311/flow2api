@@ -1,0 +1,193 @@
+/* Instrument entry and remote viewport. Session behavior stays in the existing scripts. */
+.instrument-auth,
+.instrument-desktop {
+    color-scheme: dark;
+    color: #f3f0eb;
+    background: #191a1d;
+    font-family: "Be Vietnam Pro", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+.instrument-auth *,
+.instrument-desktop * { box-sizing: border-box; }
+.instrument-auth ::selection,
+.instrument-desktop ::selection { color: #f3f0eb; background: #6b4435; }
+.instrument-auth input { caret-color: #ffa07b; }
+.instrument-auth button,
+.instrument-auth select,
+.instrument-auth input,
+.instrument-desktop button,
+.instrument-desktop select { font-family: inherit; }
+.instrument-auth button:focus-visible,
+.instrument-auth select:focus-visible,
+.instrument-auth input:focus-visible,
+.instrument-desktop button:focus-visible,
+.instrument-desktop a:focus-visible,
+.instrument-desktop select:focus-visible { outline: 2px solid #ffa07b; outline-offset: 4px; box-shadow: none; }
+.instrument-auth {
+    min-height: 100svh;
+    margin: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+}
+.instrument-auth .auth-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 28px 40px;
+}
+.instrument-auth .auth-language {
+    min-width: 120px;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #3b3c42;
+    border-radius: 8px;
+    background: #222327;
+    color: #f3f0eb;
+    font-size: 13px;
+    cursor: pointer;
+}
+.instrument-auth .auth-language:hover { border-color: #73747c; }
+.instrument-auth .auth-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+    align-items: center;
+    column-gap: 108px;
+    width: min(960px, calc(100% - 96px));
+    max-width: none;
+    margin: auto;
+    padding: 50px 0 78px;
+}
+.instrument-auth .auth-identity { min-width: 0; padding-bottom: 26px; }
+.instrument-auth .auth-mark { display: block; width: 60px; height: 60px; margin: 0 0 28px -8px; color: #ffa07b; }
+.instrument-auth .auth-wordmark {
+    margin: 0 0 16px;
+    font-size: 48px;
+    font-weight: 600;
+    letter-spacing: -.035em;
+    line-height: 1.15;
+}
+.instrument-auth .auth-subtitle { margin: 0; max-width: 30ch; color: #b0b0b8; font-size: 15px; line-height: 1.7; }
+.instrument-auth .auth-gateway { min-width: 0; border-top: 1px solid #3b3c42; padding-top: 28px; }
+.instrument-auth .auth-heading { margin: 0 0 30px; color: #f3f0eb; font-size: 24px; line-height: 1.4; font-weight: 600; letter-spacing: -.02em; }
+.instrument-auth #loginForm { display: grid; gap: 24px; margin: 0; }
+.instrument-auth #loginForm > * { margin: 0; }
+.instrument-auth #loginForm label { display: block; margin: 0 0 9px; color: #d4d1ce; font-size: 13px; font-weight: 400; line-height: 1.5; }
+.instrument-auth #loginForm input {
+    display: block;
+    width: 100%;
+    min-height: 50px;
+    height: 50px;
+    margin: 0;
+    border: 1px solid #4c4d55;
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #222327;
+    color: #f3f0eb;
+    font-size: 15px;
+    line-height: 1.5;
+    transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+.instrument-auth #loginForm input::placeholder { color: #b0b0b8; opacity: 1; }
+.instrument-auth #loginForm input:hover { border-color: #73747c; }
+.instrument-auth #loginForm input:focus { border-color: #ffa07b; background: #26272c; }
+.instrument-auth #loginButton {
+    min-height: 50px;
+    height: auto;
+    width: 100%;
+    border: 1px solid #ffa07b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 6px;
+    background: #ffa07b;
+    color: #281b15;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color 160ms ease-out, border-color 160ms ease-out;
+}
+.instrument-auth #loginButton:hover { border-color: #ffb699; background: #ffb699; }
+.instrument-auth #loginButton:active { border-color: #f68d64; background: #f68d64; }
+.instrument-auth #loginButton:disabled { cursor: wait; opacity: .6; }
+.instrument-auth .auth-footer {
+    width: calc(100% - 80px);
+    margin: 0 auto;
+    border-top: 1px solid #3b3c42;
+    padding: 22px 0 25px;
+    color: #b0b0b8;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.instrument-auth > div.fixed.bottom-4 { max-width: min(440px, calc(100vw - 32px)); line-height: 1.6; }
+.instrument-auth > div.fixed.bottom-4.bg-destructive { background: #963d3d; color: #fff2ed; }
+
+.instrument-desktop .desktop-shell { height: 100dvh; }
+.instrument-desktop .desktop-header { padding: 18px 24px 16px; background: #222327; border-bottom: 1px solid #3b3c42; }
+.instrument-desktop .desktop-toolbar { gap: 16px; }
+.instrument-desktop .desktop-identity { gap: 18px; }
+.instrument-desktop .desktop-identity h1 { margin: 0; color: #f3f0eb; font-size: 16px; letter-spacing: -.02em; line-height: 1.5; }
+.instrument-desktop .desktop-status { color: #b0b0b8; font-size: 12px; line-height: 1.5; }
+.instrument-desktop .desktop-controls { gap: 8px; }
+.instrument-desktop .desktop-controls button,
+.instrument-desktop .desktop-controls select,
+.instrument-desktop .desktop-identity a,
+.instrument-desktop .desktop-login-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 44px;
+    border: 1px solid #4c4d55;
+    border-radius: 8px;
+    padding: 10px 13px;
+    background: #222327;
+    color: #f3f0eb;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-decoration: none;
+    transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+.instrument-desktop .desktop-controls select { max-width: 145px; cursor: pointer; }
+.instrument-desktop #desktopManageLink { border-color: transparent; padding-left: 0; color: #b0b0b8; }
+.instrument-desktop #desktopManageLink svg { width: 20px; height: 20px; flex: 0 0 20px; }
+.instrument-desktop .desktop-controls button:hover,
+.instrument-desktop .desktop-identity a:hover,
+.instrument-desktop .desktop-login-link:hover { border-color: #73747c; background: #2b2c31; }
+.instrument-desktop #desktopReconnect,
+.instrument-desktop .desktop-login-link { color: #ffa07b; }
+.instrument-desktop .desktop-controls button:active,
+.instrument-desktop .desktop-login-link:active { background: #33343a; }
+.instrument-desktop .desktop-controls button:disabled { cursor: default; opacity: .45; }
+.instrument-desktop .desktop-header p { margin: 13px 0 0; max-width: 120ch; color: #b0b0b8; font-size: 12px; line-height: 1.7; }
+.instrument-desktop .desktop-stage { background: #141519; }
+.instrument-desktop .desktop-message { gap: 20px; }
+.instrument-desktop .desktop-message p { color: #b0b0b8; font-size: 14px; line-height: 1.8; max-width: 55ch; }
+.instrument-desktop [hidden] { display: none !important; }
+
+@media (max-width: 760px) {
+    .instrument-auth .auth-header { padding: 20px 24px; }
+    .instrument-auth .auth-main { width: calc(100% - 48px); grid-template-columns: 1fr; gap: 42px; padding: 34px 0 50px; }
+    .instrument-auth .auth-identity { padding: 0; }
+    .instrument-auth .auth-mark { width: 48px; height: 48px; margin: 0 0 18px -6px; }
+    .instrument-auth .auth-wordmark { font-size: 40px; margin-bottom: 12px; }
+    .instrument-auth .auth-subtitle { font-size: 14px; }
+    .instrument-auth .auth-gateway { padding-top: 23px; }
+    .instrument-auth .auth-heading { font-size: 22px; margin-bottom: 24px; }
+    .instrument-auth #loginForm { gap: 22px; }
+    .instrument-auth #loginForm input { font-size: 16px; }
+    .instrument-auth .auth-footer { width: calc(100% - 48px); padding: 20px 0; }
+    .instrument-desktop .desktop-header { padding: 12px 16px 14px; }
+    .instrument-desktop .desktop-toolbar { gap: 12px; }
+    .instrument-desktop .desktop-identity { width: 100%; gap: 7px 16px; }
+    .instrument-desktop #desktopManageLink { justify-content: flex-start; min-height: 44px; width: 100%; padding: 0; }
+    .instrument-desktop .desktop-identity h1 { font-size: 15px; }
+    .instrument-desktop .desktop-status { overflow-wrap: anywhere; }
+    .instrument-desktop .desktop-controls { width: 100%; gap: 7px; }
+    .instrument-desktop .desktop-controls button,
+    .instrument-desktop .desktop-controls select { flex: 1; min-width: 0; padding: 9px 8px; }
+    .instrument-desktop .desktop-controls select { max-width: none; }
+    .instrument-desktop .desktop-header p { margin-top: 12px; font-size: 12px; line-height: 1.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .instrument-auth *, .instrument-desktop * { animation: none !important; transition: none !important; }
+}

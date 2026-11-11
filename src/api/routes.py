@@ -1,6 +1,7 @@
 """API routes for OpenAI-compatible and Gemini generateContent endpoints."""
 
 from dataclasses import dataclass
+from contextlib import asynccontextmanager
 import asyncio
 import ipaddress
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,7 @@ import mimetypes
 import re
 from urllib.parse import unquote, urlparse, urlsplit
 
+import anyio
 from curl_cffi.requests import AsyncSession
 from fastapi import (
     APIRouter,
@@ -25,7 +27,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from ..core.auth import AuthManager, verify_api_key_flexible
 from ..core.config import config
 from ..core.logger import debug_logger
-from ..core.model_resolver import get_base_model_aliases, resolve_model_name
+from ..core.model_resolver import (
+    ModelParameterError,
+    get_base_model_aliases,
+    resolve_model_name,
+)
 from ..core.models import (
     ChatCompletionRequest,
     ChatMessage,
@@ -86,6 +92,40 @@ GEMINI_STATUS_MAP = {
 
 # Dependency injection will be set up in main.py
 generation_handler: GenerationHandler = None
+
+
+async def _close_owned_stream(iterator) -> None:
+    """Close stream ownership before returning, even through repeated cancels."""
+    close = getattr(iterator, "aclose", None)
+    if close is None:
+        return
+
+    async def finish():
+        await close()
+
+    cancellation = None
+    # Starlette's legacy disconnect path uses level cancellation. The shield
+    # also keeps an enclosing middleware cancel scope from interrupting close.
+    with anyio.CancelScope(shield=True):
+        cleanup = asyncio.create_task(finish())
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError as error:
+                cancellation = error
+        cleanup.result()
+    if cancellation is not None:
+        raise cancellation
+
+
+class GenerationStreamingResponse(StreamingResponse):
+    """Own the suspended iterator across ASGI send errors and disconnects."""
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await _close_owned_stream(self.body_iterator)
 
 
 @dataclass
@@ -190,10 +230,16 @@ def _guess_mime_type(uri: str, fallback: str) -> str:
     return guessed or fallback
 
 
-async def retrieve_image_data(url: str, *, generated_output: bool = False) -> Optional[bytes]:
+async def retrieve_image_data(
+    url: str,
+    *,
+    generated_output: bool = False,
+    request_base_url: Optional[str] = None,
+) -> Optional[bytes]:
     """Read local cache references or download remote input images.
 
-    Absolute input URLs are local only under the configured public cache root.
+    Absolute input URLs are local under the configured public cache root, or
+    the validated request origin when no public cache root is configured.
     The output converter can also identify URLs produced by our own handler.
     """
     file_cache = getattr(generation_handler, "file_cache", None)
@@ -206,7 +252,7 @@ async def retrieve_image_data(url: str, *, generated_output: bool = False) -> Op
             if "\\" in path or "\x00" in path or ".." in path.split("/"):
                 return None
             filename = path.rsplit("/tmp/", 1)[-1]
-            public_cache = urlparse(config.cache_base_url or "")
+            public_cache = urlparse(config.cache_base_url or request_base_url or "")
             configured_reference = bool(
                 public_cache.scheme in {"http", "https"}
                 and parsed.scheme == public_cache.scheme
@@ -267,7 +313,9 @@ async def retrieve_image_data(url: str, *, generated_output: bool = False) -> Op
     return None
 
 
-async def _load_image_bytes_from_uri(uri: str) -> bytes:
+async def _load_image_bytes_from_uri(
+    uri: str, *, request_base_url: Optional[str] = None
+) -> bytes:
     if not uri:
         raise HTTPException(status_code=400, detail="Image URI cannot be empty")
 
@@ -276,7 +324,7 @@ async def _load_image_bytes_from_uri(uri: str) -> bytes:
         return image_bytes
 
     if uri.startswith("http://") or uri.startswith("https://") or "/tmp/" in uri:
-        image_bytes = await retrieve_image_data(uri)
+        image_bytes = await retrieve_image_data(uri, request_base_url=request_base_url)
         if image_bytes:
             return image_bytes
         raise HTTPException(status_code=400, detail=f"Failed to load image from {uri}")
@@ -337,6 +385,8 @@ def _sanitize_media_prompt(prompt: str) -> str:
 
 async def _extract_prompt_and_images_from_openai_messages(
     messages: List[ChatMessage],
+    *,
+    request_base_url: Optional[str] = None,
 ) -> tuple[str, List[bytes], Optional[str]]:
     """Extract prompt, images, and optional video_media_id from messages.
 
@@ -365,7 +415,9 @@ async def _extract_prompt_and_images_from_openai_messages(
                 if image_url.startswith("extend://"):
                     video_media_id = image_url[len("extend://"):]
                 else:
-                    images.append(await _load_image_bytes_from_uri(image_url))
+                    images.append(await _load_image_bytes_from_uri(
+                        image_url, request_base_url=request_base_url
+                    ))
 
     prompt = "\n".join(part for part in prompt_parts if part).strip()
     return prompt, images, video_media_id
@@ -375,6 +427,8 @@ async def _append_openai_reference_images(
     model: str,
     messages: List[ChatMessage],
     images: List[bytes],
+    *,
+    request_base_url: Optional[str] = None,
 ) -> List[bytes]:
     model_config = MODEL_CONFIG.get(model)
     if not model_config or model_config["type"] != "image" or len(messages) <= 1:
@@ -392,7 +446,9 @@ async def _append_openai_reference_images(
                 if not image_url.startswith("http") and "/tmp/" not in image_url:
                     continue
                 try:
-                    downloaded_bytes = await retrieve_image_data(image_url)
+                    downloaded_bytes = await retrieve_image_data(
+                        image_url, request_base_url=request_base_url
+                    )
                     if downloaded_bytes:
                         images.insert(0, downloaded_bytes)
                         debug_logger.log_info(
@@ -409,6 +465,8 @@ async def _append_openai_reference_images(
 
 async def _extract_prompt_and_images_from_gemini_contents(
     contents: List[GeminiContent],
+    *,
+    request_base_url: Optional[str] = None,
 ) -> tuple[str, List[bytes]]:
     if not contents:
         raise HTTPException(status_code=400, detail="contents cannot be empty")
@@ -445,7 +503,9 @@ async def _extract_prompt_and_images_from_gemini_contents(
                     status_code=400,
                     detail=f"Unsupported fileData mime type: {part.fileData.mimeType}",
                 )
-            images.append(await _load_image_bytes_from_uri(part.fileData.fileUri))
+            images.append(await _load_image_bytes_from_uri(
+                part.fileData.fileUri, request_base_url=request_base_url
+            ))
 
     prompt = "\n".join(part for part in prompt_parts if part).strip()
     return prompt, images
@@ -454,9 +514,12 @@ async def _extract_prompt_and_images_from_gemini_contents(
 def _resolve_request_model(
     model: str, request: Any, images: Optional[List[bytes]] = None
 ) -> str:
-    resolved_model = resolve_model_name(
-        model=model, request=request, model_config=MODEL_CONFIG, images=images
-    )
+    try:
+        resolved_model = resolve_model_name(
+            model=model, request=request, model_config=MODEL_CONFIG, images=images
+        )
+    except ModelParameterError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     if resolved_model != model:
         debug_logger.log_info(f"[ROUTE] 模型名已转换: {model} → {resolved_model}")
     return resolved_model
@@ -493,18 +556,26 @@ def _get_request_base_url(request: Request) -> Optional[str]:
 
 async def _normalize_openai_request(
     request: ChatCompletionRequest,
+    *,
+    request_base_url: Optional[str] = None,
 ) -> NormalizedGenerationRequest:
     if request.messages:
         (
             prompt,
             images,
             video_media_id,
-        ) = await _extract_prompt_and_images_from_openai_messages(request.messages)
+        ) = await _extract_prompt_and_images_from_openai_messages(
+            request.messages, request_base_url=request_base_url
+        )
         if request.image and not images:
-            images.append(await _load_image_bytes_from_uri(request.image))
+            images.append(await _load_image_bytes_from_uri(
+                request.image, request_base_url=request_base_url
+            ))
         model = _resolve_request_model(request.model, request, images=images)
         initial_image_count = len(images)
-        images = await _append_openai_reference_images(model, request.messages, images)
+        images = await _append_openai_reference_images(
+            model, request.messages, images, request_base_url=request_base_url
+        )
         if len(images) != initial_image_count:
             model = _resolve_request_model(request.model, request, images=images)
         return NormalizedGenerationRequest(
@@ -517,10 +588,15 @@ async def _normalize_openai_request(
 
     if request.contents:
         gemini_request = GeminiGenerateContentRequest(
+            **request.model_dump(
+                exclude={"model", "messages", "stream", "contents"},
+                exclude_none=True,
+            ),
             contents=_coerce_gemini_contents(request.contents),
-            generationConfig=request.generationConfig,
         )
-        normalized = await _normalize_gemini_request(request.model, gemini_request)
+        normalized = await _normalize_gemini_request(
+            request.model, gemini_request, request_base_url=request_base_url
+        )
         normalized.messages = request.messages
         return normalized
 
@@ -530,9 +606,11 @@ async def _normalize_openai_request(
 async def _normalize_gemini_request(
     model: str,
     request: GeminiGenerateContentRequest,
+    *,
+    request_base_url: Optional[str] = None,
 ) -> NormalizedGenerationRequest:
     prompt, images = await _extract_prompt_and_images_from_gemini_contents(
-        request.contents
+        request.contents, request_base_url=request_base_url
     )
     resolved_model = _resolve_request_model(model, request, images=images)
     system_instruction = _extract_text_from_gemini_content(request.systemInstruction)
@@ -794,26 +872,38 @@ async def _convert_openai_stream_chunk_to_gemini_event(
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-async def _iterate_openai_stream(
+@asynccontextmanager
+async def _owned_generation_stream(
     normalized: NormalizedGenerationRequest,
     base_url_override: Optional[str] = None,
 ):
     handler = _ensure_generation_handler()
-    async for chunk in handler.handle_generation(
+    stream = handler.handle_generation(
         model=normalized.model,
         prompt=normalized.prompt,
         images=normalized.images if normalized.images else None,
         stream=True,
         base_url_override=base_url_override,
         video_media_id=normalized.video_media_id,
-    ):
-        if chunk.startswith("data: "):
-            yield chunk
-            continue
+    )
+    try:
+        yield stream
+    finally:
+        await _close_owned_stream(stream)
 
-        payload = _parse_handler_result(chunk)
-        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
+async def _iterate_openai_stream(
+    normalized: NormalizedGenerationRequest,
+    base_url_override: Optional[str] = None,
+):
+    async with _owned_generation_stream(normalized, base_url_override) as stream:
+        async for chunk in stream:
+            if chunk.startswith("data: "):
+                yield chunk
+                continue
+
+            payload = _parse_handler_result(chunk)
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -822,20 +912,28 @@ async def _iterate_gemini_stream(
     response_model: str,
     base_url_override: Optional[str] = None,
 ):
-    handler = _ensure_generation_handler()
-    async for chunk in handler.handle_generation(
-        model=normalized.model,
-        prompt=normalized.prompt,
-        images=normalized.images if normalized.images else None,
-        stream=True,
-        base_url_override=base_url_override,
-        video_media_id=normalized.video_media_id,
-    ):
-        if chunk.startswith("data: "):
-            payload_text = chunk[6:].strip()
-            if payload_text == "[DONE]":
+    async with _owned_generation_stream(normalized, base_url_override) as stream:
+        async for chunk in stream:
+            if chunk.startswith("data: "):
+                payload_text = chunk[6:].strip()
+                if payload_text == "[DONE]":
+                    continue
+                payload = _parse_handler_result(payload_text)
+                if "error" in payload:
+                    yield (
+                        f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Generation failed')), ensure_ascii=False)}\n\n"
+                    )
+                    return
+
+                event = await _convert_openai_stream_chunk_to_gemini_event(
+                    payload,
+                    response_model,
+                )
+                if event:
+                    yield event
                 continue
-            payload = _parse_handler_result(payload_text)
+
+            payload = _parse_handler_result(chunk)
             if "error" in payload:
                 yield (
                     f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Generation failed')), ensure_ascii=False)}\n\n"
@@ -848,21 +946,6 @@ async def _iterate_gemini_stream(
             )
             if event:
                 yield event
-            continue
-
-        payload = _parse_handler_result(chunk)
-        if "error" in payload:
-            yield (
-                f"data: {json.dumps(_build_gemini_error_payload(_get_error_status_code(payload), payload['error'].get('message', 'Generation failed')), ensure_ascii=False)}\n\n"
-            )
-            return
-
-        event = await _convert_openai_stream_chunk_to_gemini_event(
-            payload,
-            response_model,
-        )
-        if event:
-            yield event
 
 
 @router.get("/v1/models")
@@ -933,14 +1016,15 @@ async def create_chat_completion(
 ):
     """OpenAI-compatible unified generation endpoint."""
     try:
-        normalized = await _normalize_openai_request(request)
+        request_base_url = _get_request_base_url(raw_request)
+        normalized = await _normalize_openai_request(
+            request, request_base_url=request_base_url
+        )
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
-        request_base_url = _get_request_base_url(raw_request)
-
         if request.stream:
-            return StreamingResponse(
+            return GenerationStreamingResponse(
                 _iterate_openai_stream(normalized, request_base_url),
                 media_type="text/event-stream",
                 headers={
@@ -977,11 +1061,12 @@ async def generate_content(
 ):
     """Gemini official generateContent endpoint."""
     try:
-        normalized = await _normalize_gemini_request(model, request)
+        request_base_url = _get_request_base_url(raw_request)
+        normalized = await _normalize_gemini_request(
+            model, request, request_base_url=request_base_url
+        )
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
-
-        request_base_url = _get_request_base_url(raw_request)
 
         payload = _enrich_payload_with_direct_url(
             _parse_handler_result(
@@ -1024,13 +1109,14 @@ async def stream_generate_content(
 ):
     """Gemini official streamGenerateContent endpoint."""
     try:
-        normalized = await _normalize_gemini_request(model, request)
+        request_base_url = _get_request_base_url(raw_request)
+        normalized = await _normalize_gemini_request(
+            model, request, request_base_url=request_base_url
+        )
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
-        request_base_url = _get_request_base_url(raw_request)
-
-        return StreamingResponse(
+        return GenerationStreamingResponse(
             _iterate_gemini_stream(normalized, normalized.model, request_base_url),
             media_type="text/event-stream",
             headers={

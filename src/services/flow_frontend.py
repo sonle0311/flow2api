@@ -18,6 +18,23 @@ from .browser_cookie_utils import serialize_cookie_header_for_url
 from .flow_cookies import FlowCookieJar
 
 
+class FlowTextResponse(str):
+    """Keep HTTP rejection metadata while the RPC layer inspects its text."""
+
+    def __new__(cls, text: str, status_code: int, headers: Dict[str, str]):
+        response = super().__new__(cls, text)
+        response.status_code = status_code
+        response.headers = dict(headers)
+        return response
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            error = RuntimeError(f"HTTP Error {self.status_code}: {self[:500]}")
+            error.status_code = self.status_code
+            error.headers = self.headers
+            raise error
+
+
 class FlowFrontendMixin:
     """Frontend RPC helpers shared by project and media generation flows."""
 
@@ -830,9 +847,19 @@ class FlowFrontendMixin:
             )
 
         frames = self._parse_batchexecute_frames(response_text)
-        self._raise_batchexecute_error(frames, rpc_id)
+        try:
+            self._raise_batchexecute_error(frames, rpc_id)
+        except RuntimeError as error:
+            if isinstance(response_text, FlowTextResponse):
+                error.status_code = response_text.status_code
+                error.headers = response_text.headers
+            raise
         payload = self._extract_batchexecute_payload(frames, rpc_id)
         if payload is None:
+            # A valid RPC payload establishes acceptance even when an
+            # intermediary supplies an error status. Never resubmit it.
+            if isinstance(response_text, FlowTextResponse):
+                response_text.raise_for_status()
             raise RuntimeError(f"Flow frontend RPC returned no payload: rpc={rpc_id}")
         self._remember_flow_cookies(original_cookies, cookie_jar)
         return payload

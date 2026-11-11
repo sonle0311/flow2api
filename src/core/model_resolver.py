@@ -655,8 +655,21 @@ def resolve_model_name(
     Returns:
         解析后的内部模型名
     """
+    # Public video family options select an existing registered variant. Full
+    # variant IDs and legacy underscore aliases retain their original behavior.
+    if model_config:
+        contract = next(
+            (item for item in _get_public_video_contracts(model_config) if item["id"] == model),
+            None,
+        )
+        if contract is not None:
+            return _resolve_public_video_model(model, request, contract)
+
     # ────── 图片模型解析 ──────
     if model in IMAGE_BASE_MODELS:
+        _reject_incompatible_media_config(
+            _generation_config_sources(request), "videoConfig"
+        )
         base = IMAGE_BASE_MODELS[model]
         aspect_ratio, image_size = (
             _extract_generation_params(request) if request else (None, None)
@@ -746,6 +759,214 @@ def resolve_model_name(
 
     # 未知模型名，原样返回（由下游 MODEL_CONFIG 校验报错）
     return model
+
+
+class ModelParameterError(ValueError):
+    """A public family was requested with an unsupported parameter combination."""
+
+
+_PUBLIC_VIDEO_VARIANT_RE = re.compile(
+    r"^(?P<family>.+?)(?:-(?P<mode>i2v|r2v|extend))?"
+    r"-(?P<seconds>\d+)s-(?P<orientation>landscape|portrait)$"
+)
+_VIDEO_RATIOS = {"landscape": "16:9", "portrait": "9:16"}
+_IMAGE_RATIOS = {**_VIDEO_RATIOS, "square": "1:1", "four-three": "4:3", "three-four": "3:4"}
+
+
+def _get_public_video_contracts(model_config: Dict[str, Any]) -> list:
+    families = {}
+    for model_id, config in sorted(model_config.items()):
+        if config.get("type") != "video" or not config.get("listed", True):
+            continue
+        match = _PUBLIC_VIDEO_VARIANT_RE.fullmatch(model_id)
+        if not match:
+            continue
+        family = match["family"]
+        base = model_config.get(family)
+        if not base or base.get("type") != "video" or not base.get("listed", True):
+            continue
+        video_type = config.get("video_type")
+        mode = "auto" if video_type == "omni" else video_type
+        if mode not in {"auto", "t2v", "i2v", "r2v", "extend"}:
+            continue
+        families.setdefault(family, []).append({
+            "id": model_id,
+            "mode": mode,
+            "durationSeconds": int(match["seconds"]),
+            "aspectRatio": _VIDEO_RATIOS[match["orientation"]],
+            "supports_images": bool(config.get("supports_images", False)),
+            "min_images": config.get("min_images", 0),
+            "max_images": config.get("max_images", 0),
+            "locally_validated_min_images": config.get("min_images", 0) if mode == "i2v" else 0,
+        })
+
+    contracts = []
+    for family, variants in sorted(families.items()):
+        modes = sorted({item["mode"] for item in variants})
+        base_mode = "auto" if model_config[family].get("video_type") == "omni" else "t2v"
+        mode_defaults = {}
+        for mode in modes:
+            candidates = [item for item in variants if item["mode"] == mode]
+            preferred = min(candidates, key=lambda item: (
+                item["durationSeconds"] != 8,
+                item["durationSeconds"],
+                item["aspectRatio"] != "16:9",
+            ))
+            mode_defaults[mode] = {key: preferred[key] for key in ("durationSeconds", "aspectRatio", "mode")}
+        contracts.append({
+            "id": family,
+            "type": "video",
+            "listed": True,
+            "config_path": "generationConfig.videoConfig",
+            "defaults": mode_defaults.get(base_mode, mode_defaults[modes[0]]),
+            "mode_defaults": mode_defaults,
+            "parameters": {
+                "durationSeconds": {"type": "integer", "values": sorted({item["durationSeconds"] for item in variants})},
+                "aspectRatio": {"type": "string", "values": [ratio for ratio in _VIDEO_RATIOS.values() if any(item["aspectRatio"] == ratio for item in variants)]},
+                "mode": {"type": "string", "values": modes},
+            },
+            "variants": variants,
+        })
+    return contracts
+
+
+def get_model_parameter_contracts(model_config: Dict[str, Any]) -> list:
+    """Describe exact selectable combinations from the supplied model registry."""
+    contracts = []
+    for alias, base in sorted(IMAGE_BASE_MODELS.items()):
+        variants = []
+        for aspect in MODEL_SUPPORTED_ASPECTS.get(base, []):
+            for size in ("1k", *MODEL_SUPPORTED_SIZES.get(base, [])):
+                model_id = f"{base}-{aspect}" + (f"-{size}" if size != "1k" else "")
+                config = model_config.get(model_id)
+                if not config or config.get("type") != "image":
+                    continue
+                variants.append({
+                    "id": model_id,
+                    "aspectRatio": _IMAGE_RATIOS[aspect],
+                    "imageSize": size.upper(),
+                    "supports_images": True,
+                    "min_images": 0,
+                    "max_images": config.get("max_images"),
+                    "locally_validated_min_images": 0,
+                })
+        if not variants:
+            continue
+        contracts.append({
+            "id": alias,
+            "type": "image",
+            "listed": any(model_config[item["id"]].get("listed", True) for item in variants),
+            "config_path": "generationConfig.imageConfig",
+            "defaults": {"aspectRatio": "16:9", "imageSize": "1K"},
+            "parameters": {
+                "aspectRatio": {"type": "string", "values": [ratio for ratio in _IMAGE_RATIOS.values() if any(item["aspectRatio"] == ratio for item in variants)]},
+                "imageSize": {"type": "string", "values": [size for size in ("1K", "2K", "4K") if any(item["imageSize"] == size for item in variants)]},
+            },
+            "variants": variants,
+        })
+    return contracts + _get_public_video_contracts(model_config)
+
+
+def _parameter_value(source: Any, name: str) -> Any:
+    if isinstance(source, dict):
+        return source.get(name)
+    return getattr(source, name, None) if source is not None else None
+
+
+def _generation_config_sources(request: Any, *, validate_wrappers: bool = False) -> list:
+    """Read config wrappers without discarding an explicitly malformed value."""
+    sources = []
+    generation_config = getattr(request, "generationConfig", None)
+    if generation_config is not None:
+        sources.append(generation_config)
+    extra = getattr(request, "__pydantic_extra__", None) or {}
+    for wrapper in ("extra_body", "extraBody"):
+        raw = extra.get(wrapper)
+        if raw is None:
+            continue
+        if not isinstance(raw, dict):
+            if validate_wrappers:
+                raise ModelParameterError(f"{wrapper} must be an object")
+            continue
+        wrapped_config = raw.get("generationConfig")
+        if wrapped_config is None:
+            continue
+        if not isinstance(wrapped_config, dict):
+            if validate_wrappers:
+                raise ModelParameterError(f"{wrapper}.generationConfig must be an object")
+            continue
+        sources.append(wrapped_config)
+    return sources
+
+
+def _reject_incompatible_media_config(sources: list, name: str) -> None:
+    for source in sources:
+        config = _parameter_value(source, name)
+        if config is None:
+            continue
+        if hasattr(config, "model_dump"):
+            config = config.model_dump(exclude_none=True)
+        if isinstance(config, dict) and not any(value is not None for value in config.values()):
+            continue
+        expected = "imageConfig" if name == "videoConfig" else "videoConfig"
+        raise ModelParameterError(f"{name} is incompatible with this model; use generationConfig.{expected}")
+
+
+def _extract_video_params(request: Any) -> Dict[str, Any]:
+    sources = _generation_config_sources(request, validate_wrappers=True)
+    _reject_incompatible_media_config(sources, "imageConfig")
+
+    params = {}
+    for source in sources:
+        video_config = _parameter_value(source, "videoConfig")
+        if video_config is None:
+            continue
+        if not isinstance(video_config, dict) and not hasattr(type(video_config), "model_fields"):
+            raise ModelParameterError("generationConfig.videoConfig must be an object")
+        if isinstance(video_config, dict) and set(video_config) - {"durationSeconds", "aspectRatio", "mode"}:
+            raise ModelParameterError("Unsupported videoConfig field; use durationSeconds, aspectRatio and mode")
+        for name in ("durationSeconds", "aspectRatio", "mode"):
+            value = _parameter_value(video_config, name)
+            if name not in params and value is not None:
+                params[name] = value
+
+    # Keep the small top-level compatibility surface consistent for both APIs.
+    extra = getattr(request, "__pydantic_extra__", None) or {}
+    for target, names in (
+        ("durationSeconds", ("duration_seconds", "durationSeconds")),
+        ("aspectRatio", ("aspect_ratio", "aspectRatio")),
+    ):
+        if target not in params:
+            for name in names:
+                if extra.get(name) is not None:
+                    params[target] = extra[name]
+                    break
+    return params
+
+
+def _resolve_public_video_model(model: str, request: Any, contract: Dict[str, Any]) -> str:
+    params = _extract_video_params(request)
+    mode = params.get("mode", contract["defaults"]["mode"])
+    if not isinstance(mode, str) or mode not in contract["mode_defaults"]:
+        raise ModelParameterError(f"Unsupported video mode {mode!r} for {model}")
+    selected = {**contract["mode_defaults"][mode], **params}
+    seconds = selected["durationSeconds"]
+    if type(seconds) is not int:
+        raise ModelParameterError("durationSeconds must be an integer")
+    ratio = selected["aspectRatio"]
+    if not isinstance(ratio, str):
+        raise ModelParameterError("aspectRatio must be a string")
+    # Existing orientation names are convenient aliases for canonical ratios.
+    ratio = _VIDEO_RATIOS.get(ratio.strip().lower(), ratio.strip())
+    selected["aspectRatio"] = ratio
+    for variant in contract["variants"]:
+        if all(variant[name] == selected[name] for name in ("durationSeconds", "aspectRatio", "mode")):
+            return variant["id"]
+    raise ModelParameterError(
+        f"Unsupported video configuration for {model}: mode={mode}, "
+        f"durationSeconds={seconds}, aspectRatio={ratio}. "
+        "Choose a combination from the model parameter reference."
+    )
 
 
 def get_base_model_aliases() -> Dict[str, str]:

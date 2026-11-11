@@ -27,7 +27,7 @@ import subprocess
 import types
 import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any, Iterable
+from typing import Optional, Dict, Any, Iterable, Callable
 from urllib.parse import parse_qsl, urljoin, urlparse, urlunparse
 
 from curl_cffi.requests import AsyncSession
@@ -1568,6 +1568,8 @@ class ResidentTabInfo:
         self.prefer_native_harvest = False
         self.solve_lock = asyncio.Lock()  # 串行化同一标签页上的执行，降低并发冲突
         self.pending_assignment_count = 0  # 选中但尚未真正进入 solve_lock 的请求数
+        self.pending_assignments_released = asyncio.Event()
+        self.pending_assignments_released.set()
 
 
 @dataclass
@@ -6813,7 +6815,12 @@ class BrowserCaptchaService:
             lru_last_used = float("inf")
 
             for slot_id, resident_info in self._resident_tabs.items():
-                if resident_info.solve_lock.locked():
+                if (
+                    slot_id in self._resident_unavailable_slots
+                    or self._is_resident_slot_busy_for_allocation_locked(
+                        slot_id, resident_info
+                    )
+                ):
                     continue
                 if resident_info.last_used_at < lru_last_used:
                     lru_last_used = resident_info.last_used_at
@@ -6825,8 +6832,9 @@ class BrowserCaptchaService:
                 f"[BrowserCaptcha] 标签页数量达到上限({self._max_resident_tabs})，"
                 f"淘汰最久未使用的 slot={lru_slot_id}, project_hint={lru_project_hint}"
             )
-            await self._close_resident_tab(lru_slot_id)
-            return True
+            # Recheck and detach under the same lock used by reservations. A
+            # request may have claimed the candidate since the selection above.
+            return await self._close_resident_tab(lru_slot_id, only_if_idle=True)
 
         debug_logger.log_warning(
             f"[BrowserCaptcha] 标签页数量达到上限({self._max_resident_tabs})，"
@@ -7080,12 +7088,14 @@ class BrowserCaptchaService:
         current = resident_info or self._resident_tabs.get(normalized_slot_id)
         if current is None:
             return False
+        rebuild_task = self._resident_rebuild_tasks.get(normalized_slot_id)
         return (
             current.solve_lock.locked()
+            or (rebuild_task is not None and not rebuild_task.done())
             or self._resident_slot_has_pending_assignment_locked(
-            normalized_slot_id,
-            current,
-        )
+                normalized_slot_id,
+                current,
+            )
         )
 
     def _reserve_resident_slot_for_solve_locked(
@@ -7097,7 +7107,12 @@ class BrowserCaptchaService:
         if not normalized_slot_id:
             return False
         current = resident_info or self._resident_tabs.get(normalized_slot_id)
-        if current is None or not current.tab:
+        if (
+            current is None
+            or not current.tab
+            or self._resident_tabs.get(normalized_slot_id) is not current
+            or normalized_slot_id in self._resident_unavailable_slots
+        ):
             return False
         if self._is_resident_slot_busy_for_allocation_locked(
             normalized_slot_id, current
@@ -7106,6 +7121,7 @@ class BrowserCaptchaService:
         current.pending_assignment_count = (
             int(getattr(current, "pending_assignment_count", 0) or 0) + 1
         )
+        current.pending_assignments_released.clear()
         return True
 
     def _release_resident_slot_reservation_locked(
@@ -7121,6 +7137,8 @@ class BrowserCaptchaService:
             return
         pending_count = int(getattr(current, "pending_assignment_count", 0) or 0)
         current.pending_assignment_count = max(0, pending_count - 1)
+        if current.pending_assignment_count == 0:
+            current.pending_assignments_released.set()
 
     async def _release_resident_slot_reservation(
         self,
@@ -7140,11 +7158,15 @@ class BrowserCaptchaService:
         self,
         slot_id: Optional[str],
         resident_info: Optional[ResidentTabInfo] = None,
+        *,
+        on_consumed: Optional[Callable[[], None]] = None,
     ) -> None:
-        await self._release_resident_slot_reservation(
-            slot_id,
-            resident_info=resident_info,
-        )
+        async with self._resident_lock:
+            self._release_resident_slot_reservation_locked(
+                slot_id, resident_info=resident_info
+            )
+            if on_consumed is not None:
+                on_consumed()
 
     def _resolve_token_affinity_slot_locked(
         self,
@@ -8628,7 +8650,7 @@ class BrowserCaptchaService:
             async with self._tab_build_lock:
                 async with self._resident_lock:
                     old_resident = (
-                        self._resident_tabs.pop(resolved_slot_id, None)
+                        self._resident_tabs.get(resolved_slot_id)
                         if resolved_slot_id
                         else None
                     )
@@ -8639,13 +8661,19 @@ class BrowserCaptchaService:
                     self._sync_compat_resident_state()
 
                 if old_resident:
-                    try:
+                    # Retirement prevents new reservations, but a selected
+                    # request may still be binding cookies before solve_lock.
+                    # Keep it reachable until that owner consumes/releases its
+                    # reservation; never wait while holding _resident_lock.
+                    await old_resident.pending_assignments_released.wait()
+                    async with old_resident.solve_lock:
+                        async with self._resident_lock:
+                            if self._resident_tabs.get(resolved_slot_id) is old_resident:
+                                self._resident_tabs.pop(resolved_slot_id, None)
+                            self._sync_compat_resident_state()
                         await self._dispose_browser_context_quietly(
                             old_resident.browser_context_id
                         )
-                        async with old_resident.solve_lock:
-                            await self._close_tab_quietly(old_resident.tab)
-                    except Exception:
                         await self._close_tab_quietly(old_resident.tab)
 
                 next_slot_id = resolved_slot_id or self._next_resident_slot_id()
@@ -8677,6 +8705,16 @@ class BrowserCaptchaService:
                 else:
                     rebuild_task = asyncio.create_task(_runner(actual_slot_id))
                     self._resident_rebuild_tasks[actual_slot_id] = rebuild_task
+
+                    def completed(task):
+                        if self._resident_rebuild_tasks.get(actual_slot_id) is task:
+                            self._resident_rebuild_tasks.pop(actual_slot_id, None)
+                        # A cancelled waiter may be the last observer of a
+                        # failed rebuild. Retrieve its exception in that case.
+                        if not task.cancelled():
+                            task.exception()
+
+                    rebuild_task.add_done_callback(completed)
                     created_task = True
             if created_task:
                 debug_logger.log_info(
@@ -8686,20 +8724,11 @@ class BrowserCaptchaService:
                 debug_logger.log_info(
                     f"[BrowserCaptcha] slot={actual_slot_id} 已在重建中，等待复用现有结果"
                 )
-            try:
-                result = await asyncio.shield(rebuild_task)
-                if created_task:
-                    debug_logger.log_info(
-                        f"[BrowserCaptcha] 共享标签页重建结束 (slot={actual_slot_id}, project={project_id}, token_id={token_id})"
-                    )
-            finally:
-                if created_task:
-                    async with self._resident_lock:
-                        if (
-                            self._resident_rebuild_tasks.get(actual_slot_id)
-                            is rebuild_task
-                        ):
-                            self._resident_rebuild_tasks.pop(actual_slot_id, None)
+            result = await asyncio.shield(rebuild_task)
+            if created_task:
+                debug_logger.log_info(
+                    f"[BrowserCaptcha] 共享标签页重建结束 (slot={actual_slot_id}, project={project_id}, token_id={token_id})"
+                )
             return await finalize(*result)
 
         result = await _runner(actual_slot_id)
@@ -12908,13 +12937,15 @@ class BrowserCaptchaService:
         action: str,
         *,
         consume_reservation: bool = False,
+        on_reservation_consumed: Optional[Callable[[], None]] = None,
         success_label: str,
     ) -> Optional[str]:
         """在共享常驻标签页上执行一次打码，并统一更新成功态。"""
         if not resident_info or not resident_info.tab:
             if consume_reservation:
-                await self._release_resident_slot_reservation(
-                    slot_id, resident_info=resident_info
+                await self._consume_resident_slot_reservation(
+                    slot_id, resident_info=resident_info,
+                    on_consumed=on_reservation_consumed,
                 )
             return None
 
@@ -12929,7 +12960,8 @@ class BrowserCaptchaService:
         async with resident_info.solve_lock:
             if consume_reservation:
                 await self._consume_resident_slot_reservation(
-                    slot_id, resident_info=resident_info
+                    slot_id, resident_info=resident_info,
+                    on_consumed=on_reservation_consumed,
                 )
             if solve_mode == "direct":
                 try:
@@ -13060,12 +13092,38 @@ class BrowserCaptchaService:
         )
 
         reserved_slot_id: Optional[str] = None
+        reserved_resident_info: Optional[ResidentTabInfo] = None
+
+        def remember_reserved_slot(slot_id, resident_info):
+            nonlocal reserved_slot_id, reserved_resident_info
+            reserved_slot_id = slot_id or None
+            reserved_resident_info = resident_info if reserved_slot_id else None
+
+        def reservation_consumed():
+            nonlocal reserved_slot_id, reserved_resident_info
+            # Runs under _resident_lock with the pending-count decrement.
+            # Cleanup must not release a later request's reservation while this
+            # request awaits post-solve work after leaving solve_lock.
+            reserved_slot_id = None
+            reserved_resident_info = None
 
         async def release_reserved_slot():
-            nonlocal reserved_slot_id
             if reserved_slot_id:
-                await self._release_resident_slot_reservation(reserved_slot_id)
-                reserved_slot_id = None
+                release_task = asyncio.create_task(
+                    self._release_resident_slot_reservation(
+                        reserved_slot_id, resident_info=reserved_resident_info
+                    )
+                )
+                cancelled = False
+                while not release_task.done():
+                    try:
+                        await asyncio.shield(release_task)
+                    except asyncio.CancelledError:
+                        cancelled = True
+                release_task.result()
+                reservation_consumed()
+                if cancelled:
+                    raise asyncio.CancelledError
 
         try:
             debug_logger.log_info(
@@ -13105,7 +13163,7 @@ class BrowserCaptchaService:
                             f"[BrowserCaptcha] 浏览器恢复后分配共享标签页仍断开 (project: {project_id}, token_id={token_id}): {retry_error}"
                         )
                         slot_id, resident_info = None, None
-            reserved_slot_id = slot_id or None
+            remember_reserved_slot(slot_id, resident_info)
             if resident_info is None or not slot_id:
                 if await self._wait_for_active_resident_rebuild(
                     timeout_seconds=min(20.0, self._solve_timeout_seconds)
@@ -13116,7 +13174,7 @@ class BrowserCaptchaService:
                         reserve_for_solve=True,
                         return_slot_key=True,
                     )
-                    reserved_slot_id = slot_id or None
+                    remember_reserved_slot(slot_id, resident_info)
             if resident_info is None or not slot_id:
                 if not await self._probe_browser_runtime():
                     debug_logger.log_warning(
@@ -13131,7 +13189,7 @@ class BrowserCaptchaService:
                             reserve_for_solve=True,
                             return_slot_key=True,
                         )
-                        reserved_slot_id = slot_id or None
+                        remember_reserved_slot(slot_id, resident_info)
 
             if resident_info is None or not slot_id:
                 debug_logger.log_warning(
@@ -13177,7 +13235,7 @@ class BrowserCaptchaService:
                         project_id, token_id=token_id, slot_id=slot_id,
                         reserve_for_solve=True, return_slot_key=True,
                     )
-                    reserved_slot_id = slot_id or None
+                    remember_reserved_slot(slot_id, resident_info)
                     if resident_info is None or not await self._ensure_resident_token_binding(
                         resident_info, token_id, label=f"get_token_rebound:{slot_id}"
                     ):
@@ -13201,6 +13259,7 @@ class BrowserCaptchaService:
                         resident_info,
                         action,
                         consume_reservation=True,
+                        on_reservation_consumed=reservation_consumed,
                         success_label="resident_solve",
                     )
                     reserved_slot_id = None
@@ -13236,7 +13295,7 @@ class BrowserCaptchaService:
                                 reserve_for_solve=True,
                                 return_slot_key=True,
                             )
-                            reserved_slot_id = slot_id or None
+                            remember_reserved_slot(slot_id, resident_info)
                             if resident_info and slot_id:
                                 try:
                                     token = await self._solve_with_resident_tab(
@@ -13245,6 +13304,7 @@ class BrowserCaptchaService:
                                         resident_info,
                                         action,
                                         consume_reservation=True,
+                                        on_reservation_consumed=reservation_consumed,
                                         success_label="resident_solve_after_runtime_recover",
                                     )
                                     reserved_slot_id = None
@@ -13265,7 +13325,7 @@ class BrowserCaptchaService:
                         reserve_for_solve=True,
                         return_slot_key=True,
                     )
-                    reserved_slot_id = slot_id or None
+                    remember_reserved_slot(slot_id, resident_info)
                     if resident_info is None:
                         debug_logger.log_warning(
                             f"[BrowserCaptcha] 共享标签页重建返回空，升级为浏览器级恢复 (slot={slot_id}, project={project_id}, token_id={token_id})"
@@ -13280,7 +13340,7 @@ class BrowserCaptchaService:
                                 reserve_for_solve=True,
                                 return_slot_key=True,
                             )
-                            reserved_slot_id = slot_id or None
+                            remember_reserved_slot(slot_id, resident_info)
 
                     if resident_info:
                         needs_secondary_rebuild = False
@@ -13291,6 +13351,7 @@ class BrowserCaptchaService:
                                 resident_info,
                                 action,
                                 consume_reservation=True,
+                                on_reservation_consumed=reservation_consumed,
                                 success_label="resident_resolve_after_rebuild",
                             )
                             reserved_slot_id = None
@@ -13322,7 +13383,7 @@ class BrowserCaptchaService:
                                         reserve_for_solve=True,
                                         return_slot_key=True,
                                     )
-                                    reserved_slot_id = slot_id or None
+                                    remember_reserved_slot(slot_id, resident_info)
                                     if resident_info and slot_id:
                                         try:
                                             token = await self._solve_with_resident_tab(
@@ -13331,6 +13392,7 @@ class BrowserCaptchaService:
                                                 resident_info,
                                                 action,
                                                 consume_reservation=True,
+                                                on_reservation_consumed=reservation_consumed,
                                                 success_label="resident_resolve_after_browser_restart",
                                             )
                                             reserved_slot_id = None
@@ -13358,7 +13420,7 @@ class BrowserCaptchaService:
                                 reserve_for_solve=True,
                                 return_slot_key=True,
                             )
-                            reserved_slot_id = slot_id or None
+                            remember_reserved_slot(slot_id, resident_info)
                             if resident_info and slot_id:
                                 try:
                                     token = await self._solve_with_resident_tab(
@@ -13367,6 +13429,7 @@ class BrowserCaptchaService:
                                         resident_info,
                                         action,
                                         consume_reservation=True,
+                                        on_reservation_consumed=reservation_consumed,
                                         success_label="resident_resolve_after_second_rebuild",
                                     )
                                     reserved_slot_id = None
@@ -13390,7 +13453,7 @@ class BrowserCaptchaService:
                                 reserve_for_solve=True,
                                 return_slot_key=True,
                             )
-                            reserved_slot_id = slot_id or None
+                            remember_reserved_slot(slot_id, resident_info)
                             if resident_info and slot_id:
                                 try:
                                     token = await self._solve_with_resident_tab(
@@ -13399,6 +13462,7 @@ class BrowserCaptchaService:
                                         resident_info,
                                         action,
                                         consume_reservation=True,
+                                        on_reservation_consumed=reservation_consumed,
                                         success_label="resident_resolve_after_empty_recover",
                                     )
                                     reserved_slot_id = None
@@ -13673,19 +13737,25 @@ class BrowserCaptchaService:
             )
             return None
 
-    async def _close_resident_tab(self, slot_id: str):
+    async def _close_resident_tab(self, slot_id: str, *, only_if_idle: bool = False):
         """关闭指定 slot 的共享常驻标签页
 
         Args:
             slot_id: 共享标签页槽位 ID
         """
         async with self._resident_lock:
+            resident_info = self._resident_tabs.get(slot_id)
+            if only_if_idle and (
+                resident_info is None
+                or slot_id in self._resident_unavailable_slots
+                or self._is_resident_slot_busy_for_allocation_locked(slot_id, resident_info)
+            ):
+                return False
             resident_info = self._resident_tabs.pop(slot_id, None)
             self._forget_token_affinity_for_slot_locked(slot_id)
             self._forget_project_affinity_for_slot_locked(slot_id)
             self._resident_error_streaks.pop(slot_id, None)
             self._clear_resident_slot_unavailable_locked(slot_id)
-            self._resident_rebuild_tasks.pop(slot_id, None)
             self._resident_recovery_tasks.pop(slot_id, None)
             self._sync_compat_resident_state()
 
@@ -13700,6 +13770,7 @@ class BrowserCaptchaService:
                 )
             except Exception as e:
                 debug_logger.log_warning(f"[BrowserCaptcha] 关闭标签页时异常: {e}")
+        return True
 
     async def invalidate_token(self, project_id: str):
         """当检测到 token 无效时调用，重建当前项目最近映射的共享标签页。
@@ -14465,6 +14536,7 @@ class _PersonalBrowserPoolService:
         self._token_pool_waiters: dict[str, int] = {}
         self._token_pool_bucket_meta: dict[str, Dict[str, Any]] = {}
         self._token_pool_refill_inflight: dict[str, int] = {}
+        self._token_pool_retry_after: dict[str, float] = {}
         self._token_pool_fill_tasks: set[asyncio.Task] = set()
         self._token_pool_maintainer_task: Optional[asyncio.Task] = None
         self._token_pool_last_refill_at = 0.0
@@ -14709,6 +14781,10 @@ class _PersonalBrowserPoolService:
         self._token_pool_conditions.pop(bucket_key, None)
         self._token_pool_bucket_meta.pop(bucket_key, None)
         self._token_pool_refill_inflight.pop(bucket_key, None)
+        # A configured prefill bucket may be registered again immediately.
+        # Retain an unexpired cooldown even after its empty queue is removed.
+        if time.monotonic() >= self._token_pool_retry_after.get(bucket_key, 0.0):
+            self._token_pool_retry_after.pop(bucket_key, None)
         self._token_pool_waiters.pop(bucket_key, None)
 
     def _summarize_token_pool_bucket(
@@ -15268,6 +15344,7 @@ class _PersonalBrowserPoolService:
                 self._token_pool_bucket_meta.clear()
                 self._token_pool_waiters.clear()
                 self._token_pool_refill_inflight.clear()
+                self._token_pool_retry_after.clear()
                 self._token_pool_conditions.clear()
             return
 
@@ -15282,6 +15359,7 @@ class _PersonalBrowserPoolService:
                     *self._token_pool_bucket_meta.keys(),
                     *self._token_pool_queues.keys(),
                     *self._token_pool_refill_inflight.keys(),
+                    *self._token_pool_retry_after.keys(),
                     *self._token_pool_waiters.keys(),
                 }
             )
@@ -15328,6 +15406,8 @@ class _PersonalBrowserPoolService:
                     continue
                 if ready_count + inflight_count >= target_size:
                     continue
+                if time.monotonic() < self._token_pool_retry_after.get(bucket_key, 0.0):
+                    continue
 
                 while (
                     total_inflight < refill_parallelism
@@ -15353,6 +15433,7 @@ class _PersonalBrowserPoolService:
             or "IMAGE_GENERATION"
         )
         token_id = bucket_meta.get("token_id")
+        succeeded = False
 
         try:
             solve_bundle = await self._get_token_bundle_direct(
@@ -15368,6 +15449,7 @@ class _PersonalBrowserPoolService:
             token = str(solve_bundle.get("token") or "").strip()
             if not token:
                 return
+            succeeded = True
             slot_id = str(solve_bundle.get("slot_id") or "").strip() or None
 
             created_at = time.time()
@@ -15414,6 +15496,13 @@ class _PersonalBrowserPoolService:
             )
         finally:
             async with self._token_pool_lock:
+                if succeeded:
+                    self._token_pool_retry_after.pop(bucket_key, None)
+                elif not self._closing and bucket_key in self._token_pool_bucket_meta:
+                    # Also gates maintainer calls made by notified/new waiters.
+                    # The periodic maintainer retries after this fixed cooldown;
+                    # no sleeping task or cancellation-prone timer is needed.
+                    self._token_pool_retry_after[bucket_key] = time.monotonic() + 1.0
                 current_value = int(
                     self._token_pool_refill_inflight.get(bucket_key, 0) or 0
                 )
@@ -15859,6 +15948,7 @@ class _PersonalBrowserPoolService:
             self._token_pool_waiters.clear()
             self._token_pool_bucket_meta.clear()
             self._token_pool_refill_inflight.clear()
+            self._token_pool_retry_after.clear()
         for fill_task in token_pool_fill_tasks:
             if fill_task.done():
                 continue

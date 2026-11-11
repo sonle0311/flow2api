@@ -12,6 +12,7 @@ from .model_resolver import (
     MODEL_SUPPORTED_ASPECTS,
     MODEL_SUPPORTED_SIZES,
     get_base_model_aliases,
+    get_model_parameter_contracts,
 )
 from ..services.generation_handler import MODEL_CONFIG
 
@@ -106,5 +107,6 @@ def build_integration_reference(app):
         "endpoints": sorted(endpoints, key=lambda endpoint: (endpoint["path"], endpoint["method"])),
         "models": models,
         "aliases": aliases,
+        "model_parameters": get_model_parameter_contracts(MODEL_CONFIG),
         "schemas": deepcopy(specification.get("components", {}).get("schemas", {})),
     }

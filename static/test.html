@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-i18n="Flow2API 模型测试">Flow2API 模型测试</title>
+    <link rel="stylesheet" href="/static/instrument-utilities.css">
+    <link rel="stylesheet" href="/static/instrument.css">
     <script src="/static/i18n.js"></script>
+    <script src="/static/instrument-shell.js" defer></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e1e6; min-height: 100vh; }
@@ -122,64 +125,68 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #7c8aff; }
   .config-bar { flex-wrap: wrap; }
 }
 </style>
+<link rel="stylesheet" href="/static/instrument-studio.css">
 </head>
-<body>
-<div class="container">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><select data-language-select aria-label="Language" style="padding:6px 10px;border-radius:6px;border:1px solid #2a2b3a;background:#1a1b26;color:#e1e1e6;"><option value="zh-CN">中文</option><option value="en">English</option><option value="vi">Tiếng Việt</option></select></div>
-  <h1><span data-i18n="🧪 Flow2API 模型测试">🧪 Flow2API 模型测试</span></h1>
-  <p class="subtitle"><span data-i18n="选择模型，输入提示词，测试生成效果">选择模型，输入提示词，测试生成效果</span></p>
-
-  <div class="config-bar">
-    <label>API Key:</label>
-    <input type="password" id="apiKey" placeholder="输入 API Key" data-i18n-placeholder="输入 API Key">
-    <label><span data-i18n="地址:">地址:</span></label>
-    <input type="text" id="baseUrl" placeholder="http://localhost:8000" />
-  </div>
-  <p class="config-note"><span data-i18n="未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。">未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。</span></p>
-
-  <div class="main-layout">
-    <div class="sidebar" id="modelSidebar"></div>
-    <div class="content">
-      <div class="gen-panel">
-        <h3 id="selectedModelName"><span data-i18n="请选择模型">请选择模型</span></h3>
-        <div class="model-info" id="selectedModelInfo"><span data-i18n="从左侧列表选择一个模型开始测试">从左侧列表选择一个模型开始测试</span></div>
-
-        <div class="form-group">
-          <label><span data-i18n="提示词 (Prompt)">提示词 (Prompt)</span></label>
-          <textarea id="promptInput" placeholder="描述你想生成的内容..." data-i18n-placeholder="描述你想生成的内容...">一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天</textarea>
+<body class="instrument-app instrument-test" data-instrument-active="studio">
+<header class="instrument-topbar">
+  <div class="studio-wordmark"><a href="/manage">Flow2API</a><span data-i18n-message>工作室</span></div>
+  <div class="studio-top-actions"><a href="/manage" class="studio-manage-link" data-i18n-message>返回管理</a><select data-language-select aria-label="Language"><option value="zh-CN">中文</option><option value="en">English</option><option value="vi">Tiếng Việt</option></select></div>
+</header>
+<main class="instrument-main container">
+  <div class="studio-heading"><div><h1 data-i18n-message>工作室</h1><p data-i18n="选择模型，输入提示词，测试生成效果">选择模型，输入提示词，测试生成效果</p></div><span class="studio-catalog-status" id="catalogStatus" role="status"></span></div>
+  <div class="main-layout studio-workspace">
+    <details class="studio-mobile-settings" id="studioMobileSettings" hidden open><summary data-i18n="模型与参数">模型与参数</summary></details>
+    <div class="content studio-stage">
+      <section class="output-panel" aria-labelledby="studioOutputTitle">
+        <div class="studio-output-heading"><h2 id="studioOutputTitle" data-i18n="输出">输出</h2><div class="studio-status" role="status"><span class="status-dot status-idle" id="statusDot"></span><span id="statusText" data-i18n="等待中">等待中</span></div></div>
+        <div class="studio-canvas" id="studioCanvas" aria-busy="false">
+          <div class="studio-empty" id="studioEmpty"><svg viewBox="0 0 60 48" aria-hidden="true"><rect x="3" y="3" width="54" height="42" rx="5"/><path d="m4 33 15-14 13 12 9-8 16 15"/><circle cx="41" cy="14" r="4"/></svg><h2 data-i18n="下一帧，从这里开始。">下一帧，从这里开始。</h2><p data-i18n="输入提示词，或添加参考图片。">输入提示词，或添加参考图片。</p></div>
+          <div class="output-result" id="outputResult"></div>
         </div>
-
-        <div class="form-group" id="videoSourceGroup" style="display:none;">
-          <label for="videoMediaId"><span data-i18n="源视频媒体 ID">源视频媒体 ID</span></label>
-          <input type="text" id="videoMediaId" placeholder="输入源视频的 mediaGenerationId" data-i18n-placeholder="输入源视频的 mediaGenerationId" autocomplete="off">
-        </div>
-
-        <div class="form-group" id="imageUploadGroup" style="display:none;">
-          <label><span data-i18n="上传图片">上传图片</span> <span id="imageLimit" style="color:#666;font-size:12px;"></span></label>
-          <div class="image-upload-area" id="imageUploadArea">
-            <div class="image-upload-hint" id="imageHint"><span data-i18n="点击或拖拽上传图片">点击或拖拽上传图片</span></div>
-            <div class="image-preview-list" id="imagePreviewList"></div>
-          </div>
+        <details class="studio-log" id="studioLog"><summary data-i18n="生成日志">生成日志</summary><div class="output-log" id="outputLog" tabindex="0"><span data-i18n="准备就绪，选择模型并点击生成按钮开始...">准备就绪，选择模型并点击生成按钮开始...</span></div></details>
+      </section>
+      <section class="gen-panel studio-composer" aria-label="提示词 (Prompt)" data-i18n-aria-label="提示词 (Prompt)">
+        <div class="form-group studio-prompt"><label for="promptInput" data-i18n="提示词 (Prompt)">提示词 (Prompt)</label><textarea id="promptInput" placeholder="描述你想生成的内容..." data-i18n-placeholder="描述你想生成的内容..." rows="3">一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天</textarea></div>
+        <div class="form-group" id="videoSourceGroup" style="display:none;"><label for="videoMediaId" data-i18n="源视频媒体 ID">源视频媒体 ID</label><input type="text" id="videoMediaId" placeholder="输入源视频的 mediaGenerationId" data-i18n-placeholder="输入源视频的 mediaGenerationId" autocomplete="off"></div>
+        <div class="form-group studio-references" id="imageUploadGroup" style="display:none;">
+          <div class="studio-reference-label"><label data-i18n="上传图片">上传图片</label><span id="imageLimit"></span></div>
+          <div class="studio-reference-row"><button type="button" class="studio-add-reference" id="addReference" aria-label="添加参考图片" data-i18n-aria-label="添加参考图片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><div class="image-upload-area" id="imageUploadArea" role="group" aria-label="添加参考图片" data-i18n-aria-label="添加参考图片"><div class="image-upload-hint" id="imageHint" data-i18n="点击、拖放或粘贴参考图片">点击、拖放或粘贴参考图片</div><div class="image-preview-list" id="imagePreviewList"></div></div></div>
           <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none;">
         </div>
-
-        <button class="btn-generate" id="btnGenerate" disabled><span data-i18n="选择模型后开始生成">选择模型后开始生成</span></button>
-      </div>
-
-      <div class="output-panel">
-        <h3><span class="status-dot status-idle" id="statusDot"></span> <span id="statusText"><span data-i18n="等待中">等待中</span></span></h3>
-        <div class="output-log" id="outputLog"><span data-i18n="准备就绪，选择模型并点击生成按钮开始...">准备就绪，选择模型并点击生成按钮开始...</span></div>
-        <div class="output-result" id="outputResult"></div>
-      </div>
+        <div class="studio-composer-actions"><span class="studio-prompt-shortcut">Ctrl / ⌘ + Enter</span><button type="button" class="studio-cancel" id="btnCancel" hidden data-i18n="取消生成">取消生成</button><button class="btn-generate" id="btnGenerate" disabled><span data-i18n="选择模型后开始生成">选择模型后开始生成</span></button></div>
+      </section>
     </div>
+    <aside class="studio-inspector" aria-labelledby="studioSettingsTitle">
+      <div class="studio-inspector-section" id="studioModelInspector"><h2 id="studioSettingsTitle" data-i18n="生成设置">生成设置</h2><div class="form-group"><label for="studioModel" data-i18n="模型">模型</label><select id="studioModel"><option value="" data-i18n="请选择模型">请选择模型</option></select></div>
+        <div id="studioParameters" hidden><div class="form-group" id="studioModeGroup" hidden><label for="studioMode" data-i18n="生成方式">生成方式</label><select id="studioMode"></select></div><div class="studio-parameter-grid"><div class="form-group" id="studioDurationGroup" hidden><label for="studioDuration" data-i18n="时长">时长</label><select id="studioDuration"></select></div><div class="form-group" id="studioAspectGroup" hidden><label for="studioAspect" data-i18n="画幅">画幅</label><select id="studioAspect"></select></div><div class="form-group" id="studioSizeGroup" hidden><label for="studioSize" data-i18n="分辨率">分辨率</label><select id="studioSize"></select></div></div></div>
+        <p class="studio-parameter-note" id="studioParameterNote" data-i18n="此模型使用其内置参数。">此模型使用其内置参数。</p>
+        <button type="button" class="studio-parameter-action" id="studioUseParameters" hidden data-i18n="设置参数">设置参数</button>
+        <details class="studio-model-details"><summary data-i18n="精确模型 ID">精确模型 ID</summary><h3 id="selectedModelName"><span data-i18n="请选择模型">请选择模型</span></h3><div class="model-info" id="selectedModelInfo"><span data-i18n="选择模型，输入提示词，测试生成效果">选择模型，输入提示词，测试生成效果</span></div></details>
+      </div>
+      <details class="studio-inspector-section studio-connection" open><summary data-i18n="连接">连接</summary><div class="config-bar"><label for="apiKey">API Key</label><input type="password" id="apiKey" placeholder="输入 API Key" data-i18n-placeholder="输入 API Key" autocomplete="off"><label for="baseUrl" data-i18n="服务地址">服务地址</label><input type="url" id="baseUrl" placeholder="http://localhost:8000" spellcheck="false"></div><p class="config-note" data-i18n="未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。">未填写 API Key 或模型列表加载失败时，会回退到内置候选模型；实际生成前仍需填写有效 API Key。</p></details>
+      <section class="studio-inspector-section studio-catalog"><h2 data-i18n="完整模型目录">完整模型目录</h2><div class="sidebar" id="modelSidebar"></div></section>
+    </aside>
   </div>
-</div>
+</main>
 
 <script>
-const STATE = { selectedModel: null, modelConfig: null, images: [], generating: false, imageEpoch: 0, pendingImages: 0 };
+const STATE = { selectedModel: null, modelConfig: null, images: [], generating: false, imageEpoch: 0, pendingImages: 0, controller: null };
 </script>
 <script>
     I18n.ready.then(() => {
+
+const starterPrompt = '一只可爱的橘猫趴在窗台上晒太阳，窗外是樱花盛开的春天';
+if (document.getElementById('promptInput').value === starterPrompt) document.getElementById('promptInput').value = I18n.t(starterPrompt);
+const studioCompactLayout = window.matchMedia('(max-width: 900px)');
+function placeStudioSettings() {
+  const mobile = document.getElementById('studioMobileSettings');
+  const settings = document.getElementById('studioModelInspector');
+  if (studioCompactLayout.matches) mobile.append(settings);
+  else document.querySelector('.studio-inspector').prepend(settings);
+  mobile.hidden = !studioCompactLayout.matches;
+}
+placeStudioSettings();
+studioCompactLayout.addEventListener('change', placeStudioSettings);
 
 // Normalize legacy underscore ids so both catalog styles classify identically.
 function normalizeModelId(modelId) {
@@ -318,10 +325,116 @@ const FALLBACK_MODELS = {
 };
 
 let ALL_MODELS = {};
+let studioFamilies = new Map();
+let catalogSource = '内置候选模型';
+
+// Derive controls only from concrete IDs in the returned public catalog. Every
+// selection resolves to an existing ID; no undocumented combination is created.
+function parseStudioVariant(id) {
+  const image = /^(gemini-3\.[01]-(?:flash(?:-lite)?|pro)-image)-(landscape|portrait|square|four-three|three-four)(?:-(2k|4k))?$/.exec(id);
+  const ratios = {landscape: '16:9', portrait: '9:16', square: '1:1', 'four-three': '4:3', 'three-four': '3:4'};
+  if (image) return {family: image[1], id, aspect: ratios[image[2]], size: (image[3] || '1k').toUpperCase()};
+  const video = /^(.+?)(?:-(i2v|r2v|extend))?-(\d+)s-(landscape|portrait)$/.exec(id);
+  if (video && /^(?:veo-3\.1|omni-|abra-)/.test(id)) {
+    return {family: video[1], id, mode: video[2] || (/^(?:omni|abra)-/.test(id) ? 'auto' : 't2v'), duration: Number(video[3]), aspect: ratios[video[4]]};
+  }
+  return null;
+}
+
+function studioFamilyLabel(id) {
+  const labels = {'gemini-3.1-flash-image': 'Gemini 3.1 Flash', 'gemini-3.1-flash-lite-image': 'Nano Banana 2 Lite', 'gemini-3.0-pro-image': 'Gemini 3.0 Pro'};
+  return labels[id] || id.replace(/^veo-/, 'Veo ').replace(/^omni-/, 'Omni ').replace(/-flash$/, ' Flash').replace(/-fast$/, ' Fast').replace(/-quality$/, ' Quality');
+}
+
+function rebuildStudioModels() {
+  studioFamilies = new Map();
+  const ids = Object.keys(ALL_MODELS).sort();
+  ids.forEach(id => {
+    const variant = parseStudioVariant(id);
+    if (!variant) return;
+    if (!studioFamilies.has(variant.family)) studioFamilies.set(variant.family, []);
+    studioFamilies.get(variant.family).push(variant);
+  });
+  const select = document.getElementById('studioModel');
+  select.replaceChildren(new Option(I18n.t('请选择模型'), ''));
+  const families = document.createElement('optgroup');
+  families.label = I18n.t('模型与参数');
+  [...studioFamilies.keys()].sort().forEach(id => families.append(new Option(studioFamilyLabel(id), id)));
+  if (families.children.length) select.append(families);
+  const exact = document.createElement('optgroup');
+  exact.label = I18n.t('精确模型 ID');
+  ids.filter(id => !studioFamilies.has(id) && !parseStudioVariant(id)).forEach(id => exact.append(new Option(id, id)));
+  if (exact.children.length) select.append(exact);
+  syncStudioControls();
+  I18n.setText('catalogStatus', catalogSource);
+}
+
+function preferredStudioVariant(variants) {
+  return [...variants].sort((a, b) =>
+    Number(b.duration === 8) - Number(a.duration === 8) ||
+    Number(b.mode === 't2v' || b.mode === 'auto') - Number(a.mode === 't2v' || a.mode === 'auto') ||
+    Number(b.aspect === '16:9') - Number(a.aspect === '16:9') ||
+    Number(b.size === '1K') - Number(a.size === '1K') || (a.duration || 0) - (b.duration || 0)
+  )[0];
+}
+
+const studioModeLabels = {auto: '自动', t2v: '文生视频', i2v: '图生视频', r2v: '多图视频', extend: '视频续写'};
+function syncStudioControls() {
+  const variant = parseStudioVariant(STATE.selectedModel || '');
+  const family = variant?.family || STATE.selectedModel;
+  const select = document.getElementById('studioModel');
+  // Direct programmatic/legacy selection may be outside the current catalog.
+  if (family && !Array.from(select.options).some(option => option.value === family)) select.add(new Option(family, family));
+  select.value = family || '';
+  select.options[0].disabled = Boolean(STATE.selectedModel);
+  const variants = studioFamilies.get(family);
+  const selected = variants?.find(item => item.id === STATE.selectedModel);
+  document.getElementById('studioParameters').hidden = !selected;
+  document.getElementById('studioParameterNote').hidden = Boolean(selected);
+  document.getElementById('studioUseParameters').hidden = !variants?.length || Boolean(variant);
+  if (!selected) return;
+  let candidates = variants;
+  for (const [key, suffix] of [['mode', 'Mode'], ['duration', 'Duration'], ['aspect', 'Aspect'], ['size', 'Size']]) {
+    const input = document.getElementById(`studio${suffix}`);
+    const values = [...new Set(candidates.map(item => item[key]).filter(value => value !== undefined))];
+    if (key === 'duration') values.sort((a, b) => a - b);
+    document.getElementById(`studio${suffix}Group`).hidden = values.length === 0;
+    input.replaceChildren(...values.map(value => new Option(key === 'mode' ? I18n.t(studioModeLabels[value] || value) : key === 'duration' ? `${value}s` : value, value)));
+    input.value = String(selected[key] ?? '');
+    if (values.length) candidates = candidates.filter(item => String(item[key]) === input.value);
+  }
+}
+
+document.getElementById('studioUseParameters').addEventListener('click', () => {
+  const variants = studioFamilies.get(STATE.selectedModel);
+  if (variants?.length) selectModel(preferredStudioVariant(variants).id, {preserveInputs: true});
+});
+
+document.getElementById('studioModel').addEventListener('change', event => {
+  const variants = studioFamilies.get(event.target.value);
+  if (variants?.length) selectModel(preferredStudioVariant(variants).id);
+  else if (event.target.value) selectModel(event.target.value);
+});
+for (const [key, suffix] of [['mode', 'Mode'], ['duration', 'Duration'], ['aspect', 'Aspect'], ['size', 'Size']]) {
+  document.getElementById(`studio${suffix}`).addEventListener('change', event => {
+    let candidates = studioFamilies.get(document.getElementById('studioModel').value) || [];
+    const order = [['mode', 'Mode'], ['duration', 'Duration'], ['aspect', 'Aspect'], ['size', 'Size']];
+    for (const [preceding, field] of order) {
+      const value = preceding === key ? event.target.value : document.getElementById(`studio${field}`).value;
+      const matching = candidates.filter(item => String(item[preceding]) === value);
+      if (matching.length) candidates = matching;
+      if (preceding === key) break;
+    }
+    const current = parseStudioVariant(STATE.selectedModel || '');
+    const matched = candidates.find(item => item.aspect === current?.aspect && item.size === current?.size) || preferredStudioVariant(candidates);
+    if (matched) selectModel(matched.id, {preserveInputs: true});
+  });
+}
 
 function applyFallbackModels(reason) {
   console.warn(I18n.t("使用内置候选模型列表:"), reason);
   ALL_MODELS = { ...FALLBACK_MODELS };
+  catalogSource = '内置候选模型';
   renderSidebar();
 }
 
@@ -346,7 +459,8 @@ async function loadModels() {
       return;
     }
     ALL_MODELS = {};
-    items.forEach(m => { ALL_MODELS[m.id] = m.description; });
+    items.forEach(m => { if (typeof m.id === 'string') ALL_MODELS[m.id] = m.description || ''; });
+    catalogSource = '实时模型目录';
     renderSidebar();
   } catch (e) {
     console.error(I18n.t("加载模型失败:"), e);
@@ -399,6 +513,9 @@ function renderSidebar() {
 
     const title = document.createElement("div");
     title.className = "section-title";
+    title.tabIndex = 0;
+    title.setAttribute('role', 'button');
+    title.setAttribute('aria-expanded', 'true');
     title.dataset.category = catName;
     title.innerHTML = `<span>${I18n.t(catName)} (${models.length})</span><span class="arrow">▼</span>`;
 
@@ -408,6 +525,9 @@ function renderSidebar() {
     models.forEach(modelId => {
       const item = document.createElement("div");
       item.className = "model-item";
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      item.setAttribute('aria-pressed', String(modelId === STATE.selectedModel));
       item.dataset.model = modelId;
       item.classList.toggle("active", modelId === STATE.selectedModel);
 
@@ -420,24 +540,30 @@ function renderSidebar() {
       tag.textContent = I18n.t(type === 'image' ? '图片' : '视频');
       item.append(name, tag);
       item.onclick = () => selectModel(modelId);
+      item.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectModel(modelId); } };
       list.appendChild(item);
     });
 
     title.onclick = () => {
       title.classList.toggle("collapsed");
       list.classList.toggle("hidden");
+      title.setAttribute('aria-expanded', String(!title.classList.contains('collapsed')));
     };
+    title.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); title.click(); } };
 
     section.appendChild(title);
     section.appendChild(list);
     sidebar.appendChild(section);
   }
+  rebuildStudioModels();
 }
 
-function selectModel(modelId) {
+function selectModel(modelId, options = {}) {
+  const previousImages = options.preserveInputs ? [...STATE.images] : [];
+  const previousMediaId = options.preserveInputs ? document.getElementById('videoMediaId').value : '';
   STATE.selectedModel = modelId;
   STATE.modelConfig = getModelMeta(modelId);
-  STATE.images = [];
+  STATE.images = previousImages.slice(0, STATE.modelConfig.maxImages);
   STATE.imageEpoch++;
   STATE.pendingImages = 0;
   imageReadQueue = Promise.resolve();
@@ -445,6 +571,7 @@ function selectModel(modelId) {
   // Update sidebar active state
   document.querySelectorAll(".model-item").forEach(el => {
     el.classList.toggle("active", el.dataset.model === modelId);
+    el.setAttribute('aria-pressed', String(el.dataset.model === modelId));
   });
 
   // Update panel
@@ -463,16 +590,18 @@ function selectModel(modelId) {
   }
 
   document.getElementById("videoSourceGroup").style.display = meta.requiresVideoSource ? "block" : "none";
-  document.getElementById("videoMediaId").value = "";
+  document.getElementById("videoMediaId").value = meta.requiresVideoSource ? previousMediaId : '';
 
   // Reset image previews
   document.getElementById("imagePreviewList").innerHTML = "";
   document.getElementById("imageHint").style.display = "block";
+  renderImagePreviews();
+  syncStudioControls();
 
   // Enable button
   const btn = document.getElementById("btnGenerate");
   btn.disabled = STATE.generating;
-  I18n.setMessage(btn, meta.type === "image" ? I18n.t("🎨 生成图片") : I18n.t("🎬 生成视频"));
+  I18n.setMessage(btn, STATE.generating ? I18n.t('⏳ 生成中...') : I18n.t(meta.type === 'image' ? '🎨 生成图片' : '🎬 生成视频'));
 }
 
 // Image upload handling
@@ -485,17 +614,45 @@ uploadArea.onclick = (e) => {
   fileInput.click();
 };
 
-uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.style.borderColor = "#7c8aff"; };
-uploadArea.ondragleave = () => { uploadArea.style.borderColor = "#2a2b3a"; };
+document.getElementById('addReference').onclick = () => fileInput.click();
+uploadArea.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInput.click(); } };
+uploadArea.ondragover = (e) => { e.preventDefault(); uploadArea.classList.add('is-dragging'); };
+uploadArea.ondragleave = () => { uploadArea.classList.remove('is-dragging'); };
 uploadArea.ondrop = (e) => {
   e.preventDefault();
-  uploadArea.style.borderColor = "#2a2b3a";
+  e.stopPropagation();
+  uploadArea.classList.remove('is-dragging');
   handleFiles(e.dataTransfer.files);
 };
+
+const composer = document.querySelector('.studio-composer');
+composer.addEventListener('paste', event => {
+  if (!STATE.modelConfig?.supportsImages) return;
+  const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'));
+  if (!files.length) return;
+  event.preventDefault();
+  handleFiles(files);
+});
+composer.addEventListener('dragover', event => {
+  if (!STATE.modelConfig?.supportsImages || !Array.from(event.dataTransfer?.types || []).includes('Files')) return;
+  event.preventDefault();
+  uploadArea.classList.add('is-dragging');
+});
+composer.addEventListener('dragleave', event => { if (!composer.contains(event.relatedTarget)) uploadArea.classList.remove('is-dragging'); });
+composer.addEventListener('drop', event => {
+  if (!STATE.modelConfig?.supportsImages) return;
+  event.preventDefault();
+  uploadArea.classList.remove('is-dragging');
+  handleFiles(event.dataTransfer?.files || []);
+});
+document.getElementById('promptInput').addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); generate(); }
+});
 
 fileInput.onchange = () => { handleFiles(fileInput.files); fileInput.value = ""; };
 
 function handleFiles(files) {
+  if (!STATE.modelConfig?.supportsImages) return Promise.resolve();
   const maxImages = STATE.modelConfig ? STATE.modelConfig.maxImages : 5;
   const available = Math.max(0, maxImages - STATE.images.length - STATE.pendingImages);
   const selected = Array.from(files).filter(file => file.type.startsWith('image/')).slice(0, available);
@@ -531,7 +688,18 @@ function renderImagePreviews() {
   STATE.images.forEach((dataUrl, idx) => {
     const item = document.createElement("div");
     item.className = "image-preview-item";
-    item.innerHTML = `<img src="${dataUrl}" alt="preview"><button class="remove-btn" onclick="removeImage(${idx})">×</button>`;
+    const image = document.createElement('img');
+    image.src = dataUrl;
+    image.alt = I18n.t('参考图片');
+    image.dataset.i18nAlt = '参考图片';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove-btn';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', I18n.t('移除参考图片'));
+    remove.dataset.i18nAriaLabel = '移除参考图片';
+    remove.onclick = () => removeImage(idx);
+    item.append(image, remove);
     list.appendChild(item);
   });
 }
@@ -543,6 +711,7 @@ function removeImage(idx) {
 
 // Generation
 document.getElementById("btnGenerate").onclick = generate;
+document.getElementById('btnCancel').onclick = () => STATE.controller?.abort();
 
 async function generate() {
   if (!STATE.selectedModel || STATE.generating || STATE.pendingImages > 0) return;
@@ -561,6 +730,12 @@ async function generate() {
   }
 
   STATE.generating = true;
+  const controller = new AbortController();
+  STATE.controller = controller;
+  document.getElementById('btnCancel').hidden = false;
+  document.getElementById('studioCanvas').setAttribute('aria-busy', 'true');
+  document.getElementById('studioEmpty').hidden = true;
+  document.getElementById('studioLog').open = true;
   const btn = document.getElementById("btnGenerate");
   btn.disabled = true;
   I18n.setMessage(btn, I18n.t("⏳ 生成中..."));
@@ -598,6 +773,7 @@ async function generate() {
       method: "POST",
       headers: { ...I18n.headers(), "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     if (!resp.ok) {
@@ -666,11 +842,21 @@ async function generate() {
     I18n.setMessage(document.getElementById("statusText"), I18n.t("完成 ({0}s)", {"0": (elapsed)}));
 
   } catch (e) {
-    appendLog(I18n.t("\n❌ 请求失败: {0}\n", {"0": (e.message)}));
-    dot.className = "status-dot status-error";
-    I18n.setMessage(document.getElementById("statusText"), I18n.t("失败"));
+    if (controller.signal.aborted) {
+      appendLog(`\n${I18n.t('请求已取消。')}\n`);
+      dot.className = 'status-dot status-idle';
+      I18n.setText('statusText', '已取消');
+    } else {
+      appendLog(I18n.t("\n❌ 请求失败: {0}\n", {"0": (e.message)}));
+      dot.className = "status-dot status-error";
+      I18n.setMessage(document.getElementById("statusText"), I18n.t("失败"));
+    }
   } finally {
     STATE.generating = false;
+    STATE.controller = null;
+    document.getElementById('btnCancel').hidden = true;
+    document.getElementById('studioCanvas').setAttribute('aria-busy', 'false');
+    document.getElementById('studioEmpty').hidden = document.getElementById('outputResult').children.length > 0;
     btn.disabled = STATE.pendingImages > 0;
     const meta = STATE.modelConfig;
     I18n.setMessage(btn, meta && meta.type === "image" ? I18n.t("🎨 生成图片") : I18n.t("🎬 生成视频"));
@@ -716,7 +902,20 @@ function renderResult(content) {
 (function() {
   const baseUrlInput = document.getElementById("baseUrl");
   const apiKeyInput = document.getElementById("apiKey");
-  baseUrlInput.value = window.location.origin;
+  if (!baseUrlInput.value) baseUrlInput.value = window.location.origin;
+  try {
+    if (!apiKeyInput.value) apiKeyInput.value = localStorage.getItem('flow2api.test.apiKey') || '';
+    baseUrlInput.value = localStorage.getItem('flow2api.test.baseUrl') || window.location.origin;
+  } catch (_) { /* Testing remains usable when browser storage is disabled. */ }
+  apiKeyInput.addEventListener('input', () => {
+    try {
+      if (apiKeyInput.value) localStorage.setItem('flow2api.test.apiKey', apiKeyInput.value);
+      else localStorage.removeItem('flow2api.test.apiKey');
+    } catch (_) { /* Optional persistence. */ }
+  });
+  baseUrlInput.addEventListener('change', () => {
+    try { localStorage.setItem('flow2api.test.baseUrl', baseUrlInput.value.trim()); } catch (_) { /* Optional persistence. */ }
+  });
   baseUrlInput.addEventListener("change", loadModels);
   apiKeyInput.addEventListener("change", loadModels);
   loadModels();
@@ -730,9 +929,11 @@ window.addEventListener('languagechange', () => {
     if (collapsed.has(title.dataset.category)) {
       title.classList.add('collapsed');
       title.nextElementSibling.classList.add('hidden');
+      title.setAttribute('aria-expanded', 'false');
     }
   });
   if (!STATE.selectedModel) return;
+  document.querySelectorAll('.image-preview-item img').forEach(image => { image.alt = I18n.t('参考图片'); });
   const meta = STATE.modelConfig;
   I18n.setMessage(document.getElementById('selectedModelInfo'), ALL_MODELS[STATE.selectedModel] || '');
   if (meta.supportsImages) {

@@ -1,6 +1,6 @@
 """Data models for Flow2API"""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt
 from typing import Optional, List, Union, Any, Literal
 from datetime import datetime
 
@@ -262,11 +262,22 @@ class ImageConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class VideoConfig(BaseModel):
+    """Flow2API video options; supported combinations depend on the model family."""
+
+    durationSeconds: Optional[StrictInt] = None
+    aspectRatio: Optional[str] = None
+    mode: Optional[str] = None  # Veo: t2v/i2v/r2v/extend; Omni: auto
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class GenerationConfigParam(BaseModel):
     """Gemini generationConfig parameters (for model name resolution)"""
 
     responseModalities: Optional[List[str]] = None  # ["IMAGE", "TEXT"]
     imageConfig: Optional[ImageConfig] = None
+    videoConfig: Optional[VideoConfig] = None
 
     model_config = ConfigDict(extra="allow")
 

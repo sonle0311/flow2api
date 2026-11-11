@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-i18n-page="manage" lang="zh-CN" class="h-full">
+<html data-i18n-page="manage" lang="zh-CN" class="h-full dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +8,7 @@
     <script src="/static/integration-recipes.js" defer></script>
     <script src="/static/integration.js" defer></script>
     <script src="/static/managed-browser.js" defer></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/instrument-utilities.css">
     <style>
         @keyframes slide-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         .animate-slide-up{animation:slide-up .3s ease-out}
@@ -37,20 +37,19 @@
         @media(max-width:480px){.managed-browser-content{padding:1rem}.managed-browser-actions{flex-direction:column}.managed-browser-actions button{width:100%}}
         .line-clamp-2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
     </style>
-    <script>
-        tailwind.config={theme:{extend:{colors:{border:"hsl(0 0% 89%)",input:"hsl(0 0% 89%)",ring:"hsl(0 0% 3.9%)",background:"hsl(0 0% 100%)",foreground:"hsl(0 0% 3.9%)",primary:{DEFAULT:"hsl(0 0% 9%)",foreground:"hsl(0 0% 98%)"},secondary:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 9%)"},muted:{DEFAULT:"hsl(0 0% 96.1%)",foreground:"hsl(0 0% 45.1%)"},destructive:{DEFAULT:"hsl(0 84.2% 60.2%)",foreground:"hsl(0 0% 98%)"}}}}}
-    </script>
+    <link rel="stylesheet" href="/static/instrument.css">
+    <script src="/static/instrument-shell.js" defer></script>
 </head>
-<body class="h-full bg-background text-foreground antialiased">
+<body class="h-full bg-background text-foreground antialiased instrument-app instrument-manage">
     <!-- 导航栏 -->
-    <header class="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
+    <header class="instrument-topbar">
         <div class="mx-auto flex h-14 max-w-7xl items-center px-6">
             <div class="mr-4 flex items-baseline gap-3">
-                <span class="font-bold text-xl">Flow2API</span>
+                <span class="instrument-wordmark">Flow2API</span><span id="instrumentBreadcrumb" class="instrument-breadcrumb"></span>
             </div>
             <div class="flex flex-1 items-center justify-end gap-3">
                 <select data-language-select aria-label="Language" class="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="zh-CN">中文</option><option value="en">English</option><option value="vi">Tiếng Việt</option></select>
-                <a href="https://github.com/TheSmallHanCat/flow2api" target="_blank" class="inline-flex items-center justify-center text-xs transition-colors hover:bg-accent hover:text-accent-foreground h-7 px-2.5" title="GitHub 仓库" data-i18n-title="GitHub 仓库">
+                <a href="https://github.com/TheSmallHanCat/flow2api" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center text-xs transition-colors hover:bg-accent hover:text-accent-foreground h-7 px-2.5" title="GitHub 仓库" data-i18n-title="GitHub 仓库">
                     <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v 3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                     </svg>
@@ -67,9 +66,10 @@
         </div>
     </header>
 
-    <main class="mx-auto max-w-7xl px-6 py-6">
+    <main class="instrument-main">
+        <div class="instrument-page-heading"><h1 id="instrumentPageTitle">Your accounts.</h1><p id="instrumentPageDescription">Manage sessions, generation access and concurrency for each account.</p></div>
         <!-- Tab 导航 -->
-        <div class="border-b border-border mb-6 overflow-x-auto">
+        <div class="instrument-legacy-tabs">
             <nav class="flex min-w-max space-x-8">
                 <button onclick="switchTab('tokens')" id="tabTokens" class="tab-btn border-b-2 border-primary text-sm font-medium py-3 px-1"><span data-i18n="Token 管理">Token 管理</span></button>
                 <button onclick="switchTab('settings')" id="tabSettings" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="系统配置">系统配置</span></button>
@@ -82,7 +82,7 @@
         <!-- Token 管理面板 -->
         <div id="panelTokens">
             <!-- 统计卡片 -->
-            <div class="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6">
+            <div class="instrument-stats">
                 <div class="rounded-lg border border-border bg-background p-4">
                     <p class="text-sm font-medium text-muted-foreground mb-2"><span data-i18n="Token 总数">Token 总数</span></p>
                     <h3 class="text-xl font-bold" id="statTotal">-</h3>
@@ -106,8 +106,8 @@
             </div>
 
             <!-- Token 列表 -->
-            <div class="rounded-lg border border-border bg-background">
-                <div class="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-border">
+            <div class="instrument-account-sheet">
+                <div class="instrument-account-toolbar flex flex-wrap items-center justify-between gap-4 p-4 border-b border-border">
                     <h3 class="text-lg font-semibold"><span data-i18n="Token 列表">Token 列表</span></h3>
                     <div class="flex flex-wrap items-center gap-3">
                         <!-- 登录态自动校验开关 -->
@@ -115,7 +115,7 @@
                             <span class="text-xs text-muted-foreground"><span data-i18n="自动校验登录态">自动校验登录态</span></span>
                             <div class="relative inline-flex items-center group">
                                 <label class="inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" id="atAutoRefreshToggle" onchange="toggleATAutoRefresh()" class="sr-only peer">
+                                    <input type="checkbox" id="atAutoRefreshToggle" aria-label="自动校验登录态" data-i18n-aria-label="自动校验登录态" onchange="toggleATAutoRefresh()" class="sr-only peer">
                                     <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                                 </label>
                                 <!-- 悬浮提示 -->
@@ -413,7 +413,7 @@
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="YesCaptcha API密钥">YesCaptcha API密钥</span></label>
                                 <input id="cfgYescaptchaApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入YesCaptcha API密钥" data-i18n-placeholder="请输入YesCaptcha API密钥">
-                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码，留空则不使用验证码 ·">用于自动获取reCAPTCHA验证码，留空则不使用验证码 ·</span> <a href="https://yescaptcha.com/i/13Xd8K" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
+                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码，留空则不使用验证码 ·">用于自动获取reCAPTCHA验证码，留空则不使用验证码 ·</span> <a href="https://yescaptcha.com/i/13Xd8K" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
                             </div>
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="YesCaptcha API地址">YesCaptcha API地址</span></label>
@@ -437,7 +437,7 @@
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="Captcha.run API密钥">Captcha.run API密钥</span></label>
                                 <input id="cfgCaptcharunApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入Captcha.run API密钥" data-i18n-placeholder="请输入Captcha.run API密钥">
-                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码 ·">用于自动获取reCAPTCHA验证码 ·</span> <a href="https://captcha.run/sso?inviter=36179602-dbd1-4227-8ec8-98f8c0170c59" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
+                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码 ·">用于自动获取reCAPTCHA验证码 ·</span> <a href="https://captcha.run/sso?inviter=36179602-dbd1-4227-8ec8-98f8c0170c59" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
                             </div>
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="Captcha.run API地址">Captcha.run API地址</span></label>
@@ -451,7 +451,7 @@
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="2Captcha API密钥">2Captcha API密钥</span></label>
                                 <input id="cfgTwocaptchaApiKey" type="password" autocomplete="off" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入2Captcha API密钥" data-i18n-placeholder="请输入2Captcha API密钥">
-                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于获取reCAPTCHA v3 Enterprise验证码 ·">用于获取reCAPTCHA v3 Enterprise验证码 ·</span> <a href="https://2captcha.com/auth/register/?from=24953866" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
+                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于获取reCAPTCHA v3 Enterprise验证码 ·">用于获取reCAPTCHA v3 Enterprise验证码 ·</span> <a href="https://2captcha.com/auth/register/?from=24953866" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
                             </div>
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="2Captcha API地址">2Captcha API地址</span></label>
@@ -493,7 +493,7 @@
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="CapSolver API密钥">CapSolver API密钥</span></label>
                                 <input id="cfgCapsolverApiKey" type="text" class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="请输入CapSolver API密钥" data-i18n-placeholder="请输入CapSolver API密钥">
-                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码 ·">用于自动获取reCAPTCHA验证码 ·</span> <a href="https://dashboard.capsolver.com/passport/register?inviteCode=z95yVf1HvixI" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
+                                <p class="text-xs text-muted-foreground mt-1"><span data-i18n="用于自动获取reCAPTCHA验证码 ·">用于自动获取reCAPTCHA验证码 ·</span> <a href="https://dashboard.capsolver.com/passport/register?inviteCode=z95yVf1HvixI" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="text-blue-600 hover:underline"><span data-i18n="获取 API Key">获取 API Key</span></a></p>
                             </div>
                             <div>
                                 <label class="text-sm font-medium mb-2 block"><span data-i18n="CapSolver API地址">CapSolver API地址</span></label>
@@ -655,7 +655,7 @@
 
         <!-- 请求日志面板 -->
         <div id="panelLogs" class="hidden">
-            <div class="rounded-lg border border-border bg-background">
+            <div class="instrument-log-sheet">
                 <div class="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-border">
                     <h3 class="text-lg font-semibold"><span data-i18n="请求日志">请求日志</span></h3>
                     <div class="flex gap-2">
@@ -716,17 +716,14 @@
         </div>
 
         <section id="panelIntegration" class="hidden" aria-labelledby="integrationHeading">
-            <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div class="sr-only">
                 <div class="max-w-2xl">
-                    <h2 id="integrationHeading" class="text-xl font-semibold" data-i18n="integration.title">AI integration guide</h2>
+                    <h2 id="integrationHeading" class="sr-only" data-i18n="integration.title">AI integration guide</h2>
                     <p class="mt-2 text-sm leading-6 text-muted-foreground" data-i18n="integration.description">Copy these instructions into your coding agent to integrate Flow2API into your tool.</p>
                 </div>
-                <button id="copyIntegrationGuide" type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                    <svg class="h-4 w-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
-                    <span data-i18n="integration.copy">Copy instructions</span>
-                </button>
+
             </div>
-            <div class="mt-7 grid gap-5 border-y border-border py-6 lg:grid-cols-2 lg:gap-10">
+            <div class="instrument-integration-connection grid gap-5 border-y border-border lg:grid-cols-2 lg:gap-10">
                 <div class="min-w-0 space-y-2">
                     <label for="integrationServerUrl" class="block text-sm font-medium" data-i18n="integration.serverLabel">Server URL</label>
                     <input id="integrationServerUrl" type="url" spellcheck="false" autocomplete="off" aria-describedby="integrationServerHelp integrationUrlError" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
@@ -743,10 +740,62 @@
                 <p id="integrationReferenceStatus" class="text-sm text-muted-foreground" role="status" aria-live="polite"></p>
                 <button id="reloadIntegrationReference" type="button" class="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50" data-i18n="integration.reload">Reload reference</button>
             </div>
+<div class="instrument-integration-workbench">
+            <div class="instrument-integration-builder space-y-4">
+                <h3 class="text-base font-semibold" data-i18n="integration.parametersTitle">Choose a model and parameters</h3>
+                <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="integration.parametersHelp">Use a simple model name and set duration, aspect ratio and mode separately. The preview only builds a request; it does not generate media.</p>
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div class="min-w-0 space-y-2">
+                        <label for="integrationModel" class="block text-sm font-medium" data-i18n="integration.modelLabel">Model</label>
+                        <select id="integrationModel" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"></select>
+                    </div>
+
+                    <div id="integrationModeField" class="min-w-0 space-y-2">
+                        <label for="integrationMode" class="block text-sm font-medium" data-i18n="integration.modeLabel">Mode</label>
+                        <select id="integrationMode" disabled aria-describedby="integrationDefaultsHelp" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"></select>
+                    </div>
+                    <div id="integrationDurationField" class="min-w-0 space-y-2">
+                        <label for="integrationDuration" class="block text-sm font-medium" data-i18n="integration.durationLabel">Duration (seconds)</label>
+                        <select id="integrationDuration" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"></select>
+                    </div>
+                    <div class="min-w-0 space-y-2">
+                        <label for="integrationAspect" class="block text-sm font-medium" data-i18n="integration.aspectLabel">Aspect ratio</label>
+                        <select id="integrationAspect" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"></select>
+                    </div>
+                    <div id="integrationImageSizeField" class="min-w-0 space-y-2" hidden>
+                        <label for="integrationImageSize" class="block text-sm font-medium" data-i18n="integration.imageSizeLabel">Image resolution</label>
+                        <select id="integrationImageSize" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"></select>
+                    </div>
+                </div>
+                <p id="integrationDefaultsHelp" class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.defaultsHelp">Video defaults: 8 seconds, 16:9, t2v for Veo and auto for Omni. I2V defaults to 4 seconds. Omni auto accepts text or reference images.</p>
+                <p class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.combinationsHelp">Choices follow registered variants. Not every duration, mode and aspect ratio can be combined. Unsupported combinations return a validation error.</p>
+                <p id="integrationSelectedLimits" class="text-xs leading-5 text-muted-foreground"></p>
+                <p id="integrationExtensionHelp" class="text-xs leading-5 text-muted-foreground" hidden data-i18n="integration.extensionHelp">Extension needs a Flow mediaGenerationId in extend://. Use OpenAI; Gemini does not forward an extension source ID.</p>
+            </div>
+<div class="instrument-integration-request">
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <label for="integrationRequest" class="text-sm font-medium" data-i18n="integration.requestTitle">Selected request</label>
+                    <div class="min-w-0 space-y-2">
+                        <label for="integrationProtocol" class="block text-sm font-medium" data-i18n="integration.protocolLabel">API format</label>
+                        <select id="integrationProtocol" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
+                    </div>
+            </div>
+<div class="instrument-code-actions">                <button id="copyIntegrationRequest" type="button" disabled class="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.copyRequest">Copy request JSON</button>                <button id="copyIntegrationGuide" type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <svg class="h-4 w-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+                    <span data-i18n="integration.copy">Copy instructions</span>
+                </button></div>
+            <code id="integrationRequestEndpoint" class="mt-3 block break-all text-xs"></code>
+            <textarea id="integrationRequest" readonly spellcheck="false" rows="15" class="mt-3 block w-full resize-y rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm"></textarea>
+            <p id="integrationRequestCopyStatus" class="mt-2 min-h-5 text-sm text-muted-foreground" role="status" aria-live="polite"></p>
+            <p class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.sdkHelp">With the OpenAI SDK, pass extra_body={"generationConfig": {...}}. The SDK merges extra_body into the JSON body; raw HTTP uses generationConfig at the top level.</p>
+
+</div></div>
+            <details id="integrationAdvanced" class="mt-7 border-t border-border py-4">
+                <summary class="cursor-pointer text-sm font-semibold" data-i18n="integration.advancedTitle">Advanced: full guide, endpoints and compatibility IDs</summary>
             <div class="mt-4 space-y-3">
                 <label for="integrationReferenceSearch" class="block text-sm font-medium" data-i18n="integration.search">Filter endpoints and models</label>
                 <input id="integrationReferenceSearch" type="search" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" autocomplete="off">
-                <details class="border-b border-border py-3" open>
+                <details class="border-b border-border py-3">
                     <summary class="cursor-pointer text-sm font-semibold"><span data-i18n="integration.endpoints">All endpoints</span> <span id="integrationEndpointCount"></span></summary>
                     <div class="mt-3 max-h-80 overflow-auto rounded-md border border-border">
                         <table class="w-full text-left text-xs"><thead class="bg-muted"><tr><th class="p-3">HTTP</th><th class="p-3">Endpoint</th><th class="p-3" data-i18n="integration.auth">Authentication</th></tr></thead><tbody id="integrationEndpointRows"></tbody></table>
@@ -771,12 +820,13 @@
                 <button id="selectIntegrationGuide" type="button" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.manualCopy">Select instructions</button>
             </div>
             <textarea id="integrationGuide" readonly spellcheck="false" rows="24" class="mt-3 block w-full resize-y rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:p-5 sm:text-sm"></textarea>
+            </details>
             <p id="integrationCopyStatus" class="mt-3 min-h-6 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true"></p>
         </section>
 
         <!-- 页脚 -->
-        <footer class="mt-12 pt-6 border-t border-border text-center text-xs text-muted-foreground">
-            <p>© 2025 <a href="https://linux.do/u/thesmallhancat/summary" target="_blank" class="no-underline hover:underline" style="color: inherit;">TheSmallHanCat</a> && <a href="https://linux.do/u/tibbar/summary" target="_blank" class="no-underline hover:underline" style="color: inherit;">Tibbar</a>. All rights reserved.</p>
+        <footer class="instrument-footer text-muted-foreground">
+            <p>© 2025 <a href="https://linux.do/u/thesmallhancat/summary" target="_blank" rel="noopener noreferrer" class="no-underline hover:underline" style="color: inherit;">TheSmallHanCat</a> && <a href="https://linux.do/u/tibbar/summary" target="_blank" rel="noopener noreferrer" class="no-underline hover:underline" style="color: inherit;">Tibbar</a>. All rights reserved.</p>
         </footer>
     </main>
 
@@ -1056,7 +1106,7 @@
             </header>
             <p id="managedBrowserAccount"></p>
             <p id="managedBrowserDescription" class="managed-browser-description" data-i18n="普通 Chrome 或 Edge 将在运行 Flow2API 的电脑上打开。请登录此账号的 Google/Flow，然后关闭此账号专用配置的所有浏览器窗口。系统会在所有窗口关闭后验证身份并同步 Cookie。每个账号使用独立的持久化配置，不影响验证码方式。">普通 Chrome 或 Edge 将在运行 Flow2API 的电脑上打开。请登录此账号的 Google/Flow，然后关闭此账号专用配置的所有浏览器窗口。系统会在所有窗口关闭后验证身份并同步 Cookie。每个账号使用独立的持久化配置，不影响验证码方式。</p>
-            <p id="managedBrowserDesktop" hidden><a id="managedBrowserDesktopLink" href="/browser-desktop/" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2" data-i18n="打开 VPS 桌面">打开 VPS 桌面</a><br><span data-i18n="在远程桌面中完成 Google 登录，然后关闭该账号的 Chrome 窗口以同步。">在远程桌面中完成 Google 登录，然后关闭该账号的 Chrome 窗口以同步。</span></p>
+            <p id="managedBrowserDesktop" hidden><a id="managedBrowserDesktopLink" href="/browser-desktop/" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="underline underline-offset-2" data-i18n="打开 VPS 桌面">打开 VPS 桌面</a><br><span data-i18n="在远程桌面中完成 Google 登录，然后关闭该账号的 Chrome 窗口以同步。">在远程桌面中完成 Google 登录，然后关闭该账号的 Chrome 窗口以同步。</span></p>
             <div class="managed-browser-status" aria-live="polite" aria-atomic="true">
                 <p><strong id="managedBrowserStatus"></strong></p>
                 <p><span data-i18n="上次浏览器同步：">上次浏览器同步：</span> <span id="managedBrowserLastSync"></span></p>
@@ -1065,7 +1115,7 @@
             </div>
             <p data-i18n="后台同步需要启用全局会话自动检查及此账号的自动刷新。登录成功会恢复此账号；后台同步不会自动启用已停用的账号。">后台同步需要启用全局会话自动检查及此账号的自动刷新。登录成功会恢复此账号；后台同步不会自动启用已停用的账号。</p>
             <p data-i18n="停止同步会关闭窗口并保留已保存的浏览器配置。Google 要求验证时仍需手动登录。">停止同步会关闭窗口并保留已保存的浏览器配置。Google 要求验证时仍需手动登录。</p>
-            <p><a id="managedBrowserHelp" href="https://support.google.com/accounts/answer/7675428?hl=en" target="_blank" rel="noopener noreferrer" class="underline underline-offset-2" data-i18n="Google 浏览器登录帮助">Google 浏览器登录帮助</a></p>
+            <p><a id="managedBrowserHelp" href="https://support.google.com/accounts/answer/7675428?hl=en" target="_blank" rel="noopener noreferrer" rel="noopener noreferrer" class="underline underline-offset-2" data-i18n="Google 浏览器登录帮助">Google 浏览器登录帮助</a></p>
             <div class="managed-browser-actions">
                 <button id="managedBrowserLogin" type="button" data-i18n="打开浏览器登录">打开浏览器登录</button>
                 <button id="managedBrowserSync" type="button" data-i18n="立即同步 Cookie">立即同步 Cookie</button>
@@ -1382,7 +1432,7 @@
                 return `<p class="text-xs"><span class="font-medium">${label}:</span> <span class="text-muted-foreground"><span data-i18n="data URL（长度">data URL（长度</span> ${String(normalizedUrl).length}）</span></p>`;
             }
             const safeUrl=escapeLogHtml(normalizedUrl);
-            return `<p class="text-xs"><span class="font-medium">${label}:</span> <a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline break-all">${safeUrl}</a></p>`;
+            return `<p class="text-xs"><span class="font-medium">${label}:</span> <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline break-all">${safeUrl}</a></p>`;
         }
 
         function isVideoUrl(url){
@@ -1497,7 +1547,14 @@
         }
 
         (()=>{refreshTokens();loadATAutoRefreshConfig()})();
-        if (window.location.hash === '#integration') switchTab('integration');
+        function selectPanelFromLocation() {
+            const panel = window.location.hash.slice(1);
+            if (!['tokens', 'settings', 'logs', 'integration'].includes(panel)) return;
+            const target = document.getElementById('panel' + panel[0].toUpperCase() + panel.slice(1));
+            if (target.classList.contains('hidden')) switchTab(panel);
+        }
+        selectPanelFromLocation();
+        window.addEventListener('hashchange', selectPanelFromLocation);
 
 
         window.addEventListener('languagechange',()=>{
