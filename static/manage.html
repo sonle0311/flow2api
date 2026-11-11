@@ -740,7 +740,33 @@
                 <p id="integrationReferenceStatus" class="text-sm text-muted-foreground" role="status" aria-live="polite"></p>
                 <button id="reloadIntegrationReference" type="button" class="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50" data-i18n="integration.reload">Reload reference</button>
             </div>
-<div class="instrument-integration-workbench">
+            <div class="instrument-agent-handoff">
+                <div class="instrument-agent-handoff-header">
+                    <div>
+                        <h3 data-i18n="integration.agentPromptTitle">Let your coding agent build the integration</h3>
+                        <p data-i18n="integration.agentPromptHelp">Copy this prompt, paste it into the coding agent in your app project, and let it implement the connection, model controls and media results.</p>
+                    </div>
+                <button id="copyIntegrationGuide" type="button" disabled class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <svg class="h-4 w-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+                    <span data-i18n="integration.copy">Copy prompt for coding agent</span>
+                </button>
+                </div>
+                <ol class="instrument-agent-steps">
+                    <li data-i18n="integration.stepCopy">1. Copy the complete prompt</li>
+                    <li data-i18n="integration.stepPaste">2. Paste it into your app's coding agent</li>
+                    <li data-i18n="integration.stepConfigure">3. Set the API key as the agent instructs</li>
+                </ol>
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <label for="integrationGuide" class="text-sm font-medium" data-i18n="integration.previewLabel">Instructions for your agent</label>
+                <button id="selectIntegrationGuide" type="button" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.manualCopy">Select instructions</button>
+            </div>
+            <textarea id="integrationGuide" readonly spellcheck="false" rows="16" class="mt-3 block w-full resize-y rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:p-5 sm:text-sm"></textarea>
+            <p id="integrationCopyStatus" class="mt-3 min-h-6 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true"></p>
+                <p class="text-xs leading-5 text-muted-foreground" data-i18n="integration.promptScope">Includes every model family, separate parameters, image and video workflows, streaming, error handling and a test checklist. No real API key is copied.</p>
+            </div>
+            <details id="integrationRequestExamples" class="instrument-integration-examples mt-7 border-t border-border py-4">
+                <summary class="cursor-pointer text-sm font-semibold" data-i18n="integration.examplesTitle">Reference: build an example request</summary>
+                <div class="instrument-integration-workbench">
             <div class="instrument-integration-builder space-y-4">
                 <h3 class="text-base font-semibold" data-i18n="integration.parametersTitle">Choose a model and parameters</h3>
                 <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="integration.parametersHelp">Use a simple model name and set duration, aspect ratio and mode separately. The preview only builds a request; it does not generate media.</p>
@@ -772,7 +798,7 @@
                 <p id="integrationSelectedLimits" class="text-xs leading-5 text-muted-foreground"></p>
                 <p id="integrationExtensionHelp" class="text-xs leading-5 text-muted-foreground" hidden data-i18n="integration.extensionHelp">Extension needs a Flow mediaGenerationId in extend://. Use OpenAI; Gemini does not forward an extension source ID.</p>
             </div>
-<div class="instrument-integration-request">
+                    <div class="instrument-integration-request">
             <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
                 <label for="integrationRequest" class="text-sm font-medium" data-i18n="integration.requestTitle">Selected request</label>
                     <div class="min-w-0 space-y-2">
@@ -780,18 +806,19 @@
                         <select id="integrationProtocol" disabled class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
                     </div>
             </div>
-<div class="instrument-code-actions">                <button id="copyIntegrationRequest" type="button" disabled class="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.copyRequest">Copy request JSON</button>                <button id="copyIntegrationGuide" type="button" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                    <svg class="h-4 w-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
-                    <span data-i18n="integration.copy">Copy instructions</span>
-                </button></div>
+                <div class="instrument-code-actions">
+                    <button id="copyIntegrationRequest" type="button" disabled class="rounded-md border border-input px-3 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.copyRequest">Copy request JSON</button>
+                </div>
             <code id="integrationRequestEndpoint" class="mt-3 block break-all text-xs"></code>
             <textarea id="integrationRequest" readonly spellcheck="false" rows="15" class="mt-3 block w-full resize-y rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-sm"></textarea>
             <p id="integrationRequestCopyStatus" class="mt-2 min-h-5 text-sm text-muted-foreground" role="status" aria-live="polite"></p>
             <p class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.sdkHelp">With the OpenAI SDK, pass extra_body={"generationConfig": {...}}. The SDK merges extra_body into the JSON body; raw HTTP uses generationConfig at the top level.</p>
 
-</div></div>
+                    </div>
+                </div>
+            </details>
             <details id="integrationAdvanced" class="mt-7 border-t border-border py-4">
-                <summary class="cursor-pointer text-sm font-semibold" data-i18n="integration.advancedTitle">Advanced: full guide, endpoints and compatibility IDs</summary>
+                <summary class="cursor-pointer text-sm font-semibold" data-i18n="integration.advancedTitle">Advanced: endpoint directory and compatibility IDs</summary>
             <div class="mt-4 space-y-3">
                 <label for="integrationReferenceSearch" class="block text-sm font-medium" data-i18n="integration.search">Filter endpoints and models</label>
                 <input id="integrationReferenceSearch" type="search" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" autocomplete="off">
@@ -815,13 +842,9 @@
                     </div>
                 </details>
             </div>
-            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <label for="integrationGuide" class="text-sm font-medium" data-i18n="integration.previewLabel">Instructions for your agent</label>
-                <button id="selectIntegrationGuide" type="button" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2 disabled:opacity-50" data-i18n="integration.manualCopy">Select instructions</button>
-            </div>
-            <textarea id="integrationGuide" readonly spellcheck="false" rows="24" class="mt-3 block w-full resize-y rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:p-5 sm:text-sm"></textarea>
+
             </details>
-            <p id="integrationCopyStatus" class="mt-3 min-h-6 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true"></p>
+
         </section>
 
         <!-- 页脚 -->

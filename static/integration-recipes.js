@@ -64,12 +64,13 @@
     const body = (model, content, generationConfig = model === imageModel ? { imageConfig: { aspectRatio: '16:9', imageSize: '1K' } } : null) => ({ model, messages: [{ role: 'user', content }], stream: false, ...(generationConfig ? { generationConfig } : {}) });
     const videoBody = (model, content, durationSeconds, aspectRatio, mode) => body(model, content, { videoConfig: { durationSeconds, aspectRatio, mode } });
 
-    function build(root, locale) {
+    function build(root, locale, recipeOptions = {}) {
         const p = prose[locale] || prose.en;
         const origin = String(root || 'http://localhost:8000');
-        const parts = ['\n## ' + p.title + '\n\n' + p.intro];
+        const parts = ['\n## ' + p.title + '\n\n' + (recipeOptions.intro || p.intro)];
         function section(key, snippets) {
-            parts.push('\n### ' + p[key][0] + '\n\n' + p[key].slice(1).join('\n\n') + '\n' + (snippets || ''));
+            const copy = recipeOptions.copy?.[key] || p[key];
+            parts.push('\n### ' + copy[0] + '\n\n' + copy.slice(1).join('\n\n') + '\n' + (snippets || ''));
         }
         section('setup', fence('bash', 'export FLOW2API_BASE_URL=' + "'" + origin.replace(/'/g, "'\\''") + "'" + '\nexport FLOW2API_API_KEY="REPLACE_WITH_SERVER_API_KEY"\ncurl --fail-with-body "$FLOW2API_BASE_URL/v1/models" -H "Authorization: Bearer $FLOW2API_API_KEY"\ncurl --fail-with-body "$FLOW2API_BASE_URL/v1/models/aliases" -H "Authorization: Bearer $FLOW2API_API_KEY"\ncurl --fail-with-body "$FLOW2API_BASE_URL/v1beta/models" -H "x-goog-api-key: $FLOW2API_API_KEY"') + fence('powershell', '$env:FLOW2API_BASE_URL = ' + "'" + origin.replace(/'/g, "''") + "'" + '\n$env:FLOW2API_API_KEY = "REPLACE_WITH_SERVER_API_KEY"\n$headers = @{ Authorization = "Bearer $env:FLOW2API_API_KEY" }\nInvoke-RestMethod "$env:FLOW2API_BASE_URL/v1/models" -Headers $headers\nInvoke-RestMethod "$env:FLOW2API_BASE_URL/v1/models/aliases" -Headers $headers'));
         section('image', json(body(imageModel, 'Create a cinematic photograph of a red bicycle beside a lake at sunrise.')) + fence('bash', 'curl --fail-with-body --max-time 3600 "$FLOW2API_BASE_URL/v1/chat/completions" \\\n  -H "Authorization: Bearer $FLOW2API_API_KEY" \\\n  -H "Content-Type: application/json" --data-binary @request.json') + fence('powershell', 'curl.exe --fail-with-body --max-time 3600 "$env:FLOW2API_BASE_URL/v1/chat/completions" -H "Authorization: Bearer $env:FLOW2API_API_KEY" -H "Content-Type: application/json" --data-binary "@request.json"'));
@@ -79,7 +80,7 @@
         const last = 'https://YOUR_REACHABLE_HOST/last.png';
         section('video', '**T2V**\n' + json(videoBody('veo-3.1-fast', 'A red bicycle rolls slowly beside a lake, cinematic tracking shot.', 8, '16:9', 't2v')) + '**I2V: 1 image**\n' + json(videoBody('veo-3.1-lite', [textPart('Slowly orbit the subject.'), imagePart(frame)], 4, '16:9', 'i2v')) + '**I2V: first + last**\n' + json(videoBody('veo-3.1-quality', [textPart('Create a smooth transition from the first frame to the last frame.'), imagePart(frame), imagePart(last)], 6, '9:16', 'i2v')) + '**R2V: 1–3 images**\n' + json(videoBody('veo-3.1-fast', [textPart('Use these subjects in a coherent cinematic scene.'), imagePart(frame), imagePart(last)], 8, '16:9', 'r2v')) + '**Omni: 0–3 images**\n' + json(videoBody('omni-1.2-flash', [textPart('Animate this scene with a slow camera pan.'), imagePart(frame)], 8, '16:9', 'auto')) + '**Omni 1.1**\n' + json(videoBody('omni-1.1-flash', 'A cinematic mountain landscape at dawn.', 4, '9:16', 'auto')));
         section('extend', json(videoBody('veo-3.1-fast', [textPart('Continue the movement naturally, maintaining the same scene.'), imagePart('extend://REPLACE_WITH_FLOW_MEDIA_GENERATION_ID')], 8, '16:9', 'extend')));
-        section('upscale', json(body('veo_3_1_t2v_4s_1080p', 'A cinematic mountain landscape at dawn.')));
+        if (!recipeOptions.skipUpscale) section('upscale', json(body('veo_3_1_t2v_4s_1080p', 'A cinematic mountain landscape at dawn.')));
         section('gemini', json({ contents: [{ role: 'user', parts: [{ text: 'Paint the subject as a watercolor portrait.' }, { fileData: { mimeType: 'image/png', fileUri: frame } }] }], generationConfig: { imageConfig: { aspectRatio: '1:1', imageSize: '2K' } } }) + fence('json', '{"inlineData":{"mimeType":"image/png","data":"REPLACE_WITH_ACTUAL_BASE64_BYTES"}}') + fence('bash', 'curl --fail-with-body --max-time 3600 "$FLOW2API_BASE_URL/v1beta/models/gemini-3.1-flash-image:generateContent" \\\n  -H "x-goog-api-key: $FLOW2API_API_KEY" \\\n  -H "Content-Type: application/json" --data-binary @gemini.json\n# SSE: use :streamGenerateContent?alt=sse and curl -N') + fence('powershell', 'curl.exe --fail-with-body --max-time 3600 "$env:FLOW2API_BASE_URL/v1beta/models/gemini-3.1-flash-image:generateContent" -H "x-goog-api-key: $env:FLOW2API_API_KEY" -H "Content-Type: application/json" --data-binary "@gemini.json"'));
         section('geminiVideo', 'POST ' + origin + '/v1beta/models/omni-1.2-flash:generateContent\n' + json({ contents: [{ role: 'user', parts: [{ text: 'A slow cinematic flight over a mountain village.' }] }], generationConfig: { videoConfig: { durationSeconds: 8, aspectRatio: '16:9', mode: 'auto' } } }));
         section('js', fence('javascript', jsExample(origin)));
@@ -203,5 +204,219 @@ print(result["choices"][0]["message"]["content"])
 # print(asyncio.run(generate()))`;
     }
 
-    window.Flow2APIIntegrationRecipes = Object.freeze({ build });
+    const agentProse = {
+        en: {
+            title: 'Implement Flow2API in my existing application',
+            mission: 'You are the coding agent working in my existing application. Inspect the current repository, identify its stack, provider architecture, generation workflows, configuration conventions and test commands, then actually implement a working Flow2API integration that fits this app. Do not stop at a plan, an explanation, a server setup guide or a standalone request example. Make the code changes and verify them. Preserve existing providers and unrelated behavior; choose reasonable implementation details from the repository and ask only for an essential missing product decision.',
+            boundary: 'This handoff authorizes application integration work. Use the supplied service root and the generation API key placeholder below. Never read, print, copy or embed actual secret values from this machine, environment files, browser storage or server/account data. Add documented variable names and placeholders to the app’s existing secure configuration mechanism. Keep the API key on the application backend and redact it from logs; expose only nonsecret settings in browser UI. Do not deploy or operate the Flow2API server as part of this task.',
+            stepsTitle: 'Implementation deliverables',
+            steps: [
+                'Inspect the app before editing: find existing OpenAI/Gemini adapters, provider registration, server/client boundaries, upload handling, result components, validation, error handling and tests. Reuse these extension points and the app’s language/framework instead of introducing a parallel demo.',
+                'Implement and register a Flow2API provider/adapter. Support image generation, image editing and the video capabilities below through the app’s existing generation interface. If the app lacks a relevant surface, add the smallest coherent generation workflow in its current UI. Use server-side FLOW2API_BASE_URL and FLOW2API_API_KEY configuration with startup validation, example placeholders and a connection/discovery check using GET only.',
+                'Implement configuration UI with all eight clean model families, clear image/video grouping, prompt and attachment controls, and separate typed aspect ratio, image size, video duration and mode selectors. Derive dependent choices from the exact rows below. Validate reference counts, frame order and extension source IDs before submission; hide or disable invalid combinations and explain validation errors. Do not ask users to assemble long concrete model IDs or edit JSON.',
+                'Implement request mapping, long-running loading/progress states, completion and error states, safe image/video result rendering, download/open behavior and application cancellation controls. Keep progress separate from final media, preserve useful source media IDs for extension, and explain that closing the client request does not guarantee upstream cancellation.',
+                'Add meaningful mock/fixture tests for provider registration, secure configuration, payload mapping, dependent selector validation, attachment handling, response/SSE parsing, safe rendering and error states. Run the relevant existing checks and new tests. Do not submit paid image/video generation during integration tests; mock HTTP/SSE responses. Live generation requires a separate explicit user request.',
+                'Finish with a concise report of files changed, setup variables, supported workflows, checks run and any verified limitations. Include a small usage walkthrough in the app’s normal documentation. Continue until the implementation and checks are complete; report a concrete blocker if one truly prevents completion.'
+            ],
+            connectionTitle: 'Connection and protocol contract',
+            connection: 'ROOT includes any reverse-proxy prefix and excludes /v1. Preserve this prefix when joining every route. Prefer OpenAI-compatible POST /v1/chat/completions with Authorization: Bearer <generation API key>; an OpenAI SDK base_url is ROOT + /v1. Gemini-compatible POST /v1beta/models/{family}:generateContent or :streamGenerateContent uses x-goog-api-key and the same generationConfig. Discover with GET /v1/models, /v1/models/aliases or /v1beta/models using generation credentials. Discovery may fail independently of generation: show a useful connection error and allow explicit supported family selection. Availability can still depend on upstream account access. This adapter generates media; do not route normal chat, tools, embeddings, Responses or OpenAI Images methods to it.',
+            modelsTitle: 'Model families and exact selectable combinations',
+            models: 'Use the clean family as model and send options separately. These compact tables are derived from the supplied model_parameters registry snapshot, not from independent value lists. Every combination within one row is registered; combinations across rows are not implied. Keep these correlations when implementing dependent selectors and validation. Unspecified reference maxima mean the registry does not declare a ceiling, not an unlimited upstream guarantee. The literal local min annotation reports a weaker local check; keep the advertised R2V minimum in UI.',
+            typesTitle: 'Typed parameters',
+            types: 'Image: generationConfig.imageConfig.aspectRatio is a string; imageSize is a string enum (1K, 2K, 4K where listed). Video: generationConfig.videoConfig.durationSeconds is an integer, aspectRatio is a string and mode is a string enum (t2v, i2v, r2v, auto, extend where listed). Do not send imageConfig to a video family or videoConfig to an image family. Canonical videoConfig accepts only durationSeconds/aspectRatio/mode. In the OpenAI SDK, use extra_body={"generationConfig": ...}; the SDK merges it into the outgoing body. Unsupported video tuples return HTTP 400; malformed typed bodies return HTTP 422. Present server validation errors and preserve the user’s input; never silently coerce a request to a different mode, duration or family.',
+            imageHeaders: ['Image family', 'aspectRatio', 'imageSize', 'Reference images'],
+            videoHeaders: ['Video family', 'mode', 'aspectRatio', 'durationSeconds (integer)', 'Reference images'],
+            defaultsTitle: 'Registered defaults',
+            defaults: 'Apply the defaults below, changing dependent options when mode changes. Image aliases without an explicit aspect can infer shape from the first reference image, otherwise they default to 16:9; send explicit selections for a predictable UI. Explicit concrete/legacy model IDs retain their configured behavior. The current clean video families do not expose arbitrary output resolution or standalone video upscaling.',
+            inputsTitle: 'Inputs, outputs and operational behavior of the client',
+            inputs: 'Send a nonempty prompt. OpenAI attachments are message content parts with type=image_url and image_url.url containing a server-reachable HTTPS URL or a data:image/...;base64,... URI with actual bytes; never send a client filesystem path. Convert local files in the app and validate MIME type/size. Gemini uses fileData.fileUri or inlineData {mimeType,data}, with raw base64 in inlineData.data. Only the last OpenAI message supplies the main prompt/direct images and the last Gemini user content is used. I2V accepts 1–2 ordered first/last frames; R2V uses subject/style references, not frame interpolation. Omni auto chooses the text/reference path from 0–3 images. T2V takes no images. Extension takes an existing Flow mediaGenerationId in an OpenAI image_url marker extend://ID; no arbitrary video upload/MP4 URL or Gemini extension is supported. Keep data-media-id from streaming output when available; a normal nonstream response has no structured source ID, and there is no public media-ID lookup endpoint. Disable extension until a valid retained source ID is available.',
+            runtime: 'OpenAI nonstream results use choices[0].message.content containing Markdown images or a video HTML wrapper (sometimes fenced), not an Images data array. SSE carries delta.reasoning_content progress, delta.content final media and [DONE]; buffer UTF-8 and SSE frame boundaries across network chunks, handle CRLF and final partial frames, and detect missing completion, empty output and in-stream errors even with HTTP 200. Gemini uses candidates[].content.parts inlineData/fileData and text progress. Parse media destinations and create safe img/video elements with controls; never execute returned HTML with innerHTML. Validate URL schemes/origins and bounded image data URIs; handle relative cache URLs, unreachable localhost, expiring links and downloads according to the app’s policy.',
+            reliability: 'Use long generation timeouts (examples: 3600 seconds; server defaults are commonly 300 image/1500 video seconds), coordinate app/proxy timeouts and avoid SSE buffering. Handle 401 authentication, 400/422 validation, 403 access, 429 rate limits and 5xx upstream/unavailable failures using actual error payloads ({detail:...}, OpenAI error, Gemini error). Surface actionable errors without keys. No public job polling, upstream cancellation or idempotency-key guarantee is provided. Disable automatic generation POST retries, including SDK retries; a timeout/disconnect can leave paid work running. Do not blindly retry POST or promise that a retry is free/deduplicated. Bounded GET discovery retries are suitable; let users inspect state before deliberately submitting again.',
+            acceptanceTitle: 'Acceptance criteria',
+            acceptance: 'The app exposes a usable Flow2API provider, secure configuration and a visible generation workflow; all eight family names are supported independently of the example currently shown in this guide; separate controls admit only registered tuples and valid references; final media and progress/errors render correctly; secrets stay server-side; mocked success, validation/auth failure, fragmented SSE, in-stream error and cancellation/timeout behavior pass relevant checks. Report any application-specific limitation explicitly. No paid generation is required to complete this integration.',
+            recipesIntro: 'Use the following runnable requests and parsers as implementation fixtures. Adapt them to the existing app’s stack, provider interface and secure backend; they are not the deliverable by themselves. Choose only combinations from the tables above. Commands that submit generation are reference examples, not instructions to run paid integration tests.',
+            setup: ['Backend environment and discovery fixtures', 'Add FLOW2API_BASE_URL and FLOW2API_API_KEY to the app’s existing backend configuration, with the supplied root and a placeholder in example files. Complete implementation and mock tests without requesting or inspecting a real key; the operator can inject the generation API key securely afterwards. The runtime adapter may load it through the normal server configuration API. ROOT includes any proxy prefix, without /v1; OpenAI SDK base_url appends /v1 once. Use Bearer or x-goog-api-key headers. Query key authentication is accepted but URLs may be logged; precedence is Bearer, then x-goog-api-key, then ?key=. A wrong Bearer key is not rescued by a correct query key. The shell examples below illustrate configuration and read-only discovery.'],
+            js: ['JavaScript: backend fetch and SSE fixture', 'Adapt this parser to the app’s backend fetch implementation (Node 18+ or an equivalent runtime). Keep the service key in server configuration; the fallback key is only a placeholder for this fixture. The parser buffers UTF-8 and SSE frames across chunks, handles CRLF, [DONE], final partial frames, HTTP errors and in-stream JSON errors. reasoning_content is progress, not final media. AbortController closes the client request without guaranteeing upstream cancellation or refund.'],
+            extend: ['Extend a retained Flow video', 'Use an existing Flow mediaGenerationId, not a chatcmpl ID, task ID, MP4 URL or arbitrary uploaded video. Send extend://ID in an OpenAI image_url part. Retain data-media-id from streaming output when available. Ordinary nonstream output has no structured source media ID, and this adapter has no public upload-video or media-ID lookup route. If no valid retained source ID exists, explain the limitation and disable extension. Gemini does not forward this marker; use OpenAI.']
+        },
+        vi: {
+            title: 'Triển khai Flow2API vào ứng dụng hiện có của tôi',
+            mission: 'Bạn là coding agent làm việc trong ứng dụng hiện có của tôi. Hãy đọc repository, xác định stack, kiến trúc provider, luồng tạo nội dung, quy ước cấu hình và lệnh kiểm tra, rồi thực sự triển khai tích hợp Flow2API phù hợp với ứng dụng. Không dừng ở kế hoạch, giải thích, tài liệu quản trị máy chủ hay ví dụ request riêng lẻ. Hãy sửa mã và xác minh kết quả. Giữ các provider hiện có và hành vi không liên quan; tự quyết các chi tiết hợp lý theo repository, chỉ hỏi khi thiếu quyết định sản phẩm thiết yếu.',
+            boundary: 'Phạm vi này cho phép tích hợp vào ứng dụng. Dùng gốc dịch vụ và placeholder generation API key bên dưới. Không đọc, in, sao chép hoặc nhúng giá trị secret thật từ máy, file môi trường, browser storage hay dữ liệu tài khoản/máy chủ. Chỉ thêm tên biến được mô tả và placeholder vào cơ chế cấu hình bảo mật hiện có. Giữ API key tại backend ứng dụng, che key trong log; UI trình duyệt chỉ hiển thị cấu hình không bí mật. Không triển khai hay vận hành máy chủ Flow2API trong tác vụ này.',
+            stepsTitle: 'Các phần phải triển khai',
+            steps: [
+                'Đọc ứng dụng trước khi sửa: tìm adapter OpenAI/Gemini, đăng ký provider, ranh giới server/client, upload, component kết quả, validation, xử lý lỗi và tests. Dùng điểm mở rộng và ngôn ngữ/framework hiện có thay vì tạo demo tách rời.',
+                'Triển khai và đăng ký provider/adapter Flow2API. Hỗ trợ tạo ảnh, sửa ảnh và các khả năng video dưới đây qua giao diện tạo nội dung hiện có. Nếu chưa có màn hình phù hợp, thêm luồng nhỏ nhất nhưng hoàn chỉnh theo UI hiện tại. Dùng FLOW2API_BASE_URL và FLOW2API_API_KEY phía server, kiểm tra cấu hình khi khởi động, thêm placeholder mẫu và kiểm tra kết nối/khám phá model chỉ bằng GET.',
+                'Triển khai UI cấu hình đủ tám dòng model ngắn, phân nhóm ảnh/video rõ ràng, prompt, đính kèm ảnh và các control riêng có kiểu cho tỉ lệ, kích thước ảnh, thời lượng video, mode. Suy ra lựa chọn phụ thuộc từ các hàng hợp lệ bên dưới. Kiểm tra số ảnh, thứ tự khung và ID nguồn nối dài trước khi gửi; ẩn hoặc vô hiệu hóa tổ hợp sai và giải thích lỗi. Không bắt người dùng ghép ID model dài hay sửa JSON.',
+                'Triển khai ánh xạ request, trạng thái chờ/tiến trình dài, thành công/lỗi, render ảnh/video an toàn, tải xuống/mở kết quả và thao tác hủy phía ứng dụng. Tách tiến trình khỏi media cuối, giữ media ID nguồn hữu ích cho nối dài và giải thích rằng đóng request không bảo đảm hủy tác vụ upstream.',
+                'Thêm tests mock/fixture có ý nghĩa cho đăng ký provider, cấu hình bảo mật, payload, lựa chọn phụ thuộc, ảnh đính kèm, parser response/SSE, render an toàn và trạng thái lỗi. Chạy kiểm tra hiện có liên quan và tests mới. Không tạo ảnh/video tính phí trong tests tích hợp; mock HTTP/SSE. Tạo thật cần yêu cầu rõ ràng riêng của người dùng.',
+                'Hoàn tất bằng báo cáo ngắn về file đã sửa, biến cấu hình, luồng hỗ trợ, kiểm tra đã chạy và giới hạn đã xác minh. Thêm hướng dẫn dùng ngắn vào tài liệu thông thường của ứng dụng. Tiếp tục tới khi mã và kiểm tra hoàn tất; nếu thực sự bị chặn, báo nguyên nhân cụ thể.'
+            ],
+            connectionTitle: 'Hợp đồng kết nối và giao thức',
+            connection: 'ROOT gồm tiền tố reverse proxy nếu có và không gồm /v1. Giữ nguyên tiền tố khi ghép mọi route. Ưu tiên OpenAI-compatible POST /v1/chat/completions với Authorization: Bearer <generation API key>; base_url OpenAI SDK là ROOT + /v1. Gemini-compatible POST /v1beta/models/{family}:generateContent hoặc :streamGenerateContent dùng x-goog-api-key và cùng generationConfig. Khám phá qua GET /v1/models, /v1/models/aliases hoặc /v1beta/models bằng generation key. Khám phá có thể lỗi riêng: hiển thị lỗi kết nối hữu ích và cho chọn dòng hợp lệ tường minh. Quyền truy cập còn phụ thuộc upstream. Adapter tạo media; không gửi hội thoại thường, tools, embeddings, Responses hay phương thức OpenAI Images vào đây.',
+            modelsTitle: 'Dòng model và tổ hợp lựa chọn chính xác',
+            models: 'Dùng tên dòng ngắn làm model và gửi tham số riêng. Bảng gọn này được suy từ snapshot registry model_parameters đã cung cấp, không phải ghép các danh sách giá trị độc lập. Mọi tổ hợp trong một hàng có đăng ký; không suy thêm tổ hợp giữa các hàng. Giữ quan hệ này trong control phụ thuộc và validation. Max ảnh unspecified nghĩa registry chưa khai báo giới hạn, không bảo đảm upstream vô hạn. Chú thích local min là mức kiểm tra cục bộ yếu hơn; UI vẫn giữ tối thiểu R2V được công bố.',
+            typesTitle: 'Tham số có kiểu',
+            types: 'Ảnh: generationConfig.imageConfig.aspectRatio là string; imageSize là string enum (1K, 2K, 4K nếu có trong bảng). Video: generationConfig.videoConfig.durationSeconds là integer, aspectRatio là string và mode là string enum (t2v, i2v, r2v, auto, extend nếu có trong bảng). Không gửi imageConfig cho video hay videoConfig cho ảnh. videoConfig chuẩn chỉ nhận durationSeconds/aspectRatio/mode. Với OpenAI SDK, dùng extra_body={"generationConfig": ...}; SDK gộp vào body gửi đi. Tổ hợp video không hỗ trợ trả HTTP 400; body sai kiểu trả HTTP 422. Hiển thị lỗi validation của server, giữ input người dùng; không tự đổi mode, thời lượng hay dòng model.',
+            imageHeaders: ['Dòng ảnh', 'aspectRatio', 'imageSize', 'Ảnh tham chiếu'],
+            videoHeaders: ['Dòng video', 'mode', 'aspectRatio', 'durationSeconds (integer)', 'Ảnh tham chiếu'],
+            defaultsTitle: 'Mặc định đã đăng ký',
+            defaults: 'Áp dụng mặc định bên dưới, đổi lựa chọn phụ thuộc khi mode đổi. Alias ảnh thiếu tỉ lệ có thể suy từ ảnh đầu tiên, nếu không có thì dùng 16:9; gửi lựa chọn tường minh để UI nhất quán. ID biến thể/legacy tường minh giữ hành vi đã cấu hình. Các dòng video ngắn hiện không cung cấp độ phân giải tùy ý hoặc phóng một video có sẵn.',
+            inputsTitle: 'Đầu vào, đầu ra và hành vi phía ứng dụng',
+            inputs: 'Gửi prompt không rỗng. Ảnh OpenAI là content part type=image_url, image_url.url chứa HTTPS mà server tải được hoặc data:image/...;base64,... chứa byte thật; không gửi đường dẫn file trên máy client. Chuyển file cục bộ trong ứng dụng, kiểm tra MIME/kích thước. Gemini dùng fileData.fileUri hoặc inlineData {mimeType,data}, inlineData.data chỉ chứa base64 thuần. Chỉ tin nhắn OpenAI cuối cung cấp prompt/ảnh trực tiếp và Gemini dùng user content cuối. I2V nhận 1–2 khung theo thứ tự đầu/cuối; R2V dùng ảnh tham chiếu chủ thể/phong cách, không phải nội suy khung. Omni auto chọn nhánh chữ/ảnh theo 0–3 ảnh. T2V không nhận ảnh. Nối dài cần mediaGenerationId Flow hiện có qua marker OpenAI image_url extend://ID; không hỗ trợ upload video bất kỳ, URL MP4 hay nối dài Gemini. Giữ data-media-id khi có trong stream; nonstream thường không có source ID có cấu trúc và không có endpoint public tra media ID. Vô hiệu hóa nối dài khi chưa có source ID hợp lệ đã giữ lại.',
+            runtime: 'Kết quả OpenAI nonstream nằm trong choices[0].message.content, chứa Markdown ảnh hoặc HTML video (đôi khi trong code fence), không phải mảng data của Images. SSE có delta.reasoning_content cho tiến trình, delta.content cho media cuối và [DONE]; buffer UTF-8 và khung SSE qua các network chunk, xử lý CRLF, khung cuối chưa ngắt dòng, thiếu hoàn tất, output rỗng và lỗi trong stream dù HTTP 200. Gemini dùng candidates[].content.parts inlineData/fileData và text tiến trình. Parse URL media rồi tạo img/video an toàn có controls; không chạy HTML trả về bằng innerHTML. Kiểm tra scheme/origin và giới hạn data URI ảnh; xử lý URL cache tương đối, localhost không truy cập được, link hết hạn và tải xuống theo chính sách ứng dụng.',
+            reliability: 'Dùng timeout tạo nội dung dài (ví dụ 3600 giây; mặc định server thường là 300 giây ảnh/1500 giây video), phối hợp timeout ứng dụng/proxy và tránh buffer SSE. Xử lý 401 xác thực, 400/422 validation, 403 quyền, 429 giới hạn tốc độ và 5xx upstream/không sẵn sàng theo payload thật ({detail:...}, OpenAI error, Gemini error). Hiển thị lỗi có hành động xử lý, không lộ key. Không có bảo đảm public về polling job, hủy upstream hay idempotency-key. Tắt retry POST tạo nội dung tự động kể cả SDK; timeout/mất kết nối có thể để tác vụ tính phí tiếp tục. Không retry POST mù quáng hoặc hứa miễn phí/khử trùng lặp. GET khám phá có thể retry giới hạn; cho người dùng xem trạng thái trước khi chủ động gửi lại.',
+            acceptanceTitle: 'Tiêu chí nghiệm thu',
+            acceptance: 'Ứng dụng có provider Flow2API dùng được, cấu hình bảo mật và luồng tạo nội dung nhìn thấy được; hỗ trợ đủ tám tên dòng độc lập với ví dụ đang hiển thị trong hướng dẫn; control riêng chỉ cho tổ hợp đã đăng ký và ảnh hợp lệ; media cuối, tiến trình/lỗi hiển thị đúng; secret ở server; các kiểm tra mock thành công, lỗi validation/xác thực, SSE bị chia nhỏ, lỗi trong stream và hủy/timeout đều đạt. Báo rõ giới hạn riêng của ứng dụng. Không cần tạo nội dung tính phí để hoàn tất tích hợp.',
+            recipesIntro: 'Dùng request và parser chạy được dưới đây làm fixture triển khai. Điều chỉnh theo stack, giao diện provider và backend bảo mật của ứng dụng; riêng ví dụ không phải sản phẩm bàn giao. Chỉ chọn tổ hợp từ bảng trên. Lệnh tạo nội dung là tài liệu tham khảo, không phải yêu cầu chạy tests tích hợp tính phí.',
+            setup: ['Fixture môi trường backend và khám phá model', 'Thêm FLOW2API_BASE_URL và FLOW2API_API_KEY vào cấu hình backend hiện có, dùng gốc dịch vụ đã cho và placeholder trong file mẫu. Hoàn tất mã và tests mock mà không yêu cầu hoặc xem key thật; người vận hành có thể cấu hình generation API key an toàn sau đó. Adapter lúc chạy có thể nạp key qua API cấu hình server thông thường. ROOT gồm tiền tố proxy, không có /v1; base_url OpenAI SDK chỉ thêm /v1 một lần. Dùng header Bearer hoặc x-goog-api-key. Hệ thống nhận query key nhưng URL có thể bị log; ưu tiên Bearer, rồi x-goog-api-key, rồi ?key=. Bearer sai không được cứu bởi query key đúng. Ví dụ shell dưới minh họa cấu hình và khám phá chỉ đọc.'],
+            js: ['JavaScript: fixture fetch backend và SSE', 'Điều chỉnh parser theo fetch backend của ứng dụng (Node 18+ hoặc runtime tương đương). Giữ key dịch vụ trong cấu hình server; key dự phòng chỉ là placeholder của fixture. Parser buffer UTF-8 và khung SSE qua các chunk, xử lý CRLF, [DONE], khung cuối, lỗi HTTP và lỗi JSON trong stream. reasoning_content là tiến trình, không phải media cuối. AbortController đóng request phía client, không bảo đảm hủy upstream hay hoàn phí.'],
+            extend: ['Nối dài video Flow đã giữ ID', 'Dùng mediaGenerationId Flow hiện có, không dùng chatcmpl ID, task ID, URL MP4 hay video upload bất kỳ. Gửi extend://ID trong part OpenAI image_url. Giữ data-media-id từ stream khi có. Nonstream thường không có source media ID có cấu trúc; adapter không có route public upload-video hoặc tra media ID. Khi chưa có source ID hợp lệ đã giữ, giải thích giới hạn và vô hiệu hóa nối dài. Gemini không chuyển marker này; dùng OpenAI.']
+        },
+        'zh-CN': {
+            title: '将 Flow2API 实际集成到我的现有应用',
+            mission: '你是在我的现有应用中工作的 coding agent。先检查当前 repository，确定技术栈、provider 架构、生成流程、配置惯例和测试命令，然后实际实现符合该应用的 Flow2API 集成。不要停留在计划、解释、服务器运维文档或单独的请求示例。修改代码并验证结果。保留现有 provider 和无关行为；根据仓库合理决定实现细节，仅在缺少必要产品决策时提问。',
+            boundary: '本任务授权应用集成工作。使用下面给出的服务根地址和 generation API key 占位符。不要读取、打印、复制或嵌入本机、环境文件、浏览器存储或服务器/账户数据中的真实 secret。仅在应用现有安全配置机制中加入已说明的变量名和占位符。API key 保留在应用后端，日志应脱敏；浏览器 UI 仅显示非秘密设置。本任务不包括部署或运维 Flow2API 服务器。',
+            stepsTitle: '必须交付的实现',
+            steps: [
+                '修改前先检查应用：查找现有 OpenAI/Gemini adapter、provider 注册、服务端/客户端边界、上传、结果组件、校验、错误处理和测试。复用现有扩展点及语言/框架，将集成融入应用。',
+                '实现并注册 Flow2API provider/adapter。通过现有生成接口支持图片生成、图片编辑及下方视频能力。若缺少相关界面，按当前 UI 增加最小但完整的生成流程。服务端使用 FLOW2API_BASE_URL 和 FLOW2API_API_KEY，校验启动配置、提供示例占位符，并仅用 GET 检查连接和发现模型。',
+                '实现配置 UI，包含全部八个简洁模型系列、清晰的图片/视频分组、提示词、图片附件，以及独立且有类型的宽高比、图片尺寸、视频时长和 mode 控件。根据下方准确表格生成联动选项。提交前校验图片数量、帧顺序和续写源 ID；隐藏或禁用非法组合并说明校验错误。不要要求用户拼接长模型 ID 或编辑 JSON。',
+                '实现请求映射、长时间等待/进度、成功/错误状态、安全图片/视频展示、下载/打开行为及应用取消控件。将进度与最终媒体分开，保留可用于续写的源媒体 ID，并说明关闭客户端请求不能保证取消上游任务。',
+                '为 provider 注册、安全配置、请求映射、联动选项校验、附件处理、response/SSE 解析、安全展示和错误状态加入有意义的 mock/fixture 测试。运行相关现有检查和新测试。集成测试不得提交付费图片/视频生成；使用 mock HTTP/SSE 响应。真实生成需要用户另行明确要求。',
+                '最终简要报告修改文件、配置变量、支持流程、运行检查及已验证限制。在应用常规文档中加入简短使用说明。持续完成实现和检查；如果确实无法继续，报告具体阻塞原因。'
+            ],
+            connectionTitle: '连接与协议约定',
+            connection: 'ROOT 包含反向代理前缀，不包含 /v1。拼接所有路由时保留此前缀。优先使用 OpenAI-compatible POST /v1/chat/completions，设置 Authorization: Bearer <generation API key>；OpenAI SDK base_url 为 ROOT + /v1。Gemini-compatible POST /v1beta/models/{family}:generateContent 或 :streamGenerateContent 使用 x-goog-api-key 和相同 generationConfig。使用 generation key 请求 GET /v1/models、/v1/models/aliases 或 /v1beta/models 发现模型。发现请求可能单独失败：显示有用的连接错误并允许明确选择受支持系列。可用性还受上游账户权限影响。该 adapter 用于媒体生成，不应接收普通聊天、tools、embeddings、Responses 或 OpenAI Images 方法。',
+            modelsTitle: '模型系列与准确可选组合',
+            models: 'model 使用简洁系列名，选项单独传递。下方紧凑表格来自提供的 model_parameters 注册快照，不是独立值列表的任意组合。同一行内的组合均已注册，不代表可以跨行组合。联动选项和校验必须保留这些关联。图片上限 unspecified 表示 registry 未声明上限，不保证上游无限制。local min 字样表示较宽松的本地检查；UI 仍应采用公布的 R2V 最少图片数。',
+            typesTitle: '有类型的参数',
+            types: '图片：generationConfig.imageConfig.aspectRatio 为 string；imageSize 为 string enum（仅表中列出的 1K、2K、4K）。视频：generationConfig.videoConfig.durationSeconds 为 integer，aspectRatio 为 string，mode 为 string enum（仅表中列出的 t2v、i2v、r2v、auto、extend）。不要向视频系列发送 imageConfig，也不要向图片系列发送 videoConfig。标准 videoConfig 仅接受 durationSeconds/aspectRatio/mode。OpenAI SDK 使用 extra_body={"generationConfig": ...}，SDK 会将其合并至发送正文。不支持的视频组合返回 HTTP 400；类型或结构错误返回 HTTP 422。显示服务器校验错误并保留用户输入；不要悄悄更改 mode、时长或系列。',
+            imageHeaders: ['图片系列', 'aspectRatio', 'imageSize', '参考图片数'],
+            videoHeaders: ['视频系列', 'mode', 'aspectRatio', 'durationSeconds (integer)', '参考图片数'],
+            defaultsTitle: '已注册默认值',
+            defaults: '采用下方默认值，切换 mode 时更新联动选项。图片别名未明确提供宽高比时可从第一张参考图推断，否则默认 16:9；为可预测的 UI 应明确传入选择。具体变体/旧 ID 保留已有配置行为。当前简洁视频系列不提供任意输出分辨率或独立视频放大接口。',
+            inputsTitle: '输入、输出及客户端行为',
+            inputs: '发送非空提示词。OpenAI 附件为 type=image_url 的 message content part，image_url.url 包含服务器可访问的 HTTPS 地址或带真实字节的 data:image/...;base64,... URI；不要发送客户端文件路径。在应用中转换本地文件并校验 MIME/大小。Gemini 使用 fileData.fileUri 或 inlineData {mimeType,data}，inlineData.data 只放原始 base64。OpenAI 仅最后一条消息提供主要提示词/直接图片，Gemini 使用最后一条 user content。I2V 接受按首帧/末帧顺序排列的 1–2 张图；R2V 使用主体/风格参考图，不是首尾帧插值。Omni auto 根据 0–3 张图片选择文生/参考图路径。T2V 不接收图片。续写需要现有 Flow mediaGenerationId，通过 OpenAI image_url 标记 extend://ID 传入；不支持任意视频上传、MP4 URL 或 Gemini 续写。流式结果提供 data-media-id 时应保留；普通非流式没有结构化源 ID，也无公开媒体 ID 查询端点。没有保留的有效源 ID 时禁用续写。',
+            runtime: 'OpenAI 非流式结果位于 choices[0].message.content，包含 Markdown 图片或 video HTML 包装（可能在代码围栏中），不是 Images data 数组。SSE 通过 delta.reasoning_content 发送进度、delta.content 发送最终媒体，并以 [DONE] 结束；跨网络块缓存 UTF-8 和 SSE 帧，处理 CRLF、最后未分隔帧、未完成、空输出和 HTTP 200 中的流内错误。Gemini 使用 candidates[].content.parts 的 inlineData/fileData 及进度文本。解析媒体地址并创建带 controls 的安全 img/video 元素；不要通过 innerHTML 执行返回的 HTML。校验 URL scheme/origin 和受限图片 data URI；按照应用策略处理相对缓存 URL、不可达 localhost、过期链接和下载。',
+            reliability: '配置长生成超时（示例 3600 秒；服务器常见默认值为图片 300 秒/视频 1500 秒），协调应用/代理超时并避免 SSE 缓冲。根据实际错误正文（{detail:...}、OpenAI error、Gemini error）处理 401 认证、400/422 校验、403 权限、429 限流及 5xx 上游/不可用错误。提供可操作提示，避免泄露 key。没有公开 job polling、上游取消或 idempotency-key 保证。禁用生成 POST 自动重试，包括 SDK 重试；超时/断线可能留下正在付费运行的任务。不要盲目重试 POST，也不要承诺免费或去重。发现 GET 可有限重试；让用户检查状态后再主动重新提交。',
+            acceptanceTitle: '验收标准',
+            acceptance: '应用具有可用的 Flow2API provider、安全配置和可见生成流程；全部八个系列均可用，不受本指南当前示例选择影响；独立控件只允许已注册组合和有效参考图片；正确显示最终媒体、进度和错误；secret 保留在服务端；mock 成功、校验/认证失败、碎片化 SSE、流内错误及取消/超时行为通过相关检查。明确报告应用特定限制。完成集成不需要付费生成。',
+            recipesIntro: '将下方可运行请求和 parser 作为实现 fixture，按现有应用的技术栈、provider 接口及安全后端调整；单独示例本身不是交付结果。仅使用上表列出的组合。生成命令是参考示例，不是运行付费集成测试的指令。',
+            setup: ['后端环境与发现 fixture', '在应用现有后端配置中加入 FLOW2API_BASE_URL 和 FLOW2API_API_KEY，示例文件使用给定根地址及占位符。完成代码和 mock 测试时不要索取或查看真实 key；操作人员之后可安全注入 generation API key。运行时 adapter 可通过常规服务器配置 API 加载它。ROOT 包含代理前缀，不含 /v1；OpenAI SDK base_url 只追加一次 /v1。使用 Bearer 或 x-goog-api-key header。也接受 query key，但 URL 可能被记录；优先级为 Bearer、x-goog-api-key、?key=。错误 Bearer 不能被正确 query key 补救。下方 shell 示例用于说明配置和只读发现。'],
+            js: ['JavaScript：后端 fetch 与 SSE fixture', '将 parser 适配到应用后端 fetch 实现（Node 18+ 或等价运行时）。服务 key 保留在服务器配置中；回退 key 仅为 fixture 占位符。parser 跨 chunk 缓存 UTF-8 和 SSE 帧，处理 CRLF、[DONE]、最后部分帧、HTTP 错误及流内 JSON 错误。reasoning_content 是进度，不是最终媒体。AbortController 仅关闭客户端请求，不能保证取消上游或退款。'],
+            extend: ['续写已保留 ID 的 Flow 视频', '使用现有 Flow mediaGenerationId，不要使用 chatcmpl ID、任务 ID、MP4 URL 或任意上传视频。在 OpenAI image_url part 中发送 extend://ID。有流式 data-media-id 时保留它。普通非流式没有结构化源媒体 ID；adapter 无公开 upload-video 或媒体 ID 查询路由。没有已保留的有效源 ID 时说明限制并禁用续写。Gemini 不转发该标记；请使用 OpenAI。']
+        }
+    };
+
+    const cleanFamilies = [
+        'gemini-3.0-pro-image', 'gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image',
+        'veo-3.1-fast', 'veo-3.1-lite', 'veo-3.1-quality', 'omni-1.1-flash', 'omni-1.2-flash'
+    ];
+    const contractRatios = ['16:9', '9:16', '1:1', '4:3', '3:4'];
+    const contractModes = ['t2v', 'i2v', 'r2v', 'auto', 'extend'];
+
+    function serviceRoot(value) {
+        // A shared prompt must not leak a URL password, query key, or fragment.
+        // Encoding backticks also prevents a crafted prefix closing code fences.
+        const url = new URL(String(value || 'http://localhost:8000'));
+        if (!['http:', 'https:'].includes(url.protocol)) throw new TypeError('Flow2API root must be HTTP(S)');
+        url.username = '';
+        url.password = '';
+        url.search = '';
+        url.hash = '';
+        url.pathname = url.pathname.replace(/`/g, '%60').replace(/\/+$/, '').replace(/\/(?:v1|v1beta)$/, '');
+        return url.href.replace(/\/+$/, '');
+    }
+
+    function markdownTable(headers, rows) {
+        return [headers, headers.map(() => '---'), ...rows]
+            .map(row => '| ' + row.join(' | ') + ' |').join('\n');
+    }
+
+    function referenceBounds(variant) {
+        const minimum = Number.isInteger(variant.min_images) && variant.min_images >= 0 ? variant.min_images : 0;
+        const maximum = Number.isInteger(variant.max_images) && variant.max_images >= minimum ? variant.max_images : 'unspecified';
+        const local = Number.isInteger(variant.locally_validated_min_images) && variant.locally_validated_min_images >= 0
+            ? variant.locally_validated_min_images : minimum;
+        return minimum + '–' + maximum + (local !== minimum ? ' (local min ' + local + ')' : '');
+    }
+
+    function compactContractRows(contract) {
+        const video = contract.type === 'video';
+        const variants = contract.variants.filter(item => contractRatios.includes(item.aspectRatio)
+            && (video ? contractModes.includes(item.mode) && Number.isInteger(item.durationSeconds) && item.durationSeconds > 0
+                : ['1K', '2K', '4K'].includes(item.imageSize)));
+        const rows = [];
+        // Group within one aspect first, then combine aspects only when their
+        // full value sets AND reference bounds match. Sparse registries cannot
+        // accidentally become a Cartesian product of independent parameters.
+        for (const mode of video ? contractModes : ['image']) {
+            const groups = new Map();
+            for (const ratio of contractRatios) {
+                const bounds = new Map();
+                for (const item of variants.filter(item => item.aspectRatio === ratio && (!video || item.mode === mode))) {
+                    const refs = referenceBounds(item);
+                    if (!bounds.has(refs)) bounds.set(refs, new Set());
+                    bounds.get(refs).add(video ? item.durationSeconds : item.imageSize);
+                }
+                for (const [refs, valueSet] of bounds) {
+                    const values = Array.from(valueSet).sort(video ? (a, b) => a - b : (a, b) => parseInt(a, 10) - parseInt(b, 10));
+                    const key = JSON.stringify([values, refs]);
+                    if (!groups.has(key)) groups.set(key, { aspects: [], values, refs });
+                    groups.get(key).aspects.push(ratio);
+                }
+            }
+            for (const group of groups.values()) {
+                rows.push(video ? [contract.id, mode, group.aspects.join(', '), group.values.join(', '), group.refs]
+                    : [contract.id, group.aspects.join(', '), group.values.join(', '), group.refs]);
+            }
+        }
+        return rows;
+    }
+
+    function formatDefaults(contract) {
+        const format = value => {
+            const fields = contract.type === 'video' ? ['durationSeconds', 'aspectRatio', 'mode'] : ['aspectRatio', 'imageSize'];
+            if (!value || !contract.variants.some(item => fields.every(key => item[key] === value[key]))
+                || !contractRatios.includes(value.aspectRatio)
+                || (contract.type === 'video' ? !contractModes.includes(value.mode) || !Number.isInteger(value.durationSeconds)
+                    : !['1K', '2K', '4K'].includes(value.imageSize))) return 'unspecified';
+            return fields.map(key => key + '=' + value[key]).join(', ');
+        };
+        const main = '- ' + contract.id + ': ' + format(contract.defaults);
+        const modes = contract.type === 'video' ? contractModes.filter(mode => contract.mode_defaults?.[mode]) : [];
+        return main + (modes.length ? '; ' + modes.map(mode => mode + ' → ' + format(contract.mode_defaults[mode])).join('; ') : '');
+    }
+
+    function buildAgentPrompt(root, locale, reference) {
+        const language = agentProse[locale] ? locale : 'en';
+        const p = agentProse[language];
+        const origin = serviceRoot(root);
+        const registry = Array.isArray(reference?.model_parameters) ? reference.model_parameters : [];
+        const contracts = cleanFamilies.map(id => registry.find(item => item.id === id
+            && item.type === (id.startsWith('gemini-') ? 'image' : 'video') && Array.isArray(item.variants)));
+        // Do not copy an incomplete contract into an apparently complete handoff.
+        if (contracts.some(item => !item || !compactContractRows(item).length)) {
+            throw new TypeError('Flow2API integration reference must contain all eight model family contracts');
+        }
+        const imageRows = contracts.filter(item => item.type === 'image').flatMap(compactContractRows);
+        const videoRows = contracts.filter(item => item.type === 'video').flatMap(compactContractRows);
+        return [
+            '# ' + p.title, p.mission, p.boundary,
+            '## ' + p.stepsTitle, p.steps.map((step, index) => (index + 1) + '. ' + step).join('\n'),
+            '## ' + p.connectionTitle,
+            fence('text', 'FLOW2API_BASE_URL=' + origin + '\nFLOW2API_API_KEY=REPLACE_WITH_SERVER_API_KEY'), p.connection,
+            '## ' + p.modelsTitle, p.models,
+            markdownTable(p.imageHeaders, imageRows), markdownTable(p.videoHeaders, videoRows),
+            '### ' + p.typesTitle, p.types,
+            '### ' + p.defaultsTitle, p.defaults, contracts.map(formatDefaults).join('\n'),
+            '## ' + p.inputsTitle, p.inputs, p.runtime, p.reliability,
+            '## ' + p.acceptanceTitle, p.acceptance,
+            build(origin, language, { intro: p.recipesIntro, skipUpscale: true,
+                copy: { extend: p.extend, setup: p.setup, js: p.js } })
+        ].join('\n\n').trim();
+    }
+
+    window.Flow2APIIntegrationRecipes = Object.freeze({ build, buildAgentPrompt });
 }());

@@ -725,6 +725,7 @@ def test_integration_guide_tab_copies_complete_instructions_without_secrets(brow
     page.locator("#tabIntegration").click(timeout=3000)
     playwright_api.expect(page.locator("#panelIntegration")).to_be_visible()
     playwright_api.expect(page.locator("#panelTokens")).to_be_hidden()
+    playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
     guide = page.locator("#integrationGuide").input_value()
     assert base in guide
     for contract in ("/v1/models", "/v1/chat/completions", "FLOW2API_API_KEY",
@@ -733,13 +734,13 @@ def test_integration_guide_tab_copies_complete_instructions_without_secrets(brow
         assert contract in guide
     examples = [json.loads(block) for block in re.findall(r"```json\n(.*?)\n```", guide, re.S)]
     requests_examples = [item for item in examples if isinstance(item, dict) and "messages" in item]
-    assert requests_examples[0]["model"] == "omni-1.2-flash"
-    assert requests_examples[0]["stream"] is False
-    assert requests_examples[0]["generationConfig"]["videoConfig"] == {
+    assert any(item["model"] == "omni-1.2-flash" and item["generationConfig"]["videoConfig"] == {
         "durationSeconds": 8, "aspectRatio": "16:9", "mode": "auto"
-    }
-    assert any(isinstance(item, list) and item[1]["type"] == "image_url" for item in examples)
-    assert any(isinstance(item, dict) and item.get("contents", [{}])[0].get("parts", [{}])[0].get("text") == "<PROMPT>" for item in examples)
+    } for item in requests_examples)
+    assert any("imageConfig" in item.get("generationConfig", {}) for item in requests_examples)
+    playwright_api.expect(page.locator("#integrationGuide")).to_be_visible()
+    assert not page.locator("#integrationRequestExamples").evaluate("el => el.open")
+    assert not page.locator("#integrationAdvanced").evaluate("el => el.open")
     assert "private-api-key-do-not-copy" not in guide
     page.locator("#copyIntegrationGuide").click()
     assert page.evaluate("window.copiedIntegrationGuide") == guide
@@ -800,12 +801,15 @@ def test_integration_reference_lists_every_endpoint_model_and_filters(browser_pa
     open_page(page, base + "/manage#integration")
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
     guide = page.locator("#integrationGuide").input_value()
-    for model_id in MODEL_CONFIG:
-        assert model_id in guide
-    for path in ("/api/tokens/import", "/api/cache/config", "/api/plugin/check-tokens", "/captcha_ws", "/v1/models/aliases"):
-        assert path in guide
-    assert "ChatCompletionRequest" in guide
-    assert "ADMIN" in guide or "admin_session" in guide
+    from src.core.model_resolver import get_model_parameter_contracts
+    for contract in get_model_parameter_contracts(MODEL_CONFIG):
+        assert contract["id"] in guide
+    for path in ("/api/tokens/import", "/api/cache/config", "/api/plugin/check-tokens", "/captcha_ws"):
+        assert path not in guide
+        assert any(path in line for line in page.locator("#integrationEndpointRows tr").all_text_contents())
+    assert "/v1/models/aliases" in guide
+    assert "ChatCompletionRequest" not in guide
+    assert len(guide) < 80000
     assert page.locator("#integrationModelRows tr").count() == len(MODEL_CONFIG)
     page.locator("#integrationAdvanced > summary").click()
     page.locator("#integrationReferenceSearch").fill("/api/cache")
@@ -816,19 +820,28 @@ def test_integration_reference_lists_every_endpoint_model_and_filters(browser_pa
     assert page.locator("#integrationGuide").input_value() == guide
 
 
-def test_integration_reference_failure_disables_partial_copy_and_can_retry(browser_page):
+@pytest.mark.parametrize("reference_failure", ["unavailable", "incomplete"])
+def test_integration_reference_failure_disables_partial_copy_and_can_retry(browser_page, reference_failure):
     page, base = browser_page
-    page.route("**/api/integration/reference", lambda route: route.fulfill(status=503, json={"detail": "unavailable"}))
+    if reference_failure == "incomplete":
+        from src.core.integration_reference import build_integration_reference
+        from src.main import app
+        partial = build_integration_reference(app)
+        partial["model_parameters"].pop()
+        page.route("**/api/integration/reference", lambda route: route.fulfill(json=partial))
+    else:
+        page.route("**/api/integration/reference", lambda route: route.fulfill(status=503, json={"detail": "unavailable"}))
     open_page(page, base + "/manage#integration")
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_disabled()
     playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_disabled()
     assert page.locator("#integrationGuide").input_value() == ""
     assert page.locator("#integrationRequest").input_value() == ""
     assert page.locator("#integrationReferenceStatus").inner_text()
+    assert page.locator("#integrationServerUrl").get_attribute("aria-invalid") == "false"
     page.unroute("**/api/integration/reference")
     page.locator("#reloadIntegrationReference").click()
     playwright_api.expect(page.locator("#copyIntegrationGuide")).to_be_enabled()
-    assert "/api/tokens/import" in page.locator("#integrationGuide").input_value()
+    assert "/v1/chat/completions" in page.locator("#integrationGuide").input_value()
 
 
 @pytest.mark.parametrize("locale", ["en", "vi", "zh-CN"])
@@ -845,6 +858,8 @@ def test_integration_parameter_preview_uses_simple_models_and_registered_choices
     open_page(page, base + "/manage#integration")
     page.locator("[data-language-select]").select_option(locale)
     playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_enabled()
+    page.locator("#integrationRequestExamples > summary").click()
+    complete_guide = page.locator("#integrationGuide").input_value()
     assert not page.locator("#integrationAdvanced").evaluate("element => element.open")
     assert page.locator("#integrationModel").input_value() == "omni-1.2-flash"
     assert page.locator("#integrationModel option").all_text_contents() == [
@@ -853,7 +868,7 @@ def test_integration_parameter_preview_uses_simple_models_and_registered_choices
 
     def preview():
         value = json.loads(page.locator("#integrationRequest").input_value())
-        assert "integration." not in page.locator("#panelIntegration").inner_text()
+        assert not re.search(r"\bintegration\.[A-Za-z]", page.locator("#panelIntegration").inner_text())
         return value
 
     assert preview()["generationConfig"]["videoConfig"] == {
@@ -899,6 +914,7 @@ def test_integration_parameter_preview_uses_simple_models_and_registered_choices
         Object.defineProperty(navigator, 'clipboard', {configurable: true,
             value: {writeText: async text => {window.copiedRequest = text;}}});
     }""")
+    assert page.locator("#integrationGuide").input_value() == complete_guide
     page.locator("#copyIntegrationRequest").click()
     assert json.loads(page.evaluate("window.copiedRequest")) == payload
     assert not any(method == "POST" or path.endswith(("/chat/completions", ":generateContent")) for method, path in requests)
@@ -917,6 +933,8 @@ def test_integration_parameter_preview_never_invents_variant_combinations(browse
     page.route("**/api/integration/reference", lambda route: route.fulfill(json=reference))
     open_page(page, base + "/manage#integration")
     playwright_api.expect(page.locator("#copyIntegrationRequest")).to_be_enabled()
+    page.locator("#integrationRequestExamples > summary").click()
+    complete_guide = page.locator("#integrationGuide").input_value()
     assert page.locator("#integrationDuration").input_value() == "8"
     assert page.locator("#integrationAspect option").all_text_contents() == ["16:9"]
     page.locator("#integrationDuration").select_option("4")
@@ -924,6 +942,7 @@ def test_integration_parameter_preview_never_invents_variant_combinations(browse
     assert json.loads(page.locator("#integrationRequest").input_value())["generationConfig"]["videoConfig"] == {
         "durationSeconds": 4, "aspectRatio": "9:16", "mode": "auto"
     }
+    assert page.locator("#integrationGuide").input_value() == complete_guide
 
 
 @pytest.mark.parametrize("enabled", [False, True])

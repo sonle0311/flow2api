@@ -4,20 +4,20 @@
     "shell.title.tokens": "你的账号。", "shell.description.tokens": "管理登录会话、生成权限和每个账号的并发设置。",
     "shell.title.settings": "有条理地配置。", "shell.description.settings": "连接、安全、验证码与浏览器设置，保持清晰可查。",
     "shell.title.logs": "每次请求，都有记录。", "shell.description.logs": "检查进度、结果与原始请求，定位需要处理的问题。",
-    "shell.title.integration": "集成，无需猜参数。", "shell.description.integration": "选择模型，单独设置参数，将请求复制到你的工具。"
+    "shell.title.integration": "让应用接入 Flow2API。", "shell.description.integration": "将提示词粘贴到编程智能体，让它按项目结构实现集成。"
   },
   "en": {
     "shell.navigation": "Main navigation", "shell.studio": "Studio", "shell.tokens": "Accounts", "shell.integration": "API", "shell.logs": "Logs", "shell.settings": "Settings",
     "shell.title.tokens": "Your accounts.", "shell.description.tokens": "Manage sessions, generation access and concurrency for each account.",
     "shell.title.settings": "Configure with purpose.", "shell.description.settings": "Keep connections, security, CAPTCHA and browser settings within reach.",
     "shell.title.logs": "Every request leaves a trace.", "shell.description.logs": "Inspect progress, results and original payloads to find what needs attention.",
-    "shell.title.integration": "Integrate without guessing.", "shell.description.integration": "Choose a model, set parameters separately and copy the request into your tool."
+    "shell.title.integration": "Bring Flow2API into your app.", "shell.description.integration": "Copy the prompt into your coding agent and let it implement the integration in your project."
   },
   "vi": {
     "shell.navigation": "Điều hướng chính", "shell.studio": "Studio", "shell.tokens": "Tài khoản", "shell.integration": "Tích hợp", "shell.logs": "Nhật ký", "shell.settings": "Cấu hình",
     "shell.title.tokens": "Tài khoản của bạn.", "shell.description.tokens": "Quản lý phiên đăng nhập, quyền tạo và giới hạn đồng thời của từng tài khoản.",
     "shell.title.settings": "Cấu hình có chủ đích.", "shell.description.settings": "Kết nối, bảo mật, CAPTCHA và trình duyệt được sắp xếp rõ ràng.",
     "shell.title.logs": "Mỗi yêu cầu, một dấu vết.", "shell.description.logs": "Kiểm tra tiến độ, kết quả và dữ liệu gốc để tìm vấn đề cần xử lý.",
-    "shell.title.integration": "Tích hợp mà không đoán tham số.", "shell.description.integration": "Chọn model, đặt tham số riêng và sao chép yêu cầu vào tool của bạn."
+    "shell.title.integration": "Đưa Flow2API vào app của bạn.", "shell.description.integration": "Sao chép prompt, dán vào coding agent và để agent triển khai tích hợp theo cấu trúc dự án."
   }
 }
