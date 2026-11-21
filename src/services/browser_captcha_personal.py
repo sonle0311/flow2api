@@ -6922,6 +6922,7 @@ class BrowserCaptchaService:
 
         说明：
         - 原始 Cookie 头没有 domain 元数据时，直接扩展到 labs/google/recaptcha 三个目标。
+        - 原 Cookie 始终按自身作用域保留（含 host-only 的 OSID/LSID 等），镜像只是补充。
         - 即使 token.google_cookies 已经带有显式的 google.com 域，也额外镜像一份到
           `www.recaptcha.net`，保证 enterprise reload 首轮请求也能命中 cookie。
         - 对 Google/reCAPTCHA Cookie 强制使用 `SameSite=None`
@@ -6948,11 +6949,14 @@ class BrowserCaptchaService:
 
         for cookie in browser_cookies:
             scope_host = cls._extract_cookie_scope_host(cookie)
-            explicit_domain = str(cookie.get("domain") or "").strip()
             google_family_scope = cls._is_google_family_cookie_host(scope_host)
 
-            if explicit_domain or not google_family_scope:
-                append_cookie(cookie)
+            # Always keep the cookie at its own scope. Host-only Google cookies
+            # (for example OSID on flow.google.com or LSID on accounts.google.com,
+            # as captured from a signed-in browser profile) have no domain and
+            # exist only at their URL; dropping them in favour of the mirrors
+            # below signs the context out of Flow.
+            append_cookie(cookie)
 
             if not google_family_scope:
                 continue
@@ -7008,11 +7012,11 @@ class BrowserCaptchaService:
 
         for cookie in browser_cookies:
             scope_host = cls._extract_cookie_scope_host(cookie)
-            explicit_domain = str(cookie.get("domain") or "").strip()
             google_family_scope = cls._is_google_family_cookie_host(scope_host)
 
-            if explicit_domain or not google_family_scope:
-                append_cookie(cookie)
+            # Keep host-only Google cookies at their own URL (see
+            # _build_personal_cookie_targets); mirrors are only additions.
+            append_cookie(cookie)
 
             if not google_family_scope:
                 continue
