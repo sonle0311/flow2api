@@ -232,6 +232,9 @@ print(result["choices"][0]["message"]["content"])
             inputs: 'Send a nonempty prompt. OpenAI attachments are message content parts with type=image_url and image_url.url containing a server-reachable HTTPS URL or a data:image/...;base64,... URI with actual bytes; never send a client filesystem path. Convert local files in the app and validate MIME type/size. Gemini uses fileData.fileUri or inlineData {mimeType,data}, with raw base64 in inlineData.data. Only the last OpenAI message supplies the main prompt/direct images and the last Gemini user content is used. I2V accepts 1–2 ordered first/last frames; R2V uses subject/style references, not frame interpolation. Omni auto chooses the text/reference path from 0–3 images. T2V takes no images. Extension takes an existing Flow mediaGenerationId in an OpenAI image_url marker extend://ID; no arbitrary video upload/MP4 URL or Gemini extension is supported. Keep data-media-id from streaming output when available; a normal nonstream response has no structured source ID, and there is no public media-ID lookup endpoint. Disable extension until a valid retained source ID is available.',
             runtime: 'OpenAI nonstream results use choices[0].message.content containing Markdown images or a video HTML wrapper (sometimes fenced), not an Images data array. SSE carries delta.reasoning_content progress, delta.content final media and [DONE]; buffer UTF-8 and SSE frame boundaries across network chunks, handle CRLF and final partial frames, and detect missing completion, empty output and in-stream errors even with HTTP 200. Gemini uses candidates[].content.parts inlineData/fileData and text progress. Parse media destinations and create safe img/video elements with controls; never execute returned HTML with innerHTML. Validate URL schemes/origins and bounded image data URIs; handle relative cache URLs, unreachable localhost, expiring links and downloads according to the app’s policy.',
             reliability: 'Use long generation timeouts (examples: 3600 seconds; server defaults are commonly 300 image/1500 video seconds), coordinate app/proxy timeouts and avoid SSE buffering. Handle 401 authentication, 400/422 validation, 403 access, 429 rate limits and 5xx upstream/unavailable failures using actual error payloads ({detail:...}, OpenAI error, Gemini error). Surface actionable errors without keys. No public job polling, upstream cancellation or idempotency-key guarantee is provided. Disable automatic generation POST retries, including SDK retries; a timeout/disconnect can leave paid work running. Do not blindly retry POST or promise that a retry is free/deduplicated. Bounded GET discovery retries are suitable; let users inspect state before deliberately submitting again.',
+            capacityTitle: "Throughput and concurrency limits",
+            capacity: "This deployment has finite capacity. The numbers below are a snapshot of its configuration when this handoff was generated; read them as limits, not targets, and make them configurable in the app (for example FLOW2API_MAX_PARALLEL_IMAGE / FLOW2API_MAX_PARALLEL_VIDEO) instead of hard-coding them. Implement a client-side concurrency limiter (semaphore/queue) per media type and never send more simultaneous generation requests than the recommended maximum; extra requests should wait in the app's own queue. Requests above the server limit are held in a server queue and fail when its wait timeout expires. Space bursts out rather than firing a whole batch at once. Treat HTTP 429 and errors mentioning reCAPTCHA evaluation failed, quota or rate limits as retryable: retry with exponential backoff and jitter (for example 5 s, 15 s, 45 s, at most 3 attempts) and lower the app's parallelism while they persist. Capacity grows with the number of active Google accounts on the server, not by raising client parallelism. For large batches show per-item progress and allow partial success.",
+            capacityLabels: {"captcha": "Captcha method", "thirdParty": "third-party paid solver", "local": "free local browser", "slots": "parallel captcha slots", "image": "Image", "video": "Video", "rec": "recommended max parallel requests", "accounts": "active accounts", "perAccount": "per-account concurrency", "total": "accounts total", "launch": "server launch limit", "stagger": "server launch spacing", "queue": "server queue timeout", "unlimited": "unlimited", "none": "no active account: requests will fail"},
             acceptanceTitle: 'Acceptance criteria',
             acceptance: 'The app exposes a usable Flow2API provider, secure configuration and a visible generation workflow; all eight family names are supported independently of the example currently shown in this guide; separate controls admit only registered tuples and valid references; final media and progress/errors render correctly; secrets stay server-side; mocked success, validation/auth failure, fragmented SSE, in-stream error and cancellation/timeout behavior pass relevant checks. Report any application-specific limitation explicitly. No paid generation is required to complete this integration.',
             recipesIntro: 'Use the following runnable requests and parsers as implementation fixtures. Adapt them to the existing app’s stack, provider interface and secure backend; they are not the deliverable by themselves. Choose only combinations from the tables above. Commands that submit generation are reference examples, not instructions to run paid integration tests.',
@@ -266,6 +269,9 @@ print(result["choices"][0]["message"]["content"])
             inputs: 'Gửi prompt không rỗng. Ảnh OpenAI là content part type=image_url, image_url.url chứa HTTPS mà server tải được hoặc data:image/...;base64,... chứa byte thật; không gửi đường dẫn file trên máy client. Chuyển file cục bộ trong ứng dụng, kiểm tra MIME/kích thước. Gemini dùng fileData.fileUri hoặc inlineData {mimeType,data}, inlineData.data chỉ chứa base64 thuần. Chỉ tin nhắn OpenAI cuối cung cấp prompt/ảnh trực tiếp và Gemini dùng user content cuối. I2V nhận 1–2 khung theo thứ tự đầu/cuối; R2V dùng ảnh tham chiếu chủ thể/phong cách, không phải nội suy khung. Omni auto chọn nhánh chữ/ảnh theo 0–3 ảnh. T2V không nhận ảnh. Nối dài cần mediaGenerationId Flow hiện có qua marker OpenAI image_url extend://ID; không hỗ trợ upload video bất kỳ, URL MP4 hay nối dài Gemini. Giữ data-media-id khi có trong stream; nonstream thường không có source ID có cấu trúc và không có endpoint public tra media ID. Vô hiệu hóa nối dài khi chưa có source ID hợp lệ đã giữ lại.',
             runtime: 'Kết quả OpenAI nonstream nằm trong choices[0].message.content, chứa Markdown ảnh hoặc HTML video (đôi khi trong code fence), không phải mảng data của Images. SSE có delta.reasoning_content cho tiến trình, delta.content cho media cuối và [DONE]; buffer UTF-8 và khung SSE qua các network chunk, xử lý CRLF, khung cuối chưa ngắt dòng, thiếu hoàn tất, output rỗng và lỗi trong stream dù HTTP 200. Gemini dùng candidates[].content.parts inlineData/fileData và text tiến trình. Parse URL media rồi tạo img/video an toàn có controls; không chạy HTML trả về bằng innerHTML. Kiểm tra scheme/origin và giới hạn data URI ảnh; xử lý URL cache tương đối, localhost không truy cập được, link hết hạn và tải xuống theo chính sách ứng dụng.',
             reliability: 'Dùng timeout tạo nội dung dài (ví dụ 3600 giây; mặc định server thường là 300 giây ảnh/1500 giây video), phối hợp timeout ứng dụng/proxy và tránh buffer SSE. Xử lý 401 xác thực, 400/422 validation, 403 quyền, 429 giới hạn tốc độ và 5xx upstream/không sẵn sàng theo payload thật ({detail:...}, OpenAI error, Gemini error). Hiển thị lỗi có hành động xử lý, không lộ key. Không có bảo đảm public về polling job, hủy upstream hay idempotency-key. Tắt retry POST tạo nội dung tự động kể cả SDK; timeout/mất kết nối có thể để tác vụ tính phí tiếp tục. Không retry POST mù quáng hoặc hứa miễn phí/khử trùng lặp. GET khám phá có thể retry giới hạn; cho người dùng xem trạng thái trước khi chủ động gửi lại.',
+            capacityTitle: "Giới hạn thông lượng và đồng thời",
+            capacity: "Triển khai này có năng lực giới hạn. Các con số dưới đây là ảnh chụp cấu hình tại thời điểm tạo hướng dẫn; coi chúng là giới hạn, không phải mục tiêu, và cho phép cấu hình trong ứng dụng (ví dụ FLOW2API_MAX_PARALLEL_IMAGE / FLOW2API_MAX_PARALLEL_VIDEO) thay vì viết cứng. Triển khai bộ giới hạn đồng thời phía ứng dụng (semaphore/hàng đợi) cho từng loại media và không bao giờ gửi đồng thời nhiều request tạo nội dung hơn mức tối đa khuyến nghị; request dư phải chờ trong hàng đợi của chính ứng dụng. Request vượt giới hạn server bị giữ trong hàng đợi server và lỗi khi hết thời gian chờ. Giãn các đợt gửi thay vì bắn cả lô cùng lúc. Coi HTTP 429 và lỗi nhắc tới reCAPTCHA evaluation failed, quota hoặc rate limit là có thể thử lại: retry với exponential backoff và jitter (ví dụ 5 s, 15 s, 45 s, tối đa 3 lần) và giảm số luồng của ứng dụng khi lỗi còn tiếp diễn. Năng lực tăng theo số tài khoản Google đang hoạt động trên server, không phải bằng cách tăng số luồng phía client. Với lô lớn, hiển thị tiến trình từng mục và cho phép thành công một phần.",
+            capacityLabels: {"captcha": "Phương thức captcha", "thirdParty": "dịch vụ giải bên thứ ba tính phí", "local": "trình duyệt cục bộ miễn phí", "slots": "số slot captcha song song", "image": "Ảnh", "video": "Video", "rec": "số request song song tối đa khuyến nghị", "accounts": "tài khoản hoạt động", "perAccount": "đồng thời mỗi tài khoản", "total": "tổng các tài khoản", "launch": "giới hạn gửi của server", "stagger": "giãn cách gửi của server", "queue": "thời gian chờ hàng đợi server", "unlimited": "không giới hạn", "none": "không có tài khoản hoạt động: request sẽ lỗi"},
             acceptanceTitle: 'Tiêu chí nghiệm thu',
             acceptance: 'Ứng dụng có provider Flow2API dùng được, cấu hình bảo mật và luồng tạo nội dung nhìn thấy được; hỗ trợ đủ tám tên dòng độc lập với ví dụ đang hiển thị trong hướng dẫn; control riêng chỉ cho tổ hợp đã đăng ký và ảnh hợp lệ; media cuối, tiến trình/lỗi hiển thị đúng; secret ở server; các kiểm tra mock thành công, lỗi validation/xác thực, SSE bị chia nhỏ, lỗi trong stream và hủy/timeout đều đạt. Báo rõ giới hạn riêng của ứng dụng. Không cần tạo nội dung tính phí để hoàn tất tích hợp.',
             recipesIntro: 'Dùng request và parser chạy được dưới đây làm fixture triển khai. Điều chỉnh theo stack, giao diện provider và backend bảo mật của ứng dụng; riêng ví dụ không phải sản phẩm bàn giao. Chỉ chọn tổ hợp từ bảng trên. Lệnh tạo nội dung là tài liệu tham khảo, không phải yêu cầu chạy tests tích hợp tính phí.',
@@ -300,6 +306,9 @@ print(result["choices"][0]["message"]["content"])
             inputs: '发送非空提示词。OpenAI 附件为 type=image_url 的 message content part，image_url.url 包含服务器可访问的 HTTPS 地址或带真实字节的 data:image/...;base64,... URI；不要发送客户端文件路径。在应用中转换本地文件并校验 MIME/大小。Gemini 使用 fileData.fileUri 或 inlineData {mimeType,data}，inlineData.data 只放原始 base64。OpenAI 仅最后一条消息提供主要提示词/直接图片，Gemini 使用最后一条 user content。I2V 接受按首帧/末帧顺序排列的 1–2 张图；R2V 使用主体/风格参考图，不是首尾帧插值。Omni auto 根据 0–3 张图片选择文生/参考图路径。T2V 不接收图片。续写需要现有 Flow mediaGenerationId，通过 OpenAI image_url 标记 extend://ID 传入；不支持任意视频上传、MP4 URL 或 Gemini 续写。流式结果提供 data-media-id 时应保留；普通非流式没有结构化源 ID，也无公开媒体 ID 查询端点。没有保留的有效源 ID 时禁用续写。',
             runtime: 'OpenAI 非流式结果位于 choices[0].message.content，包含 Markdown 图片或 video HTML 包装（可能在代码围栏中），不是 Images data 数组。SSE 通过 delta.reasoning_content 发送进度、delta.content 发送最终媒体，并以 [DONE] 结束；跨网络块缓存 UTF-8 和 SSE 帧，处理 CRLF、最后未分隔帧、未完成、空输出和 HTTP 200 中的流内错误。Gemini 使用 candidates[].content.parts 的 inlineData/fileData 及进度文本。解析媒体地址并创建带 controls 的安全 img/video 元素；不要通过 innerHTML 执行返回的 HTML。校验 URL scheme/origin 和受限图片 data URI；按照应用策略处理相对缓存 URL、不可达 localhost、过期链接和下载。',
             reliability: '配置长生成超时（示例 3600 秒；服务器常见默认值为图片 300 秒/视频 1500 秒），协调应用/代理超时并避免 SSE 缓冲。根据实际错误正文（{detail:...}、OpenAI error、Gemini error）处理 401 认证、400/422 校验、403 权限、429 限流及 5xx 上游/不可用错误。提供可操作提示，避免泄露 key。没有公开 job polling、上游取消或 idempotency-key 保证。禁用生成 POST 自动重试，包括 SDK 重试；超时/断线可能留下正在付费运行的任务。不要盲目重试 POST，也不要承诺免费或去重。发现 GET 可有限重试；让用户检查状态后再主动重新提交。',
+            capacityTitle: "吞吐量与并发限制",
+            capacity: "该部署的处理能力有限。下列数字是生成本说明时的配置快照；应视为上限而非目标，并在应用中做成可配置项（例如 FLOW2API_MAX_PARALLEL_IMAGE / FLOW2API_MAX_PARALLEL_VIDEO），不要写死。为每种媒体类型实现客户端并发限制器（semaphore/队列），同时发送的生成请求数不得超过建议上限；多余请求在应用自己的队列中等待。超过服务端限制的请求会进入服务端队列，等待超时后失败。分散突发请求，不要一次性发出整批。将 HTTP 429 以及提到 reCAPTCHA evaluation failed、配额或速率限制的错误视为可重试：使用指数退避加随机抖动重试（例如 5 秒、15 秒、45 秒，最多 3 次），错误持续时降低应用并发。容量随服务器上活跃 Google 账号数量增加，而不是靠提高客户端并发。大批量任务应显示逐项进度并允许部分成功。",
+            capacityLabels: {"captcha": "验证码方式", "thirdParty": "第三方付费打码", "local": "本地浏览器（免费）", "slots": "并行验证码槽位", "image": "图片", "video": "视频", "rec": "建议最大并行请求数", "accounts": "活跃账号", "perAccount": "每账号并发", "total": "账号合计", "launch": "服务端发车上限", "stagger": "服务端发车间隔", "queue": "服务端排队超时", "unlimited": "不限", "none": "无活跃账号：请求将失败"},
             acceptanceTitle: '验收标准',
             acceptance: '应用具有可用的 Flow2API provider、安全配置和可见生成流程；全部八个系列均可用，不受本指南当前示例选择影响；独立控件只允许已注册组合和有效参考图片；正确显示最终媒体、进度和错误；secret 保留在服务端；mock 成功、校验/认证失败、碎片化 SSE、流内错误及取消/超时行为通过相关检查。明确报告应用特定限制。完成集成不需要付费生成。',
             recipesIntro: '将下方可运行请求和 parser 作为实现 fixture，按现有应用的技术栈、provider 接口及安全后端调整；单独示例本身不是交付结果。仅使用上表列出的组合。生成命令是参考示例，不是运行付费集成测试的指令。',
@@ -389,6 +398,46 @@ print(result["choices"][0]["message"]["content"])
         return main + (modes.length ? '; ' + modes.map(mode => mode + ' → ' + format(contract.mode_defaults[mode])).join('; ') : '');
     }
 
+    // Copy only validated numbers and known method names from the live
+    // capacity snapshot; anything else is omitted rather than echoed.
+    const captchaMethods = new Set(['personal', 'browser', 'remote_browser', 'yescaptcha', 'flow2api_team',
+        'captcharun', 'twocaptcha', 'capsolver', 'ezcaptcha', 'capmonster']);
+    function formatCapacity(capacity, labels) {
+        if (!capacity || typeof capacity !== 'object') return '';
+        const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+        const limit = value => value === null ? labels.unlimited : (count(value) ?? null);
+        const lines = [];
+        if (captchaMethods.has(capacity.captcha_method)) {
+            const kind = capacity.captcha_third_party === true ? labels.thirdParty : labels.local;
+            const slots = count(capacity.captcha_parallel_slots);
+            lines.push('- ' + labels.captcha + ': ' + capacity.captcha_method + ' (' + kind + ')'
+                + (slots !== null ? ', ' + labels.slots + ': ' + slots : ''));
+        }
+        for (const [key, title] of [['image', labels.image], ['video', labels.video]]) {
+            const item = capacity[key];
+            if (!item || typeof item !== 'object') continue;
+            const accounts = count(item.active_accounts);
+            const recommended = item.recommended_max_parallel_requests;
+            if (accounts === null || (recommended !== null && count(recommended) === null)) continue;
+            const parts = [];
+            parts.push(accounts === 0 ? labels.none : labels.rec + ': ' + limit(recommended));
+            parts.push(labels.accounts + ': ' + accounts);
+            const per = Array.isArray(item.per_account_concurrency)
+                ? item.per_account_concurrency.filter(v => v === -1 || count(v) !== null) : [];
+            if (per.length) parts.push(labels.perAccount + ': ' + per.map(v => v === -1 ? labels.unlimited : v).join('/'));
+            if (item.accounts_total_concurrency === null || count(item.accounts_total_concurrency) !== null) {
+                parts.push(labels.total + ': ' + limit(item.accounts_total_concurrency));
+            }
+            if (item.launch_soft_limit === null || count(item.launch_soft_limit) !== null) {
+                parts.push(labels.launch + ': ' + limit(item.launch_soft_limit));
+            }
+            if (count(item.launch_stagger_ms) !== null) parts.push(labels.stagger + ': ' + item.launch_stagger_ms + ' ms');
+            if (count(item.queue_wait_timeout_seconds) !== null) parts.push(labels.queue + ': ' + item.queue_wait_timeout_seconds + ' s');
+            lines.push('- ' + title + ': ' + parts.join('; '));
+        }
+        return lines.join('\n');
+    }
+
     function buildAgentPrompt(root, locale, reference) {
         const language = agentProse[locale] ? locale : 'en';
         const p = agentProse[language];
@@ -412,10 +461,11 @@ print(result["choices"][0]["message"]["content"])
             '### ' + p.typesTitle, p.types,
             '### ' + p.defaultsTitle, p.defaults, contracts.map(formatDefaults).join('\n'),
             '## ' + p.inputsTitle, p.inputs, p.runtime, p.reliability,
+            '## ' + p.capacityTitle, p.capacity, formatCapacity(reference?.capacity, p.capacityLabels),
             '## ' + p.acceptanceTitle, p.acceptance,
             build(origin, language, { intro: p.recipesIntro, skipUpscale: true,
                 copy: { extend: p.extend, setup: p.setup, js: p.js } })
-        ].join('\n\n').trim();
+        ].filter(part => part !== '').join('\n\n').trim();
     }
 
     window.Flow2APIIntegrationRecipes = Object.freeze({ build, buildAgentPrompt });

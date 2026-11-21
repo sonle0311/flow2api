@@ -404,10 +404,12 @@ async def instrument_font(font_name: str):
 @app.get("/api/integration/reference")
 async def integration_reference(request: Request, token: str = Depends(admin.verify_admin_token)):
     """Complete endpoint contracts, schemas and model capabilities for integration agents."""
-    from .core.integration_reference import build_integration_reference
+    from .core.integration_reference import build_capacity, build_integration_reference
 
+    reference = build_integration_reference(request.app)
+    reference["capacity"] = build_capacity(config, await db.get_all_tokens())
     return JSONResponse(
-        content=build_integration_reference(request.app),
+        content=reference,
         headers={"Cache-Control": "no-store"},
     )
 

@@ -41,7 +41,7 @@ def _authentication(route):
 
 
 def build_integration_reference(app):
-    """Return schemas, static examples and model capabilities, never account/config data."""
+    """Return schemas, static examples and model capabilities, never account/config secrets."""
     specification = app.openapi()
     endpoints = []
     for route in app.routes:
@@ -109,4 +109,54 @@ def build_integration_reference(app):
         "aliases": aliases,
         "model_parameters": get_model_parameter_contracts(MODEL_CONFIG),
         "schemas": deepcopy(specification.get("components", {}).get("schemas", {})),
+    }
+
+
+_BROWSER_CAPTCHA_METHODS = {"personal", "browser"}
+
+
+def _limit(value):
+    """Normalize a configured limit: positive int, or None for unlimited/off."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def build_capacity(settings, tokens):
+    """Throughput limits a client should respect, from the running configuration.
+
+    Only numbers and the captcha method name are returned: no account
+    identities, credentials, URLs or API keys.
+    """
+    method = str(settings.captcha_method or "")
+    captcha_slots = None
+    if method in _BROWSER_CAPTCHA_METHODS:
+        captcha_slots = min(50, settings.browser_count * settings.personal_max_resident_tabs) \
+            if method == "personal" else settings.browser_count
+
+    def per_kind(kind):
+        enabled = [t for t in tokens if t.is_active and getattr(t, f"{kind}_enabled", True)]
+        limits = [_limit(getattr(t, f"{kind}_concurrency", -1)) for t in enabled]
+        accounts_limit = None if not enabled or None in limits else sum(limits)
+        launch_limit = _limit(getattr(settings, f"flow_{kind}_launch_soft_limit"))
+        bounds = [b for b in (captcha_slots, launch_limit, accounts_limit) if b is not None]
+        return {
+            "active_accounts": len(enabled),
+            "per_account_concurrency": sorted({-1 if v is None else v for v in limits}),
+            "accounts_total_concurrency": accounts_limit,
+            "launch_soft_limit": launch_limit,
+            "launch_stagger_ms": max(0, int(getattr(settings, f"flow_{kind}_launch_stagger_ms") or 0)),
+            "queue_wait_timeout_seconds": int(getattr(settings, f"flow_{kind}_slot_wait_timeout")),
+            # 0 means no account can currently serve this kind of request.
+            "recommended_max_parallel_requests": 0 if not enabled else (min(bounds) if bounds else None),
+        }
+
+    return {
+        "captcha_method": method,
+        "captcha_third_party": method not in _BROWSER_CAPTCHA_METHODS and method != "remote_browser",
+        "captcha_parallel_slots": captcha_slots,
+        "image": per_kind("image"),
+        "video": per_kind("video"),
     }

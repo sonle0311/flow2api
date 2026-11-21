@@ -62,6 +62,8 @@ def test_complete_reference_matches_routes_and_models_without_runtime_secrets(mo
         assert r2v["min_images"] == 1
         assert r2v["locally_validated_min_images"] == 0
         assert "ChatCompletionRequest" in reference["schemas"]
+        assert set(reference["capacity"]) >= {"captcha_method", "captcha_parallel_slots", "image", "video"}
+        assert "recommended_max_parallel_requests" in reference["capacity"]["image"]
         assert "PRIVATE-KEY-NOT-FOR-DOCS-72910" not in response.text
         assert session not in response.text
         endpoints = {(e["method"], e["path"]): e for e in reference["endpoints"]}
