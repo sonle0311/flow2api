@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import patch, AsyncMock
 
 from src.core.database import Database
 from src.core.models import Token
@@ -24,6 +24,10 @@ class FakePage:
         if self.closed:
             raise RuntimeError("closed browser contains secret Cookie=bad")
         return {"host": "flow.google.com", "email": self.email, "ready": "complete"}
+
+    async def close(self):
+        self.trimmed = True
+        self.closed = True
 
     async def bring_to_front(self):
         pass
@@ -141,6 +145,8 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         status = await self.wait_login()
         self.assertEqual("ready", status["status"])
         self.assertFalse(status["browser_open"])
+        # macOS keeps a window-less Chrome alive: it must be shut down before reuse.
+        self.manual.close.assert_awaited()
         self.assertEqual(1, len(self.launches))
         self.assertTrue(self.launches[0][1])
         self.assertTrue(self.contexts[0].closed)
@@ -445,6 +451,33 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         launch.side_effect = [RuntimeError("Chromium distribution 'chrome' is not found at test"), FakeContext()]
         await self.service._launch_browser(Path(self.temp.name) / "browser", headless=True, proxy=None)
         self.assertEqual(2, launch.await_count)
+
+    async def test_closing_sync_context_keeps_only_one_flow_tab(self):
+        context = FakeContext()
+        flow = context.pages[0]
+        flow.url = "https://flow.google.com/projects"
+        extras = []
+        for url in ("https://flow.google.com/projects", "about:blank", "https://accounts.google.com/"):
+            page = FakePage()
+            page.url = url
+            extras.append(page)
+        context.pages.extend(extras)
+        self.service._contexts[self.token_id] = context
+        await self.service._close_context(self.token_id)
+        self.assertFalse(getattr(flow, "trimmed", False))
+        self.assertTrue(all(getattr(page, "trimmed", False) for page in extras))
+        self.assertTrue(context.closed)
+
+    async def test_macos_headless_sync_uses_real_keychain(self):
+        launch = AsyncMock(return_value=FakeContext())
+        self.service._playwright = SimpleNamespace(chromium=SimpleNamespace(launch_persistent_context=launch), stop=AsyncMock())
+        with patch("src.services.managed_browser.sys.platform", "darwin"):
+            await self.service._launch_browser(Path(self.temp.name) / "browser", headless=True, proxy=None)
+        self.assertEqual(["--use-mock-keychain"], launch.await_args.kwargs["ignore_default_args"])
+        launch.reset_mock()
+        with patch("src.services.managed_browser.sys.platform", "linux"):
+            await self.service._launch_browser(Path(self.temp.name) / "browser", headless=True, proxy=None)
+        self.assertNotIn("ignore_default_args", launch.await_args.kwargs)
 
     async def test_real_browser_preserves_session_cookie_after_clean_exit(self):
         """Use only an invented loopback cookie, without visiting Google."""

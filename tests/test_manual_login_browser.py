@@ -78,3 +78,60 @@ class ManualLoginBrowserTests(unittest.IsolatedAsyncioTestCase):
         close.assert_called_once_with(process.pid)
         process.wait.assert_called_once()
         process.terminate.assert_not_called()
+
+    def test_closing_last_shown_window_ends_login_while_process_lives(self):
+        from src.services.manual_login_browser import ManualBrowser
+        process = MagicMock()
+        process.poll.return_value = None
+        helpers = [(1, False, 500.0, 500.0), (2, False, 1920.0, 30.0), (3, True, 1.0, 1.0)]
+        windows = list(helpers)
+        browser = ManualBrowser(process, "chrome", window_lister=lambda pid: windows)
+        # Only hidden helper windows so far: keep waiting.
+        self.assertTrue(browser.is_running)
+        windows.append((10, True, 1200.0, 724.0))
+        self.assertTrue(browser.is_running)
+        # Minimized / on another Space: still listed, just not on screen.
+        windows[-1] = (10, False, 1200.0, 724.0)
+        self.assertTrue(browser.is_running)
+        windows.pop()
+        self.assertFalse(browser.is_running)
+        self.assertTrue(browser.process_running)
+
+    def test_second_window_keeps_login_open_until_all_are_closed(self):
+        from src.services.manual_login_browser import ManualBrowser
+        process = MagicMock()
+        process.poll.return_value = None
+        windows = [(10, True, 1200.0, 724.0)]
+        browser = ManualBrowser(process, "chrome", window_lister=lambda pid: windows)
+        self.assertTrue(browser.is_running)
+        windows.append((11, True, 800.0, 600.0))
+        self.assertTrue(browser.is_running)
+        windows.pop(0)
+        self.assertTrue(browser.is_running)
+        windows.pop(0)
+        self.assertFalse(browser.is_running)
+
+    def test_window_listing_failure_falls_back_to_process_state(self):
+        from src.services.manual_login_browser import ManualBrowser
+        process = MagicMock()
+        process.poll.return_value = None
+
+        def broken(pid):
+            raise OSError("unavailable")
+
+        browser = ManualBrowser(process, "chrome", window_lister=broken)
+        self.assertTrue(browser.is_running)
+        process.poll.return_value = 0
+        self.assertFalse(browser.is_running)
+
+    async def test_close_terminates_window_less_browser_process(self):
+        from src.services.manual_login_browser import ManualBrowser
+        process = MagicMock()
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        browser = ManualBrowser(process, "chrome", window_lister=lambda pid: [])
+        browser._seen_windows.add(10)
+        self.assertFalse(browser.is_running)
+        with patch("src.services.manual_login_browser._request_window_close", return_value=False):
+            await browser.close()
+        process.terminate.assert_called_once()

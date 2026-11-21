@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,12 @@ from .browser_cookie_utils import is_partitioned_cookie, validate_flow_cookie_st
 
 
 FLOW_URL = "https://flow.google.com/projects"
+
+
+def _timing(token_id, step, started):
+    # Stage timings only (no cookies or identities) to diagnose slow hand-offs.
+    loop = asyncio.get_running_loop()
+    print(f"[managed-browser] token={token_id} {step} +{loop.time() - started:.1f}s", flush=True)
 
 
 def _utcnow() -> datetime:
@@ -180,6 +187,13 @@ class ManagedBrowserService:
             "viewport": {"width": 1200, "height": 850},
             "args": ["--restore-last-session"],
         }
+        if sys.platform == "darwin":
+            # Profiles are signed in through ordinary Chrome, which encrypts
+            # cookies with the real "Chrome Safe Storage" Keychain key.
+            # Playwright's default mock keychain cannot decrypt them, and
+            # Chrome then deletes the undecryptable cookies, signing the
+            # account out of its own profile.
+            options["ignore_default_args"] = ["--use-mock-keychain"]
         if os.environ.get("FLOW2API_CHROME_SANDBOX", "").lower() in {"1", "true", "yes", "on"}:
             options["chromium_sandbox"] = True
         channel = read_profile_channel(profile_path) or "chrome"
@@ -214,9 +228,32 @@ class ManagedBrowserService:
         context.on("close", closed)
         return context, True
 
+    @staticmethod
+    async def _trim_pages(context):
+        """Keep one Flow tab so the restored session does not grow on every sync.
+
+        The profile is launched with --restore-last-session (needed to keep
+        session-only cookies), so every tab left open is reopened, and loaded,
+        by the next background sync and the next interactive login.
+        """
+        try:
+            pages = [p for p in context.pages if not p.is_closed()]
+        except Exception:
+            return
+        if len(pages) <= 1:
+            return
+        keep = next((p for p in pages if urlparse(p.url).hostname == "flow.google.com"), pages[-1])
+        for page in pages:
+            if page is not keep:
+                try:
+                    await asyncio.wait_for(page.close(), timeout=5)
+                except Exception:
+                    pass
+
     async def _close_context(self, token_id):
         context = self._contexts.pop(token_id, None)
         if context is not None:
+            await self._trim_pages(context)
             try:
                 await asyncio.wait_for(context.close(), timeout=10)
             except Exception:
@@ -259,17 +296,25 @@ class ManagedBrowserService:
                 pass
         if stop.is_set() or self._closing:
             return
-        self._manual_browsers.pop(token_id, None)
+        started = asyncio.get_running_loop().time()
+        _timing(token_id, "window closed", started)
+        # The user closed the last window; make sure the browser process has
+        # exited (macOS keeps it alive) so the profile is flushed and unlocked.
+        await self._close_manual_browser(token_id)
+        _timing(token_id, "browser exited", started)
         token = await self._token(token_id)
         context = None
         try:
             await self._write(token_id, status="syncing", error_code="")
             context, _ = await self._context(token, headless=True)
             page = await self._page(context)
+            _timing(token_id, "headless profile opened", started)
             await page.goto(FLOW_URL, wait_until="domcontentloaded", timeout=30000)
             error, result = await self._capture(token, context)
+            _timing(token_id, f"cookies captured ({error or 'ok'})", started)
             if result and not stop.is_set() and not self._closing:
                 await self._save(token_id, result, interactive=True)
+                _timing(token_id, "cookies saved", started)
             elif not stop.is_set():
                 await self._write(token_id, status="needs_login", error_code=error)
         finally:

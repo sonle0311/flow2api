@@ -83,10 +83,16 @@
             if (epoch !== generation) return;
             if (!data.success || !data.session || data.session.token_id !== id) throw new Error('request_failed');
             const wasReady = currentSession?.status === 'ready';
+            const wasBusy = BUSY_STATUSES.has(currentSession?.status);
             currentSession = data.session;
             if (!wasReady && currentSession.status === 'ready' && window.refreshTokens) {
                 // Show the restored account immediately after explicit login succeeds.
                 await window.refreshTokens();
+            }
+            if (wasBusy && currentSession.status === 'ready' && dialog?.open) {
+                // Login hand-off is complete: dismiss the "open browser" dialog.
+                dialog.close();
+                return;
             }
         } catch (error) {
             if (epoch === generation && error.name !== 'AbortError') {

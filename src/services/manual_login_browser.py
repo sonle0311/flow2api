@@ -78,17 +78,125 @@ def _request_window_close(pid):
     return found
 
 
+_MAC_MIN_WIDTH = 300
+_MAC_MIN_HEIGHT = 200
+_mac_window_api = None
+
+
+def _load_mac_window_api():
+    """Bind the CoreGraphics window list via ctypes (window metadata needs no permission)."""
+    global _mac_window_api
+    if _mac_window_api is None:
+        import ctypes
+        import ctypes.util
+
+        vp = ctypes.c_void_p
+        cg = ctypes.CDLL(ctypes.util.find_library("CoreGraphics"))
+        cf = ctypes.CDLL(ctypes.util.find_library("CoreFoundation"))
+        cg.CGWindowListCopyWindowInfo.restype = vp
+        cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        cf.CFArrayGetCount.restype = ctypes.c_long
+        cf.CFArrayGetCount.argtypes = [vp]
+        cf.CFArrayGetValueAtIndex.restype = vp
+        cf.CFArrayGetValueAtIndex.argtypes = [vp, ctypes.c_long]
+        cf.CFDictionaryGetValue.restype = vp
+        cf.CFDictionaryGetValue.argtypes = [vp, vp]
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [vp, ctypes.c_int, vp]
+        cf.CFBooleanGetValue.restype = ctypes.c_bool
+        cf.CFBooleanGetValue.argtypes = [vp]
+        cf.CFRelease.argtypes = [vp]
+
+        class Rect(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double), ("w", ctypes.c_double), ("h", ctypes.c_double)]
+
+        cg.CGRectMakeWithDictionaryRepresentation.restype = ctypes.c_bool
+        cg.CGRectMakeWithDictionaryRepresentation.argtypes = [vp, ctypes.POINTER(Rect)]
+        keys = {
+            name: vp.in_dll(cg, name)
+            for name in ("kCGWindowOwnerPID", "kCGWindowLayer", "kCGWindowNumber", "kCGWindowIsOnscreen", "kCGWindowBounds")
+        }
+        _mac_window_api = (ctypes, cg, cf, Rect, keys)
+    return _mac_window_api
+
+
+def _mac_windows(pid):
+    """Return [(window_number, onscreen, width, height)] for normal-layer windows owned by pid."""
+    ctypes, cg, cf, Rect, keys = _load_mac_window_api()
+
+    def number(entry, key):
+        value = cf.CFDictionaryGetValue(entry, keys[key])
+        if not value:
+            return None
+        out = ctypes.c_int64()
+        cf.CFNumberGetValue(value, 4, ctypes.byref(out))  # kCFNumberSInt64Type
+        return out.value
+
+    windows = []
+    listing = cg.CGWindowListCopyWindowInfo(0, 0)  # kCGWindowListOptionAll, including minimized/other Spaces
+    if not listing:
+        raise OSError("window_list_unavailable")
+    try:
+        for index in range(cf.CFArrayGetCount(listing)):
+            entry = cf.CFArrayGetValueAtIndex(listing, index)
+            if number(entry, "kCGWindowOwnerPID") != pid or number(entry, "kCGWindowLayer") != 0:
+                continue
+            onscreen = cf.CFDictionaryGetValue(entry, keys["kCGWindowIsOnscreen"])
+            rect = Rect()
+            bounds = cf.CFDictionaryGetValue(entry, keys["kCGWindowBounds"])
+            if bounds:
+                cg.CGRectMakeWithDictionaryRepresentation(bounds, ctypes.byref(rect))
+            windows.append((number(entry, "kCGWindowNumber"), bool(onscreen and cf.CFBooleanGetValue(onscreen)), rect.w, rect.h))
+    finally:
+        cf.CFRelease(listing)
+    return windows
+
+
 class ManualBrowser:
-    def __init__(self, process, channel):
+    def __init__(self, process, channel, window_lister=None):
         self.process = process
         self.channel = channel
+        # macOS keeps Chrome alive after its last window closes, so process exit
+        # alone never signals the hand-off there; watch the browser windows too.
+        if window_lister is None and sys.platform == "darwin":
+            window_lister = _mac_windows
+        self._window_lister = window_lister
+        self._seen_windows = set()
+
+    def _windows_closed(self):
+        """True once every real browser window that has been shown is gone.
+
+        Chrome also owns hidden helper windows that never appear on screen, so a
+        window counts only after it has been visible at browser-window size.
+        Minimized windows or windows on another Space remain in the list and
+        therefore do not count as closed.
+        """
+        if self._window_lister is None:
+            return False
+        try:
+            windows = self._window_lister(self.process.pid)
+        except Exception:
+            return False
+        for number, onscreen, width, height in windows:
+            if onscreen and width >= _MAC_MIN_WIDTH and height >= _MAC_MIN_HEIGHT:
+                self._seen_windows.add(number)
+        if not self._seen_windows:
+            return False
+        existing = {number for number, *_ in windows}
+        return not (self._seen_windows & existing)
 
     @property
     def is_running(self):
+        return self.process.poll() is None and not self._windows_closed()
+
+    @property
+    def process_running(self):
         return self.process.poll() is None
 
     async def close(self):
-        if not self.is_running:
+        # A window-less Chrome on macOS still holds the profile lock and unsaved
+        # cookies; terminating it (SIGTERM) shuts it down cleanly and flushes them.
+        if not self.process_running:
             return
         try:
             closed = await asyncio.to_thread(_request_window_close, self.process.pid)
@@ -99,12 +207,12 @@ class ManualBrowser:
         try:
             await asyncio.to_thread(self.process.wait, timeout=8)
         except subprocess.TimeoutExpired:
-            if self.is_running:
+            if self.process_running:
                 self.process.terminate()
             try:
                 await asyncio.to_thread(self.process.wait, timeout=3)
             except subprocess.TimeoutExpired:
-                if self.is_running:
+                if self.process_running:
                     self.process.kill()
                 await asyncio.to_thread(self.process.wait, timeout=3)
 
@@ -121,9 +229,11 @@ async def launch_manual_browser(profile_path, *, proxy=None):
         raise RuntimeError("browser_unavailable")
     profile = Path(profile_path)
     profile.mkdir(parents=True, exist_ok=True)
+    # Open Flow as a tab of the restored window rather than in an extra
+    # window, so repeated logins do not stack up windows in the profile.
     args = [
         executable, f"--user-data-dir={profile}", "--restore-last-session",
-        "--no-first-run", "--disable-background-mode", "--new-window", FLOW_URL,
+        "--no-first-run", "--disable-background-mode", FLOW_URL,
     ]
     if proxy:
         args.insert(-1, f"--proxy-server={proxy['server']}")
