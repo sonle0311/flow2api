@@ -89,7 +89,7 @@ def test_complete_integration_reference_keeps_local_features_and_adds_omni_12():
     models = {model["id"]: model for model in reference["models"]}
     assert models["omni-1.2-flash-15s-portrait"]["duration_seconds"] == 15
     assert models["omni-1.2-flash-15s-portrait"]["max_images"] == 3
-    assert "omni-1.2-flash-15s-landscape" not in models
+    assert models["omni-1.2-flash-15s-landscape"]["duration_seconds"] == 15
     assert "omni-1.1-flash-8s-landscape" in models
     endpoints = {(entry["method"], entry["path"]) for entry in reference["endpoints"]}
     assert ("POST", "/api/browser-sessions/accounts") in endpoints
@@ -102,9 +102,8 @@ def test_public_catalog_preserves_previous_models_and_lists_all_omni_12_variants
     expected = {"omni-1.2-flash"}
     expected.update(
         f"omni-1.2-flash-{seconds}s-{orientation}"
-        for seconds in range(3, 11) for orientation in ("landscape", "portrait")
+        for seconds in range(3, 16) for orientation in ("landscape", "portrait")
     )
-    expected.update(f"omni-1.2-flash-{seconds}s-portrait" for seconds in range(11, 16))
     assert {model for model in listed if model.startswith("omni-1.2-")} == expected
     assert len(listed - expected) == 82
-    assert len(expected) == 22
+    assert len(expected) == 27

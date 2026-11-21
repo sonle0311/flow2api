@@ -26,6 +26,8 @@ def _openai(model, video_config=None, **extra):
     (10, "16:9", "omni-1.2-flash-10s-landscape"),
     (11, "9:16", "omni-1.2-flash-11s-portrait"),
     (15, "9:16", "omni-1.2-flash-15s-portrait"),
+    (11, "16:9", "omni-1.2-flash-11s-landscape"),
+    (15, "16:9", "omni-1.2-flash-15s-landscape"),
 ])
 def test_omni_base_selects_requested_duration_and_orientation(seconds, ratio, expected):
     request = _openai("omni-1.2-flash", {"durationSeconds": seconds, "aspectRatio": ratio})
@@ -53,7 +55,6 @@ def test_public_base_defaults_keep_eight_second_landscape(model):
 
 
 @pytest.mark.parametrize("model,config", [
-    ("omni-1.2-flash", {"durationSeconds": 11, "aspectRatio": "16:9"}),
     ("omni-1.2-flash", {"durationSeconds": 2}),
     ("omni-1.2-flash", {"durationSeconds": 16}),
     ("omni-1.2-flash", {"durationSeconds": 8.5}),
@@ -131,8 +132,11 @@ def test_capability_combinations_come_from_the_registry():
     omni = contracts["omni-1.2-flash"]
     assert omni["config_path"] == "generationConfig.videoConfig"
     assert omni["defaults"] == {"durationSeconds": 8, "aspectRatio": "16:9", "mode": "auto"}
-    assert len(omni["variants"]) == 21
-    assert all(item["aspectRatio"] == "9:16" for item in omni["variants"] if item["durationSeconds"] > 10)
+    # Upstream: both orientations support 3s-15s (11s-15s need AI Plus/Pro/Ultra).
+    assert len(omni["variants"]) == 26
+    assert {(item["durationSeconds"], item["aspectRatio"]) for item in omni["variants"]} == {
+        (seconds, ratio) for seconds in range(3, 16) for ratio in ("16:9", "9:16")
+    }
     assert "r2v" not in contracts["veo-3.1-quality"]["parameters"]["mode"]["values"]
     for contract in contracts.values():
         for variant in contract["variants"]:
@@ -140,6 +144,7 @@ def test_capability_combinations_come_from_the_registry():
 
     reduced = dict(MODEL_CONFIG)
     del reduced["omni-1.2-flash-15s-portrait"]
+    del reduced["omni-1.2-flash-15s-landscape"]
     reduced_contract = next(item for item in model_resolver.get_model_parameter_contracts(reduced) if item["id"] == "omni-1.2-flash")
     assert 15 not in reduced_contract["parameters"]["durationSeconds"]["values"]
     with pytest.raises(ValueError):
