@@ -1,4 +1,4 @@
-"""Per-client API keys with a request-rate limit and a concurrency limit.
+"""Per-client API keys with a request-rate limit, a concurrency limit and a model allow-list.
 
 The key is shown once at creation; only its SHA-256 hash is stored. Keys carry
 high entropy, so an unsalted hash is enough and lets authentication be a
@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
+import re
 import secrets
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import lru_cache
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import aiosqlite
 
@@ -29,6 +32,11 @@ MAX_RATE_LIMIT_PER_MINUTE = 100000
 MAX_CONCURRENT = 1000
 MAX_NAME_LENGTH = 64
 FLUSH_INTERVAL_SECONDS = 30
+MAX_ALLOWED_MODELS = 200
+MAX_MODEL_PATTERN_LENGTH = 100
+TYPE_PATTERN_PREFIX = "type:"
+MODEL_TYPES = ("image", "video")
+_MODEL_PATTERN_RE = re.compile(r"type:(?:image|video)|[A-Za-z0-9._*-]+")
 
 
 def hash_key(api_key: str) -> str:
@@ -54,6 +62,7 @@ class ClientKey:
     total_requests: int
     created_at: str
     last_used_at: Optional[str]
+    allowed_models: list[str] = field(default_factory=list)
 
 
 class ClientLimitExceeded(Exception):
@@ -74,6 +83,20 @@ class ClientLimitExceeded(Exception):
         if self.reason == "rate_limit":
             return f"已超过该 API Key 的速率限制（每分钟 {self.limit} 次），请 {self.retry_after} 秒后重试"
         return f"已超过该 API Key 的并发上限（{self.limit} 个进行中的请求），请 {self.retry_after} 秒后重试"
+
+
+class ModelNotAllowed(Exception):
+    """The client key may not use the requested model; answer HTTP 403."""
+
+    code = "model_not_allowed"
+
+    def __init__(self, model: str):
+        super().__init__(model)
+        self.model = model
+
+    @property
+    def message(self) -> str:
+        return f"该 API Key 无权使用模型 {self.model}"
 
 
 class Lease:
@@ -104,6 +127,47 @@ def _validated_name(value: Any) -> str:
     return name
 
 
+@lru_cache(maxsize=512)
+def _compiled_pattern(pattern: str) -> "re.Pattern[str]":
+    """Only ``*`` is a wildcard; everything else matches literally."""
+    return re.compile(".*".join(re.escape(part) for part in pattern.split("*")))
+
+
+def _decode_models(raw: Any) -> list[str]:
+    try:
+        value = json.loads(raw) if isinstance(raw, str) else []
+    except ValueError:
+        return []
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _validated_models(value: Any, known_models: Optional[Iterable[str]]) -> list[str]:
+    """Normalise an allow-list. Entries are model names, ``*`` patterns or ``type:image|video``."""
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or len(value) > MAX_ALLOWED_MODELS:
+        raise ValueError(f"allowed_models must be a list of at most {MAX_ALLOWED_MODELS} entries")
+    patterns: list[str] = []
+    for item in value:
+        pattern = item.strip() if isinstance(item, str) else ""
+        if (
+            not pattern
+            or len(pattern) > MAX_MODEL_PATTERN_LENGTH
+            or _MODEL_PATTERN_RE.fullmatch(pattern) is None
+        ):
+            raise ValueError(f"invalid allowed_models entry: {item!r}")
+        if pattern not in patterns:
+            patterns.append(pattern)
+    if known_models is not None:
+        names = list(known_models)
+        for pattern in patterns:
+            if pattern.startswith(TYPE_PATTERN_PREFIX):
+                continue
+            if not any(_compiled_pattern(pattern).fullmatch(name) for name in names):
+                raise ValueError(f"allowed_models entry matches no known model: {pattern}")
+    return patterns
+
+
 class ClientKeyService:
     def __init__(self, db, clock: Callable[[], float] = time.monotonic):
         self.db = db
@@ -114,6 +178,9 @@ class ClientKeyService:
         self._inflight: dict[int, int] = {}
         self._pending: dict[int, int] = {}
         self._flusher: Optional[asyncio.Task] = None
+        # Returns every model name a client may reference; set by the application so
+        # allow-list entries can be validated. None disables validation.
+        self.known_models: Optional[Callable[[], Iterable[str]]] = None
 
     async def initialize(self) -> None:
         async with self.db._connect(write=True) as conn:
@@ -128,9 +195,13 @@ class ClientKeyService:
                     max_concurrent INTEGER NOT NULL DEFAULT 0,
                     total_requests INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
-                    last_used_at TEXT
+                    last_used_at TEXT,
+                    allowed_models TEXT NOT NULL DEFAULT '[]'
                 )
             """)
+            columns = {row[1] for row in await (await conn.execute("PRAGMA table_info(client_keys)")).fetchall()}
+            if "allowed_models" not in columns:
+                await conn.execute("ALTER TABLE client_keys ADD COLUMN allowed_models TEXT NOT NULL DEFAULT '[]'")
             await conn.commit()
         async with self.db._connect() as conn:
             conn.row_factory = aiosqlite.Row
@@ -151,6 +222,7 @@ class ClientKeyService:
             max_concurrent=row["max_concurrent"],
             total_requests=row["total_requests"],
             created_at=row["created_at"], last_used_at=row["last_used_at"],
+            allowed_models=_decode_models(row["allowed_models"]),
         )
 
     # ----- authentication and limits (synchronous: no await, so no races) -----
@@ -160,6 +232,23 @@ class ClientKeyService:
             return None
         record = self._by_hash.get(hash_key(api_key))
         return record if record is not None and record.is_active else None
+
+    @staticmethod
+    def model_allowed(key: ClientKey, names: Iterable[str], media_type: Optional[str]) -> bool:
+        """True when any of ``names`` (e.g. requested and resolved model) is permitted.
+
+        An empty allow-list means every model. ``type:image`` / ``type:video`` allow a whole kind.
+        """
+        if not key.allowed_models:
+            return True
+        names = tuple(names)
+        for pattern in key.allowed_models:
+            if pattern.startswith(TYPE_PATTERN_PREFIX):
+                if pattern[len(TYPE_PATTERN_PREFIX):] == media_type:
+                    return True
+            elif any(_compiled_pattern(pattern).fullmatch(name) for name in names):
+                return True
+        return False
 
     def admit(self, key: ClientKey) -> Lease:
         """Count one request against the key or raise ClientLimitExceeded."""
@@ -199,6 +288,7 @@ class ClientKeyService:
             "is_active": key.is_active,
             "rate_limit_per_minute": key.rate_limit_per_minute,
             "max_concurrent": key.max_concurrent,
+            "allowed_models": list(key.allowed_models),
             "total_requests": key.total_requests,
             "created_at": key.created_at,
             "last_used_at": key.last_used_at,
@@ -212,30 +302,36 @@ class ClientKeyService:
     def get(self, key_id: int) -> Optional[ClientKey]:
         return self._by_id.get(key_id)
 
+    def _validate_models(self, value: Any) -> list[str]:
+        return _validated_models(value, self.known_models() if self.known_models else None)
+
     async def create(
         self,
         name: str,
         rate_limit_per_minute: int = DEFAULT_RATE_LIMIT_PER_MINUTE,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+        allowed_models: Optional[list[str]] = None,
     ) -> tuple[dict, str]:
         """Create a key and return (description, plaintext key shown only now)."""
         name = _validated_name(name)
         rate = _validated_int(rate_limit_per_minute, "rate_limit_per_minute", MAX_RATE_LIMIT_PER_MINUTE)
         concurrent = _validated_int(max_concurrent, "max_concurrent", MAX_CONCURRENT)
+        models = self._validate_models(allowed_models)
         api_key = generate_key()
         created_at = _now_iso()
         async with self.db._connect(write=True) as conn:
             cursor = await conn.execute(
                 "INSERT INTO client_keys (name, key_hash, key_prefix, is_active, rate_limit_per_minute,"
-                " max_concurrent, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)",
-                (name, hash_key(api_key), api_key[:DISPLAY_PREFIX_LENGTH], rate, concurrent, created_at),
+                " max_concurrent, created_at, allowed_models) VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
+                (name, hash_key(api_key), api_key[:DISPLAY_PREFIX_LENGTH], rate, concurrent, created_at,
+                 json.dumps(models)),
             )
             key_id = cursor.lastrowid
             await conn.commit()
         record = ClientKey(
             id=key_id, name=name, key_prefix=api_key[:DISPLAY_PREFIX_LENGTH], is_active=True,
             rate_limit_per_minute=rate, max_concurrent=concurrent, total_requests=0,
-            created_at=created_at, last_used_at=None,
+            created_at=created_at, last_used_at=None, allowed_models=models,
         )
         self._by_id[key_id] = record
         self._by_hash[hash_key(api_key)] = record
@@ -249,6 +345,7 @@ class ClientKeyService:
         is_active: Optional[bool] = None,
         rate_limit_per_minute: Optional[int] = None,
         max_concurrent: Optional[int] = None,
+        allowed_models: Optional[list[str]] = None,
     ) -> Optional[dict]:
         record = self._by_id.get(key_id)
         if record is None:
@@ -264,16 +361,19 @@ class ClientKeyService:
             )
         if max_concurrent is not None:
             changes["max_concurrent"] = _validated_int(max_concurrent, "max_concurrent", MAX_CONCURRENT)
+        if allowed_models is not None:
+            changes["allowed_models"] = self._validate_models(allowed_models)
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
+            stored = [
+                json.dumps(v) if column == "allowed_models" else int(v) if isinstance(v, bool) else v
+                for column, v in changes.items()
+            ]
             async with self.db._connect(write=True) as conn:
-                await conn.execute(
-                    f"UPDATE client_keys SET {assignments} WHERE id = ?",
-                    (*[int(v) if isinstance(v, bool) else v for v in changes.values()], key_id),
-                )
+                await conn.execute(f"UPDATE client_keys SET {assignments} WHERE id = ?", (*stored, key_id))
                 await conn.commit()
-            for field, value in changes.items():
-                setattr(record, field, value)
+            for field_name, value in changes.items():
+                setattr(record, field_name, value)
         return self.describe(record)
 
     async def rotate(self, key_id: int) -> Optional[tuple[dict, str]]:

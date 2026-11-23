@@ -8,6 +8,8 @@
     let editingId = null;
     let secretDialog = null;
     let editDialog = null;
+    let editModels = [];
+    let modelOptionsLoaded = false;
 
     const element = id => document.getElementById(id);
     const t = (key, params) => window.I18n.t(key, params);
@@ -47,6 +49,11 @@
 
     function limitText(value) {
         return value > 0 ? String(value) : t('不限');
+    }
+
+    function modelsText(models) {
+        if (!models.length) return t('全部模型');
+        return models.length <= 2 ? models.join(', ') : `${models.slice(0, 2).join(', ')} +${models.length - 2}`;
     }
 
     function lastUsedText(value) {
@@ -95,11 +102,14 @@
                 actionButton(t('轮换密钥'), () => rotate(row)),
                 actionButton(t('删除'), () => remove(row), true),
             );
+            const models = cell(modelsText(row.allowed_models || []), 'client-keys-models');
+            if (row.allowed_models && row.allowed_models.length) models.title = row.allowed_models.join('\n');
             tr.append(
                 cell(identity), cell(badge),
                 cell(t('{0} / 分钟 · {1} 并发', { 0: limitText(row.rate_limit_per_minute), 1: limitText(row.max_concurrent) })),
-                cell(`${row.in_flight} / ${row.requests_last_minute}`),
-                cell(String(row.total_requests)), cell(lastUsedText(row.last_used_at)), cell(actions),
+                models,
+                cell(t('{0} 进行中 · {1} 近 1 分钟 · {2} 累计', { 0: row.in_flight, 1: row.requests_last_minute, 2: row.total_requests })),
+                cell(lastUsedText(row.last_used_at)), cell(actions),
             );
             body.appendChild(tr);
         }
@@ -188,18 +198,75 @@
         });
     }
 
+    function renderChips() {
+        const list = element('clientKeyModelChips');
+        if (!list) return;
+        list.replaceChildren();
+        if (!editModels.length) {
+            const empty = document.createElement('li');
+            empty.className = 'client-keys-hint';
+            empty.textContent = t('全部模型');
+            list.appendChild(empty);
+            return;
+        }
+        for (const pattern of editModels) {
+            const chip = document.createElement('li');
+            chip.className = 'client-keys-chip';
+            const name = document.createElement('code');
+            name.textContent = pattern;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.textContent = '×';
+            remove.setAttribute('aria-label', t('移除 {0}', { 0: pattern }));
+            remove.addEventListener('click', () => {
+                editModels = editModels.filter(item => item !== pattern);
+                renderChips();
+            });
+            chip.append(name, remove);
+            list.appendChild(chip);
+        }
+    }
+
+    function addModel(value) {
+        const pattern = String(value).trim();
+        if (pattern && !editModels.includes(pattern)) editModels.push(pattern);
+        element('clientKeyModelInput').value = '';
+        renderChips();
+    }
+
+    // Suggestions only: any model name or pattern can still be typed, and the server validates it.
+    async function loadModelOptions() {
+        if (modelOptionsLoaded) return;
+        try {
+            const data = await call('/api/client-keys/models');
+            if (!data) return;
+            element('clientKeyModelOptions').replaceChildren(...data.models.map(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.label = model.type;
+                return option;
+            }));
+            modelOptionsLoaded = true;
+        } catch (error) { /* typing a name still works */ }
+    }
+
     function openEdit(row) {
         editingId = row.id;
         element('clientKeyEditName').value = row.name;
         element('clientKeyEditRate').value = row.rate_limit_per_minute;
         element('clientKeyEditConcurrent').value = row.max_concurrent;
+        element('clientKeyModelInput').value = '';
+        editModels = [...(row.allowed_models || [])];
+        renderChips();
         element('clientKeyEditError').hidden = true;
         editDialog.showModal();
+        loadModelOptions();
     }
 
     async function saveEdit(event) {
         event.preventDefault();
         const error = element('clientKeyEditError');
+        addModel(element('clientKeyModelInput').value);
         try {
             const data = await call('/api/client-keys/' + editingId, {
                 method: 'PUT',
@@ -207,6 +274,7 @@
                     name: element('clientKeyEditName').value.trim(),
                     rate_limit_per_minute: Number.parseInt(element('clientKeyEditRate').value, 10),
                     max_concurrent: Number.parseInt(element('clientKeyEditConcurrent').value, 10),
+                    allowed_models: editModels,
                 }),
             });
             if (!data) return;
@@ -266,11 +334,20 @@
         element('clientKeyCopy').addEventListener('click', copySecret);
         element('clientKeySecretClose').addEventListener('click', closeSecret);
         element('clientKeyEditCancel').addEventListener('click', () => editDialog.close());
+        element('clientKeyModelAdd').addEventListener('click', () => addModel(element('clientKeyModelInput').value));
+        element('clientKeyModelInput').addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            addModel(event.currentTarget.value);
+        });
+        for (const preset of editDialog.querySelectorAll('[data-client-key-preset]')) {
+            preset.addEventListener('click', () => addModel(preset.dataset.clientKeyPreset));
+        }
         // Closing by Escape must clear the secret as well.
         secretDialog.addEventListener('close', () => { element('clientKeySecretValue').textContent = ''; });
         new MutationObserver(syncPolling).observe(panel, { attributes: true, attributeFilter: ['class'] });
         document.addEventListener('visibilitychange', syncPolling);
-        window.addEventListener('languagechange', render);
+        window.addEventListener('languagechange', () => { render(); renderChips(); });
         syncPolling();
     }
 

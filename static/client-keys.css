@@ -24,4 +24,18 @@
 .client-keys-dialog-field{margin-top:.75rem}
 .client-keys-dialog-field label{display:block;font-size:.875rem;font-weight:500}
 .client-keys-dialog-field .client-keys-input{margin-top:.375rem;color:#171717;background:#fff}
+.client-keys-models{overflow-wrap:anywhere;max-width:14rem}
+.client-keys-hint{font-size:.8125rem;line-height:1.5;opacity:.7;margin:.25rem 0 .5rem}
+.client-keys-model-add{display:flex;gap:.5rem;align-items:center}
+.client-keys-model-add .client-keys-input{margin-top:0}
+.client-keys-model-presets{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
+.client-keys-secondary{min-height:2.25rem;border:1px solid rgb(127 127 127 / .5);border-radius:6px;padding:0 .75rem;font-size:.875rem;background:transparent;color:inherit;cursor:pointer;white-space:nowrap}
+.client-keys-secondary:hover{background:rgb(127 127 127 / .2)}
+.client-keys-secondary:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+.client-keys-chips{list-style:none;margin:.5rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.375rem;max-height:8rem;overflow:auto}
+.client-keys-chip{display:inline-flex;align-items:center;gap:.25rem;border:1px solid rgb(127 127 127 / .5);border-radius:999px;padding:0 .25rem 0 .625rem;font-size:.8125rem}
+.client-keys-chip code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.client-keys-chip button{min-height:1.75rem;min-width:1.75rem;border:0;border-radius:999px;background:transparent;color:inherit;cursor:pointer;font-size:1rem;line-height:1}
+.client-keys-chip button:hover{background:rgb(220 38 38 / .15);color:#dc2626}
+.client-keys-chip button:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
 @media(max-width:768px){.client-keys-form{grid-template-columns:1fr}}

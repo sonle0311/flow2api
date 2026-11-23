@@ -259,8 +259,8 @@
                                     <th data-i18n="名称">名称</th>
                                     <th data-i18n="状态">状态</th>
                                     <th data-i18n="限制">限制</th>
-                                    <th data-i18n="进行中 / 近 1 分钟">进行中 / 近 1 分钟</th>
-                                    <th data-i18n="累计请求">累计请求</th>
+                                    <th data-i18n="模型">模型</th>
+                                    <th data-i18n="使用情况">使用情况</th>
                                     <th data-i18n="最近使用">最近使用</th>
                                     <th data-i18n="操作">操作</th>
                                 </tr>
@@ -1212,6 +1212,20 @@
             <div class="client-keys-dialog-field">
                 <label for="clientKeyEditConcurrent" data-i18n="并发上限">并发上限</label>
                 <input id="clientKeyEditConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" required>
+            </div>
+            <div class="client-keys-dialog-field">
+                <label for="clientKeyModelInput" data-i18n="允许使用的模型">允许使用的模型</label>
+                <p class="client-keys-hint" data-i18n="留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。">留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。</p>
+                <div class="client-keys-model-add">
+                    <input id="clientKeyModelInput" class="client-keys-input" type="text" list="clientKeyModelOptions" autocomplete="off" maxlength="100" placeholder="gemini-3.1-flash-image*">
+                    <button id="clientKeyModelAdd" type="button" class="client-keys-secondary" data-i18n="添加">添加</button>
+                </div>
+                <datalist id="clientKeyModelOptions"></datalist>
+                <div class="client-keys-model-presets">
+                    <button type="button" class="client-keys-secondary" data-client-key-preset="type:image" data-i18n="全部图片模型">全部图片模型</button>
+                    <button type="button" class="client-keys-secondary" data-client-key-preset="type:video" data-i18n="全部视频模型">全部视频模型</button>
+                </div>
+                <ul id="clientKeyModelChips" class="client-keys-chips"></ul>
             </div>
             <p id="clientKeyEditError" class="managed-browser-error" role="alert" hidden></p>
             <div class="managed-browser-actions">

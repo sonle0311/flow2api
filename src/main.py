@@ -22,10 +22,11 @@ from .services.proxy_manager import ProxyManager
 from .services.token_manager import TokenManager
 from .services.managed_browser import ManagedBrowserService
 from .services.managed_captcha import ManagedCaptchaService
+from .core.model_resolver import get_known_model_names
 from .services.client_keys import ClientKeyService
 from .services.load_balancer import LoadBalancer
 from .services.concurrency_manager import ConcurrencyManager
-from .services.generation_handler import GenerationHandler
+from .services.generation_handler import GenerationHandler, MODEL_CONFIG
 from .api import routes, admin, browser_sessions, browser_desktop
 
 
@@ -272,6 +273,7 @@ managed_captcha = ManagedCaptchaService(managed_browser)
 flow_client.managed_captcha = managed_captcha
 client_keys = ClientKeyService(db)
 set_client_key_service(client_keys)
+client_keys.known_models = lambda: get_known_model_names(MODEL_CONFIG)
 concurrency_manager = ConcurrencyManager()
 load_balancer = LoadBalancer(token_manager, concurrency_manager)
 generation_handler = GenerationHandler(

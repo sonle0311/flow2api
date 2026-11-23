@@ -18,7 +18,9 @@ import urllib.request
 from urllib.parse import urlparse
 from curl_cffi.requests import AsyncSession
 from ..core.auth import AuthManager
+from ..core.model_resolver import get_model_catalog
 from ..services.client_keys import (
+    MAX_ALLOWED_MODELS,
     DEFAULT_MAX_CONCURRENT,
     DEFAULT_RATE_LIMIT_PER_MINUTE,
     MAX_CONCURRENT,
@@ -1522,6 +1524,7 @@ class CreateClientKeyRequest(BaseModel):
         default=DEFAULT_RATE_LIMIT_PER_MINUTE, ge=0, le=MAX_RATE_LIMIT_PER_MINUTE
     )
     max_concurrent: int = Field(default=DEFAULT_MAX_CONCURRENT, ge=0, le=MAX_CONCURRENT)
+    allowed_models: List[str] = Field(default_factory=list, max_length=MAX_ALLOWED_MODELS)
 
 
 class UpdateClientKeyRequest(BaseModel):
@@ -1533,6 +1536,7 @@ class UpdateClientKeyRequest(BaseModel):
         default=None, ge=0, le=MAX_RATE_LIMIT_PER_MINUTE
     )
     max_concurrent: Optional[int] = Field(default=None, ge=0, le=MAX_CONCURRENT)
+    allowed_models: Optional[List[str]] = Field(default=None, max_length=MAX_ALLOWED_MODELS)
 
 
 def _client_keys() -> ClientKeyService:
@@ -1547,14 +1551,26 @@ async def list_client_keys(token: str = Depends(verify_admin_token)):
     return {"success": True, "client_keys": _client_keys().list()}
 
 
+@router.get("/api/client-keys/models")
+async def list_client_key_models(token: str = Depends(verify_admin_token)):
+    """Names a client key's allow-list can reference (models, families and aliases)."""
+    from ..services.generation_handler import MODEL_CONFIG
+
+    return {"success": True, "models": get_model_catalog(MODEL_CONFIG)}
+
+
 @router.post("/api/client-keys")
 async def create_client_key(
     request: CreateClientKeyRequest, token: str = Depends(verify_admin_token)
 ):
     """Create a client API key. The secret is returned only in this response."""
-    client_key, api_key = await _client_keys().create(
-        request.name, request.rate_limit_per_minute, request.max_concurrent
-    )
+    try:
+        client_key, api_key = await _client_keys().create(
+            request.name, request.rate_limit_per_minute, request.max_concurrent,
+            request.allowed_models,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"success": True, "client_key": client_key, "api_key": api_key}
 
 
@@ -1563,9 +1579,12 @@ async def update_client_key(
     key_id: int, request: UpdateClientKeyRequest, token: str = Depends(verify_admin_token)
 ):
     """Rename, enable/disable or change the limits of a client key."""
-    client_key = await _client_keys().update(
-        key_id, **request.model_dump(exclude_unset=True)
-    )
+    try:
+        client_key = await _client_keys().update(
+            key_id, **request.model_dump(exclude_unset=True)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if client_key is None:
         raise HTTPException(status_code=404, detail="Client key not found")
     return {"success": True, "client_key": client_key}

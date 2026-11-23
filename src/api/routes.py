@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 import asyncio
 import ipaddress
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import base64
 import json
 import mimetypes
@@ -30,6 +30,7 @@ from ..core.logger import debug_logger
 from ..core.model_resolver import (
     ModelParameterError,
     get_base_model_aliases,
+    get_model_families,
     resolve_model_name,
 )
 from ..core.models import (
@@ -40,7 +41,7 @@ from ..core.models import (
 )
 from ..services.generation_handler import MODEL_CONFIG, GenerationHandler
 from ..services.browser_captcha_extension import ExtensionCaptchaService
-from ..services.client_keys import NO_LEASE, ClientLimitExceeded, Lease
+from ..services.client_keys import NO_LEASE, ClientLimitExceeded, Lease, ModelNotAllowed
 
 router = APIRouter()
 
@@ -163,6 +164,57 @@ def _client_limit_response(exc: ClientLimitExceeded, *, gemini: bool = False) ->
     return JSONResponse(
         status_code=429, content=body, headers={"Retry-After": str(exc.retry_after)}
     )
+
+
+def _authorize_model(api_key: str, requested: str, resolved: str) -> None:
+    """Raise ModelNotAllowed when a client key's allow-list excludes the model.
+
+    Both names are checked: a key may allow the concrete variant that a family
+    request resolves to. The master key and unknown keys carry no allow-list.
+    """
+    service = get_client_key_service()
+    record = service.authenticate(api_key) if service is not None else None
+    if record is None:
+        return
+    media_type = (MODEL_CONFIG.get(resolved) or {}).get("type")
+    if not service.model_allowed(record, (requested, resolved), media_type):
+        raise ModelNotAllowed(requested)
+
+
+def _model_denied_response(exc: ModelNotAllowed, *, gemini: bool = False) -> JSONResponse:
+    if gemini:
+        return JSONResponse(status_code=403, content=_build_gemini_error_payload(403, exc.message))
+    return JSONResponse(
+        status_code=403,
+        content={
+            "error": {
+                "message": exc.message,
+                "type": "permission_error",
+                "code": exc.code,
+                "status_code": 403,
+            }
+        },
+    )
+
+
+def _model_filter(api_key: str) -> Callable[[str], bool]:
+    """Return a predicate telling whether a listed model name is usable by this key.
+
+    A family or alias is visible when the name or any model it can resolve to is allowed.
+    """
+    service = get_client_key_service()
+    record = service.authenticate(api_key) if service is not None else None
+    if record is None or not record.allowed_models:
+        return lambda name: True
+    families = get_model_families(MODEL_CONFIG)
+
+    def visible(name: str) -> bool:
+        family = families.get(name)
+        media_type = (MODEL_CONFIG.get(name) or family or {}).get("type")
+        names = (name, *(family["members"] if family else ()))
+        return service.model_allowed(record, names, media_type)
+
+    return visible
 
 
 @dataclass
@@ -1015,6 +1067,7 @@ async def _iterate_gemini_stream(
 @router.get("/v1/models")
 async def list_models(api_key: str = Depends(verify_api_key_flexible)):
     """List available models."""
+    visible = _model_filter(api_key)
     models = [
         {
             "id": model["id"],
@@ -1023,6 +1076,7 @@ async def list_models(api_key: str = Depends(verify_api_key_flexible)):
             "description": model["description"],
         }
         for model in _get_openai_model_catalog()
+        if visible(model["id"])
     ]
 
     return {"object": "list", "data": models}
@@ -1031,6 +1085,7 @@ async def list_models(api_key: str = Depends(verify_api_key_flexible)):
 @router.get("/v1/models/aliases")
 async def list_model_aliases(api_key: str = Depends(verify_api_key_flexible)):
     """List simplified model aliases for generationConfig-based resolution."""
+    visible = _model_filter(api_key)
     alias_models = [
         {
             "id": alias_id,
@@ -1040,6 +1095,7 @@ async def list_model_aliases(api_key: str = Depends(verify_api_key_flexible)):
             "is_alias": True,
         }
         for alias_id, description in get_base_model_aliases().items()
+        if visible(alias_id)
     ]
     return {"object": "list", "data": alias_models}
 
@@ -1049,10 +1105,12 @@ async def list_model_aliases(api_key: str = Depends(verify_api_key_flexible)):
 async def list_gemini_models(api_key: str = Depends(verify_api_key_flexible)):
     """List available models using Gemini-compatible response shape."""
     catalog = _get_gemini_model_catalog()
+    visible = _model_filter(api_key)
     return {
         "models": [
             _build_gemini_model_resource(model_id, description)
             for model_id, description in catalog.items()
+            if visible(model_id)
         ]
     }
 
@@ -1063,7 +1121,7 @@ async def get_gemini_model(model: str, api_key: str = Depends(verify_api_key_fle
     """Return a single model using Gemini-compatible response shape."""
     catalog = _get_gemini_model_catalog()
     description = catalog.get(model)
-    if not description:
+    if not description or not _model_filter(api_key)(model):
         return JSONResponse(
             status_code=404,
             content=_build_gemini_error_payload(404, f"Model not found: {model}"),
@@ -1089,6 +1147,7 @@ async def create_chat_completion(
         normalized = await _normalize_openai_request(
             request, request_base_url=request_base_url
         )
+        _authorize_model(api_key, request.model, normalized.model)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
@@ -1122,6 +1181,8 @@ async def create_chat_completion(
         )
         return _build_openai_json_response(payload)
 
+    except ModelNotAllowed as exc:
+        return _model_denied_response(exc)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1149,6 +1210,7 @@ async def generate_content(
         normalized = await _normalize_gemini_request(
             model, request, request_base_url=request_base_url
         )
+        _authorize_model(api_key, model, normalized.model)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
@@ -1170,6 +1232,8 @@ async def generate_content(
             content=await _build_gemini_success_payload(payload, normalized.model)
         )
 
+    except ModelNotAllowed as exc:
+        return _model_denied_response(exc, gemini=True)
     except HTTPException as exc:
         return JSONResponse(
             status_code=exc.status_code,
@@ -1204,6 +1268,7 @@ async def stream_generate_content(
         normalized = await _normalize_gemini_request(
             model, request, request_base_url=request_base_url
         )
+        _authorize_model(api_key, model, normalized.model)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
         rejected = await _ensure_generation_handler().admission_preflight(
@@ -1224,6 +1289,8 @@ async def stream_generate_content(
         )
         handed_off = True
         return response
+    except ModelNotAllowed as exc:
+        return _model_denied_response(exc, gemini=True)
     except HTTPException as exc:
         return JSONResponse(
             status_code=exc.status_code,

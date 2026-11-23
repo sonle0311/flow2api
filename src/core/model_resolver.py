@@ -13,7 +13,7 @@ Example:
 
 import re
 from io import BytesIO
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, List, Tuple
 from ..core.logger import debug_logger
 
 # ──────────────────────────────────────────────
@@ -987,3 +987,48 @@ def get_base_model_aliases() -> Dict[str, str]:
         )
 
     return aliases
+
+
+def get_model_families(model_config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Names that expand to several concrete models: simplified aliases and public video families.
+
+    Returns ``{name: {"type": "image"|"video", "members": [concrete MODEL_CONFIG keys]}}``.
+    A request for such a name can resolve to any member, so per-key model access
+    has to consider the members as well as the name itself.
+    """
+    families: Dict[str, Dict[str, Any]] = {}
+    for alias, base in IMAGE_BASE_MODELS.items():
+        prefix = f"{base}-"
+        families[alias] = {
+            "type": "image",
+            "members": [
+                model_id for model_id, config in model_config.items()
+                if config.get("type") == "image" and model_id.startswith(prefix)
+            ],
+        }
+    for alias, orientations in VIDEO_BASE_MODELS.items():
+        families[alias] = {"type": "video", "members": sorted(set(orientations.values()))}
+    for contract in _get_public_video_contracts(model_config):
+        families[contract["id"]] = {
+            "type": "video",
+            "members": [variant["id"] for variant in contract["variants"]],
+        }
+    return families
+
+
+def get_known_model_names(model_config: Dict[str, Any]) -> set:
+    """Every name a request may reference, listed or not, including aliases and families."""
+    return set(model_config) | set(get_model_families(model_config))
+
+
+def get_model_catalog(model_config: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Selectable names for per-key model access: ``{"id", "type", "kind": "model"|"family"}``."""
+    families = get_model_families(model_config)
+    entries: Dict[str, Dict[str, str]] = {}
+    for model_id, config in model_config.items():
+        if config.get("listed", True):
+            kind = "family" if model_id in families else "model"
+            entries[model_id] = {"id": model_id, "type": config["type"], "kind": kind}
+    for name, family in families.items():
+        entries.setdefault(name, {"id": name, "type": family["type"], "kind": "family"})
+    return sorted(entries.values(), key=lambda entry: (entry["type"], entry["id"]))

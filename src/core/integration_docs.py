@@ -403,21 +403,26 @@ _CLIENT_KEY_FIELDS = {
     "rate_limit_per_minute": "Integer 0-100000, default 60 on create. Generation requests allowed per rolling 60 seconds; 0 means unlimited. Over the limit: HTTP 429, code rate_limit_exceeded, Retry-After.",
     "max_concurrent": "Integer 0-1000, default 3 on create. Generation requests this key may have running at once, streams included until they end; 0 means unlimited. Over the limit: HTTP 429, code concurrency_limit_exceeded, Retry-After 5.",
     "is_active": "Boolean, update only. false makes the key fail authentication at once (HTTP 401).",
+    "allowed_models": "Array of up to 200 strings, optional. Models this key may use; an empty array (the default) allows every model. Entries are model, family or alias IDs from GET /api/client-keys/models, patterns where * matches any characters (for example veo-3.1-fast* or gemini-3.1-flash-image*), or type:image / type:video for every model of that kind. Every non-type entry must match at least one known model, otherwise HTTP 422. On update the array replaces the previous list; omit it to keep the list.",
 }
 _add("GET /api/client-keys", ("List per-client API keys", "Liệt kê API key theo khách", "列出按客户端分配的 API Key"),
      ("Returns every client key with name, key_prefix (only the first characters, never the secret), is_active, rate_limit_per_minute, max_concurrent (0 means unlimited), total_requests, created_at, last_used_at and live in_flight and requests_last_minute counters. The secret is shown only when a key is created or rotated, because only its hash is stored. Counters live in server memory; total_requests is saved periodically.",
       "Trả mọi khóa khách với name, key_prefix (chỉ vài ký tự đầu, không bao giờ là secret), is_active, rate_limit_per_minute, max_concurrent (0 là không giới hạn), total_requests, created_at, last_used_at cùng bộ đếm trực tiếp in_flight và requests_last_minute. Secret chỉ hiện khi tạo hoặc đổi khóa vì server chỉ lưu hash. Bộ đếm nằm trong bộ nhớ server; total_requests được lưu định kỳ.",
       "返回全部客户端 Key，包括 name、key_prefix（仅前几个字符，绝不含密钥）、is_active、rate_limit_per_minute、max_concurrent（0 表示不限）、total_requests、created_at、last_used_at，以及实时的 in_flight 和 requests_last_minute 计数。密钥只在创建或轮换时显示，因为服务端只保存其哈希。计数保存在服务端内存中，total_requests 定期写入存储。"))
+_add("GET /api/client-keys/models", ("List models a client key can be limited to", "Liệt kê model có thể giới hạn cho khóa khách", "列出可用于限制客户端 Key 的模型"),
+     ("Returns {success, models:[{id, type, kind}]}: every listed model, plus simplified aliases and public video families, with type image or video and kind model (one concrete variant) or family (a name that resolves to several variants, depending on generationConfig). Use these IDs, or patterns built from them, in the allowed_models field of a client key.",
+      "Trả {success, models:[{id, type, kind}]}: mọi model được liệt kê, cùng alias đơn giản và dòng video công khai, với type là image hoặc video và kind là model (một biến thể cụ thể) hoặc family (tên phân giải ra nhiều biến thể tùy generationConfig). Dùng các ID này, hoặc mẫu tạo từ chúng, trong trường allowed_models của khóa khách.",
+      "返回 {success, models:[{id, type, kind}]}：全部已列出模型，以及简化别名和公开视频系列；type 为 image 或 video，kind 为 model（一个具体变体）或 family（会按 generationConfig 解析为多个变体的名称）。把这些 ID 或由它们组成的通配符用于客户端 Key 的 allowed_models 字段。"))
 _add("POST /api/client-keys", ("Create a per-client API key", "Tạo API key riêng cho khách", "创建按客户端分配的 API Key"),
      ("Creates a key for one client. The response contains api_key, the only time the secret is shown: copy it at once and give it to the client, who uses it like the master key (Authorization: Bearer sk-flow-...). Each client gets its own rate_limit_per_minute and max_concurrent, so one client cannot use all the capacity. Limits apply to generation requests, live in server memory and reset on restart. Invalid values return HTTP 422.",
       "Tạo khóa cho một khách. Phản hồi có api_key, lần duy nhất secret được hiển thị: hãy sao chép ngay và đưa cho khách, họ dùng như khóa gốc (Authorization: Bearer sk-flow-...). Mỗi khách có rate_limit_per_minute và max_concurrent riêng nên một khách không thể chiếm hết năng lực. Giới hạn áp dụng cho request tạo nội dung, nằm trong bộ nhớ server và đặt lại khi khởi động lại. Giá trị không hợp lệ trả HTTP 422.",
       "为一个客户端创建 Key。响应中的 api_key 是密钥唯一一次显示：请立即复制并交给客户端，客户端像主 Key 一样使用它（Authorization: Bearer sk-flow-...）。每个客户端有独立的 rate_limit_per_minute 和 max_concurrent，因此单个客户端无法占满全部容量。限制只作用于生成请求，保存在服务端内存中，重启后重置。值无效返回 HTTP 422。"),
-     body={"name": "<CLIENT_NAME>", "rate_limit_per_minute": 60, "max_concurrent": 3}, fields=_CLIENT_KEY_FIELDS)
+     body={"name": "<CLIENT_NAME>", "rate_limit_per_minute": 60, "max_concurrent": 3, "allowed_models": ["gemini-3.1-flash-image*", "type:video"]}, fields=_CLIENT_KEY_FIELDS)
 _add("PUT /api/client-keys/{key_id}", ("Update a client API key", "Cập nhật API key của khách", "更新客户端 API Key"),
      ("Partial update of name, is_active, rate_limit_per_minute or max_concurrent; omitted fields stay unchanged. Disabling a key makes its next requests fail with HTTP 401 at once; requests already running continue. New limits apply from the next request. An unknown key_id returns HTTP 404; invalid values return HTTP 422.",
       "Cập nhật một phần name, is_active, rate_limit_per_minute hoặc max_concurrent; trường bỏ trống giữ nguyên. Tắt khóa khiến request sau đó lỗi HTTP 401 ngay; request đang chạy vẫn tiếp tục. Giới hạn mới áp dụng từ request kế tiếp. key_id không tồn tại trả HTTP 404; giá trị không hợp lệ trả HTTP 422.",
       "部分更新 name、is_active、rate_limit_per_minute 或 max_concurrent，省略的字段保持不变。停用 Key 后，其后续请求立即返回 HTTP 401，已在运行的请求继续。新限制从下一个请求开始生效。未知 key_id 返回 HTTP 404，值无效返回 HTTP 422。"),
-     body={"is_active": True, "rate_limit_per_minute": 120}, fields=_CLIENT_KEY_FIELDS)
+     body={"is_active": True, "rate_limit_per_minute": 120, "allowed_models": []}, fields=_CLIENT_KEY_FIELDS)
 _add("POST /api/client-keys/{key_id}/rotate", ("Rotate a client API key", "Đổi secret của API key khách", "轮换客户端 API Key"),
      ("Issues a new secret and invalidates the previous one at once: requests using the old secret return HTTP 401. The new secret is returned only in this response. Name, limits and usage counters are kept. Use it when a client key leaks or a client changes. An unknown key_id returns HTTP 404.",
       "Cấp secret mới và vô hiệu secret cũ ngay lập tức: request dùng secret cũ trả HTTP 401. Secret mới chỉ có trong phản hồi này. Giữ nguyên tên, giới hạn và bộ đếm sử dụng. Dùng khi khóa khách bị lộ hoặc khách thay đổi. key_id không tồn tại trả HTTP 404.",
@@ -565,13 +570,14 @@ _response(["POST /v1beta/models/{model}:streamGenerateContent", "POST /models/{m
 _response("GET /api/integration/reference", {"version": 1, "endpoints": [], "models": [], "aliases": [], "model_parameters": [], "schemas": {}})
 _CLIENT_KEY_EXAMPLE = {
     "id": 1, "name": "<CLIENT_NAME>", "key_prefix": "sk-flow-ab12", "is_active": True,
-    "rate_limit_per_minute": 60, "max_concurrent": 3, "total_requests": 0,
+    "rate_limit_per_minute": 60, "max_concurrent": 3, "allowed_models": [], "total_requests": 0,
     "created_at": "<ISO_8601_TIMESTAMP>", "last_used_at": None, "in_flight": 0, "requests_last_minute": 0,
 }
 _response("GET /api/client-keys", {"success": True, "client_keys": [_CLIENT_KEY_EXAMPLE]})
 _response(["POST /api/client-keys", "POST /api/client-keys/{key_id}/rotate"], {"success": True, "client_key": _CLIENT_KEY_EXAMPLE, "api_key": "<CLIENT_API_KEY_SHOWN_ONCE>"})
 _response("PUT /api/client-keys/{key_id}", {"success": True, "client_key": _CLIENT_KEY_EXAMPLE})
 _response("DELETE /api/client-keys/{key_id}", {"success": True})
+_response("GET /api/client-keys/models", {"success": True, "models": [{"id": "<MODEL_ID>", "type": "image", "kind": "model"}]})
 
 
 _MODEL_PARAMETER_NOTES = _text(
@@ -605,6 +611,39 @@ for _key in (
 ):
     for _language in ("en", "vi", "zh-CN"):
         ENDPOINT_NOTES[_key]["details"][_language] += _BUSY_NOTES[_language]
+
+_MODEL_ACCESS_NOTES = _text(
+    " Per-key model access: a client key may be limited to certain models (allowed_models on the key; empty means every model). A request for a model outside the list returns HTTP 403 with type permission_error and code model_not_allowed, before any generation starts and without using account capacity. The check uses both the requested name and the model it resolves to, so a key allowed only gemini-3.1-flash-image-square can call the family gemini-3.1-flash-image with a square aspect ratio but not a landscape one. The server master key is never limited.",
+    " Quyền model theo khóa: khóa khách có thể bị giới hạn vào một số model (allowed_models của khóa; rỗng nghĩa là mọi model). Request model ngoài danh sách trả HTTP 403 với type permission_error và code model_not_allowed, trước khi bắt đầu tạo và không tốn năng lực tài khoản. Việc kiểm tra dùng cả tên được yêu cầu lẫn model mà nó phân giải ra, nên khóa chỉ được phép gemini-3.1-flash-image-square có thể gọi dòng gemini-3.1-flash-image với tỉ lệ vuông nhưng không gọi được tỉ lệ ngang. Khóa gốc của server không bao giờ bị giới hạn.",
+    " 按 Key 限制模型：客户端 Key 可以只允许部分模型（Key 的 allowed_models，空表示全部模型）。请求列表之外的模型会在生成开始前返回 HTTP 403，type 为 permission_error，code 为 model_not_allowed，且不占用账号容量。检查同时使用请求的名称和解析后的模型，因此只允许 gemini-3.1-flash-image-square 的 Key 可以用正方形比例调用系列 gemini-3.1-flash-image，但不能用横向比例。服务器主 Key 永不受限。",
+)
+for _key in (
+    "POST /v1/chat/completions",
+    "POST /v1beta/models/{model}:generateContent", "POST /models/{model}:generateContent",
+    "POST /v1beta/models/{model}:streamGenerateContent", "POST /models/{model}:streamGenerateContent",
+):
+    for _language in ("en", "vi", "zh-CN"):
+        ENDPOINT_NOTES[_key]["details"][_language] += _MODEL_ACCESS_NOTES[_language]
+
+_MODEL_LISTING_NOTES = _text(
+    " With a client key that has an allow-list, the list contains only the models that key may use; a family or alias is included when the name or any variant it can resolve to is allowed. Other keys see every model.",
+    " Với khóa khách có danh sách cho phép, danh sách chỉ gồm model khóa đó được dùng; dòng hoặc alias được đưa vào khi tên đó hoặc bất kỳ biến thể nào nó phân giải ra được phép. Các khóa khác thấy mọi model.",
+    " 使用设置了允许列表的客户端 Key 时，返回的列表只包含该 Key 可用的模型；当名称本身或其可解析出的任一变体被允许时，系列或别名会被包含。其他 Key 看到全部模型。",
+)
+for _key in (
+    "GET /v1/models", "GET /v1/models/aliases",
+    "GET /v1beta/models", "GET /models", "GET /v1beta/models/{model}", "GET /models/{model}",
+):
+    for _language in ("en", "vi", "zh-CN"):
+        ENDPOINT_NOTES[_key]["details"][_language] += _MODEL_LISTING_NOTES[_language]
+
+for _key in ("POST /api/client-keys", "PUT /api/client-keys/{key_id}"):
+    for _language, _note in zip(("en", "vi", "zh-CN"), (
+        " allowed_models limits the models the key may use (empty array: every model); see the field description. Changes apply from the next request.",
+        " allowed_models giới hạn model khóa được dùng (mảng rỗng: mọi model); xem mô tả trường. Thay đổi áp dụng từ request kế tiếp.",
+        " allowed_models 限制该 Key 可用的模型（空数组：全部模型），见字段说明。更改从下一个请求开始生效。",
+    )):
+        ENDPOINT_NOTES[_key]["details"][_language] += _note
 
 
 
