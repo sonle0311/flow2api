@@ -250,6 +250,21 @@
                             <input id="clientKeyConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" value="3" required>
                         </div>
                         <button id="clientKeySubmit" type="submit" class="client-keys-primary" data-i18n="创建密钥">创建密钥</button>
+                        <details class="client-keys-form-models">
+                            <summary data-i18n="允许使用的模型">允许使用的模型</summary>
+                            <div id="clientKeyCreateModels" class="client-keys-dialog-field" data-client-key-picker>
+                                <p class="client-keys-hint" data-i18n="留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。">留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。</p>
+                                <div class="client-keys-model-add">
+                                    <input class="client-keys-input" type="text" list="clientKeyModelOptions" autocomplete="off" maxlength="100" placeholder="gemini-3.1-flash-image*" aria-label="允许使用的模型" data-i18n-aria-label="允许使用的模型" data-picker-input>
+                                    <button type="button" class="client-keys-secondary" data-i18n="添加" data-picker-add>添加</button>
+                                </div>
+                                <div class="client-keys-model-presets">
+                                    <button type="button" class="client-keys-secondary" data-client-key-preset="type:image" data-i18n="全部图片模型">全部图片模型</button>
+                                    <button type="button" class="client-keys-secondary" data-client-key-preset="type:video" data-i18n="全部视频模型">全部视频模型</button>
+                                </div>
+                                <ul class="client-keys-chips" data-picker-chips></ul>
+                            </div>
+                        </details>
                     </form>
                     <p id="clientKeysError" class="client-keys-error" role="alert" hidden></p>
                     <div class="relative w-full overflow-x-auto">
@@ -1213,20 +1228,20 @@
                 <label for="clientKeyEditConcurrent" data-i18n="并发上限">并发上限</label>
                 <input id="clientKeyEditConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" required>
             </div>
-            <div class="client-keys-dialog-field">
-                <label for="clientKeyModelInput" data-i18n="允许使用的模型">允许使用的模型</label>
+            <div id="clientKeyEditModels" class="client-keys-dialog-field" data-client-key-picker>
+                <label for="clientKeyEditModelInput" data-i18n="允许使用的模型">允许使用的模型</label>
                 <p class="client-keys-hint" data-i18n="留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。">留空表示可使用全部模型。可填写模型名、带 * 的通配符（如 veo-3.1-fast*），或 type:image / type:video。</p>
                 <div class="client-keys-model-add">
-                    <input id="clientKeyModelInput" class="client-keys-input" type="text" list="clientKeyModelOptions" autocomplete="off" maxlength="100" placeholder="gemini-3.1-flash-image*">
-                    <button id="clientKeyModelAdd" type="button" class="client-keys-secondary" data-i18n="添加">添加</button>
+                    <input id="clientKeyEditModelInput" class="client-keys-input" type="text" list="clientKeyModelOptions" autocomplete="off" maxlength="100" placeholder="gemini-3.1-flash-image*" data-picker-input>
+                    <button type="button" class="client-keys-secondary" data-i18n="添加" data-picker-add>添加</button>
                 </div>
-                <datalist id="clientKeyModelOptions"></datalist>
                 <div class="client-keys-model-presets">
                     <button type="button" class="client-keys-secondary" data-client-key-preset="type:image" data-i18n="全部图片模型">全部图片模型</button>
                     <button type="button" class="client-keys-secondary" data-client-key-preset="type:video" data-i18n="全部视频模型">全部视频模型</button>
                 </div>
-                <ul id="clientKeyModelChips" class="client-keys-chips"></ul>
+                <ul class="client-keys-chips" data-picker-chips></ul>
             </div>
+            <datalist id="clientKeyModelOptions"></datalist>
             <p id="clientKeyEditError" class="managed-browser-error" role="alert" hidden></p>
             <div class="managed-browser-actions">
                 <button type="submit" data-i18n="保存">保存</button>

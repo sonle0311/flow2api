@@ -25,6 +25,9 @@
 .client-keys-dialog-field label{display:block;font-size:.875rem;font-weight:500}
 .client-keys-dialog-field .client-keys-input{margin-top:.375rem;color:#171717;background:#fff}
 .client-keys-models{overflow-wrap:anywhere;max-width:14rem}
+.client-keys-form-models{grid-column:1/-1}
+.client-keys-form-models summary{cursor:pointer;font-size:.875rem;font-weight:500;width:fit-content}
+.client-keys-form-models summary:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
 .client-keys-hint{font-size:.8125rem;line-height:1.5;opacity:.7;margin:.25rem 0 .5rem}
 .client-keys-model-add{display:flex;gap:.5rem;align-items:center}
 .client-keys-model-add .client-keys-input{margin-top:0}

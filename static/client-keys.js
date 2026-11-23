@@ -8,7 +8,8 @@
     let editingId = null;
     let secretDialog = null;
     let editDialog = null;
-    let editModels = [];
+    let editPicker = null;
+    let createPicker = null;
     let modelOptionsLoaded = false;
 
     const element = id => document.getElementById(id);
@@ -179,10 +180,12 @@
                     name: element('clientKeyName').value.trim(),
                     rate_limit_per_minute: Number.parseInt(element('clientKeyRate').value, 10),
                     max_concurrent: Number.parseInt(element('clientKeyConcurrent').value, 10),
+                    allowed_models: createPicker.collect(),
                 }),
             });
             if (!data) return;
             element('clientKeyName').value = '';
+            createPicker.set([]);
             showSecret(data.api_key, '客户密钥已创建');
             await load();
         });
@@ -198,40 +201,69 @@
         });
     }
 
-    function renderChips() {
-        const list = element('clientKeyModelChips');
-        if (!list) return;
-        list.replaceChildren();
-        if (!editModels.length) {
-            const empty = document.createElement('li');
-            empty.className = 'client-keys-hint';
-            empty.textContent = t('全部模型');
-            list.appendChild(empty);
-            return;
-        }
-        for (const pattern of editModels) {
-            const chip = document.createElement('li');
-            chip.className = 'client-keys-chip';
-            const name = document.createElement('code');
-            name.textContent = pattern;
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.textContent = '×';
-            remove.setAttribute('aria-label', t('移除 {0}', { 0: pattern }));
-            remove.addEventListener('click', () => {
-                editModels = editModels.filter(item => item !== pattern);
-                renderChips();
-            });
-            chip.append(name, remove);
-            list.appendChild(chip);
-        }
-    }
+    // A list of model names/patterns edited as chips; `root` carries the data-picker-* parts.
+    function makePicker(root) {
+        const input = root.querySelector('[data-picker-input]');
+        const chips = root.querySelector('[data-picker-chips]');
+        let models = [];
 
-    function addModel(value) {
-        const pattern = String(value).trim();
-        if (pattern && !editModels.includes(pattern)) editModels.push(pattern);
-        element('clientKeyModelInput').value = '';
-        renderChips();
+        function render() {
+            chips.replaceChildren();
+            if (!models.length) {
+                const empty = document.createElement('li');
+                empty.className = 'client-keys-hint';
+                empty.textContent = t('全部模型');
+                chips.appendChild(empty);
+                return;
+            }
+            for (const pattern of models) {
+                const chip = document.createElement('li');
+                chip.className = 'client-keys-chip';
+                const name = document.createElement('code');
+                name.textContent = pattern;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = '×';
+                remove.setAttribute('aria-label', t('移除 {0}', { 0: pattern }));
+                remove.addEventListener('click', () => {
+                    models = models.filter(item => item !== pattern);
+                    render();
+                });
+                chip.append(name, remove);
+                chips.appendChild(chip);
+            }
+        }
+
+        function add(value) {
+            const pattern = String(value).trim();
+            if (pattern && !models.includes(pattern)) models.push(pattern);
+            input.value = '';
+            render();
+        }
+
+        root.querySelector('[data-picker-add]').addEventListener('click', () => add(input.value));
+        input.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            add(input.value);
+        });
+        for (const preset of root.querySelectorAll('[data-client-key-preset]')) {
+            preset.addEventListener('click', () => add(preset.dataset.clientKeyPreset));
+        }
+        render();
+        return {
+            render,
+            set(list) {
+                models = [...list];
+                input.value = '';
+                render();
+            },
+            // Text still typed in the box counts as an entry, so Save/Create never drops it.
+            collect() {
+                add(input.value);
+                return [...models];
+            },
+        };
     }
 
     // Suggestions only: any model name or pattern can still be typed, and the server validates it.
@@ -255,9 +287,7 @@
         element('clientKeyEditName').value = row.name;
         element('clientKeyEditRate').value = row.rate_limit_per_minute;
         element('clientKeyEditConcurrent').value = row.max_concurrent;
-        element('clientKeyModelInput').value = '';
-        editModels = [...(row.allowed_models || [])];
-        renderChips();
+        editPicker.set(row.allowed_models || []);
         element('clientKeyEditError').hidden = true;
         editDialog.showModal();
         loadModelOptions();
@@ -266,7 +296,6 @@
     async function saveEdit(event) {
         event.preventDefault();
         const error = element('clientKeyEditError');
-        addModel(element('clientKeyModelInput').value);
         try {
             const data = await call('/api/client-keys/' + editingId, {
                 method: 'PUT',
@@ -274,7 +303,7 @@
                     name: element('clientKeyEditName').value.trim(),
                     rate_limit_per_minute: Number.parseInt(element('clientKeyEditRate').value, 10),
                     max_concurrent: Number.parseInt(element('clientKeyEditConcurrent').value, 10),
-                    allowed_models: editModels,
+                    allowed_models: editPicker.collect(),
                 }),
             });
             if (!data) return;
@@ -334,20 +363,14 @@
         element('clientKeyCopy').addEventListener('click', copySecret);
         element('clientKeySecretClose').addEventListener('click', closeSecret);
         element('clientKeyEditCancel').addEventListener('click', () => editDialog.close());
-        element('clientKeyModelAdd').addEventListener('click', () => addModel(element('clientKeyModelInput').value));
-        element('clientKeyModelInput').addEventListener('keydown', event => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            addModel(event.currentTarget.value);
-        });
-        for (const preset of editDialog.querySelectorAll('[data-client-key-preset]')) {
-            preset.addEventListener('click', () => addModel(preset.dataset.clientKeyPreset));
-        }
+        editPicker = makePicker(element('clientKeyEditModels'));
+        createPicker = makePicker(element('clientKeyCreateModels'));
+        document.querySelector('.client-keys-form-models').addEventListener('toggle', loadModelOptions);
         // Closing by Escape must clear the secret as well.
         secretDialog.addEventListener('close', () => { element('clientKeySecretValue').textContent = ''; });
         new MutationObserver(syncPolling).observe(panel, { attributes: true, attributeFilter: ['class'] });
         document.addEventListener('visibilitychange', syncPolling);
-        window.addEventListener('languagechange', () => { render(); renderChips(); });
+        window.addEventListener('languagechange', () => { render(); editPicker.render(); createPicker.render(); });
         syncPolling();
     }
 
