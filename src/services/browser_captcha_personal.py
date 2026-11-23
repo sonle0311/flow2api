@@ -10050,8 +10050,18 @@ class BrowserCaptchaService:
                     state.startedAt = now();
                     state.finishedAt = 0;
                     state.attempts = Number(state.attempts || 0) + 1;
+                    // Flow sets require-trusted-types-for 'script'; a plain string
+                    // src is silently blocked and the script never loads.
+                    let scriptSrc = urls[index];
+                    try {{
+                        if (window.trustedTypes && typeof window.trustedTypes.createPolicy === 'function') {{
+                            window.__flow2apiScriptPolicy = window.__flow2apiScriptPolicy ||
+                                window.trustedTypes.createPolicy('flow2api-recaptcha', {{createScriptURL: (value) => value}});
+                            scriptSrc = window.__flow2apiScriptPolicy.createScriptURL(urls[index]);
+                        }}
+                    }} catch (error) {{}}
                     const script = document.createElement('script');
-                    script.src = urls[index];
+                    script.src = scriptSrc;
                     script.async = true;
                     let settled = false;
                     const finish = (status, error) => {{
@@ -11395,10 +11405,31 @@ class BrowserCaptchaService:
         """
         normalized_action = str(action or "IMAGE_GENERATION").strip().upper()
         normalized_project_id = str(project_id or "").strip()
-        if normalized_action != "CHAT_GENERATION" or not normalized_project_id:
+        # The bootstrap page (/projects) never loads reCAPTCHA and its CSP blocks
+        # injecting it. Flow loads it natively on the project page, so move the
+        # tab there whenever execute is not already available.
+        recaptcha_ready = False
+        if normalized_action != "CHAT_GENERATION" and normalized_project_id:
+            try:
+                recaptcha_ready = bool(
+                    await self._tab_evaluate(
+                        tab,
+                        "typeof grecaptcha !== 'undefined' && "
+                        "typeof grecaptcha.enterprise !== 'undefined' && "
+                        "typeof grecaptcha.enterprise.execute === 'function'",
+                        label="check_recaptcha_ready_before_open",
+                        timeout_seconds=4.0,
+                    )
+                )
+            except Exception:
+                recaptcha_ready = False
+        needs_project_page = bool(normalized_project_id) and (
+            normalized_action == "CHAT_GENERATION" or not recaptcha_ready
+        )
+        if not needs_project_page:
             await self._wait_for_recaptcha(tab)
 
-        if normalized_action == "CHAT_GENERATION" and normalized_project_id:
+        if needs_project_page:
             await self._apply_trusted_recaptcha_hook(
                 tab, label=f"direct_project:{normalized_project_id}"
             )
