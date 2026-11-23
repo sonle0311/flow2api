@@ -330,8 +330,23 @@ class ManagedBrowserService:
 
     async def _capture(self, token, context):
         page = await self._page(context)
+        wait_for_selector = getattr(page, "wait_for_selector", None)
+        if callable(wait_for_selector):
+            try:
+                await wait_for_selector(
+                    "flow-user-tier-chip .tier-chip",
+                    state="attached",
+                    timeout=5000,
+                )
+            except Exception:
+                pass
         identity = await page.evaluate(
-            "({host:location.hostname,ready:document.readyState,email:(window.WIZ_global_data||{}).oPEP7c||''})"
+            """(() => {
+                const email = (window.WIZ_global_data || {}).oPEP7c || '';
+                const tier = document.querySelector('flow-user-tier-chip .tier-chip')?.textContent?.trim().toUpperCase() || '';
+                const tierMap = {FREE: 'PAYGATE_TIER_NOT_PAID', PLUS: 'PAYGATE_TIER_ONE', PRO: 'PAYGATE_TIER_ONE', ULTRA: 'PAYGATE_TIER_TWO'};
+                return {host: location.hostname, ready: document.readyState, email, user_paygate_tier: tierMap[tier] || null};
+            })()"""
         )
         if not isinstance(identity, dict) or identity.get("host") != "flow.google.com" or not identity.get("email"):
             return "login_required", None
@@ -349,7 +364,10 @@ class ManagedBrowserService:
             validate_flow_cookie_storage(serialized)
         except ValueError:
             return "login_required", None
-        return "", {"email": observed, "google_cookies": serialized}
+        result = {"email": observed, "google_cookies": serialized}
+        if identity.get("user_paygate_tier"):
+            result["user_paygate_tier"] = identity["user_paygate_tier"]
+        return "", result
 
     async def _save(self, token_id, result, *, interactive):
         await self._write(token_id, status="syncing", error_code="")

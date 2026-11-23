@@ -1242,6 +1242,7 @@ class TokenManager:
         if "credits" in session:
             updates["credits"] = session["credits"]
         updates.update(self._verified_tier_updates(session))
+        updates.update(self._verified_tier_updates({"userPaygateTier": result.get("user_paygate_tier")}))
         if identity_changed:
             updates.setdefault("user_paygate_tier", None)
             updates["email"] = observed_raw

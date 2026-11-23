@@ -12,8 +12,9 @@ from src.core.models import Token
 
 
 class FakePage:
-    def __init__(self, email="account@example.com"):
+    def __init__(self, email="account@example.com", tier="PRO"):
         self.email = email
+        self.tier = tier
         self.url = "https://flow.google.com/projects"
         self.closed = False
 
@@ -23,7 +24,18 @@ class FakePage:
     async def evaluate(self, script):
         if self.closed:
             raise RuntimeError("closed browser contains secret Cookie=bad")
-        return {"host": "flow.google.com", "email": self.email, "ready": "complete"}
+        return {
+            "host": "flow.google.com",
+            "email": self.email,
+            "ready": "complete",
+            "user_paygate_tier": {
+                "FREE": "PAYGATE_TIER_NOT_PAID",
+                "PLUS": "PAYGATE_TIER_ONE",
+                "PRO": "PAYGATE_TIER_ONE",
+                "ULTRA": "PAYGATE_TIER_TWO",
+            }.get(self.tier),
+        }
+
 
     async def close(self):
         self.trimmed = True
@@ -37,8 +49,9 @@ class FakePage:
 
 
 class FakeContext:
-    def __init__(self, email="account@example.com"):
-        self.pages = [FakePage(email)]
+    def __init__(self, email="account@example.com", tier="PRO"):
+        self.pages = [FakePage(email, tier)]
+        self.tier = tier
         self.closed = False
         self.callbacks = {}
 
@@ -86,7 +99,7 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
 
         async def factory(profile_path, *, headless, proxy):
             self.launches.append((profile_path, headless, proxy))
-            context = FakeContext(self.email)
+            context = FakeContext(self.email, "PRO")
             self.contexts.append(context)
             return context
 
@@ -223,6 +236,12 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["OSID", "SID"], [c["name"] for c in json.loads(args.args[1]["google_cookies"])])
         self.assertNotIn("secret-", json.dumps(status))
         self.assertNotIn("profiles", json.dumps(status))
+
+    async def test_interactive_login_captures_flow_tier(self):
+        await self.service.start_login(self.token_id)
+        await self.wait_login()
+        args = self.manager.save_managed_browser_cookies.await_args
+        self.assertEqual("PAYGATE_TIER_ONE", args.args[1]["user_paygate_tier"])
 
     async def test_wrong_account_never_saves_credentials(self):
         self.email = "wrong@example.com"
