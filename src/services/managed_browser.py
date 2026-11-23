@@ -482,7 +482,9 @@ class ManagedBrowserService:
                     await self._write(token_id, status="needs_login", error_code=error)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
+                # Server log only; the public status keeps the enum code.
+                print(f"[managed-browser] token={token_id} sync failed: {type(exc).__name__}: {str(exc)[:300]}", flush=True)
                 await self._write(token_id, status="error", error_code="sync_failed")
             finally:
                 if temporary and not interactive:
