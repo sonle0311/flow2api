@@ -1,11 +1,11 @@
 /* Studio: the canvas leads; the inspector keeps configuration within reach. */
 .instrument-test {
-  --studio-bg: #191a1d;
-  --studio-panel: #222327;
-  --studio-line: #3b3c42;
-  --studio-text: #f3f0eb;
-  --studio-muted: #b0b0b8;
-  --studio-accent: #ffa07b;
+  --studio-bg: #0b0d12;
+  --studio-panel: #0e1016;
+  --studio-line: #1e222c;
+  --studio-text: #e6e8ee;
+  --studio-muted: #9aa1b2;
+  --studio-accent: #34d399;
   background: var(--studio-bg);
   color: var(--studio-text);
   font-family: 'Be Vietnam Pro', sans-serif;
@@ -40,7 +40,7 @@
 .instrument-test .status-error { background: #f49d99; }
 .studio-canvas { min-height: 280px; display: grid; align-items: center; padding: 26px; }
 .studio-empty { text-align: center; padding: 38px 10px; color: var(--studio-muted); }
-.studio-empty svg { width: 56px; height: 46px; margin: 0 auto 20px; stroke: #8b8c95; stroke-width: 1.2; fill: none; }
+.studio-empty svg { width: 56px; height: 46px; margin: 0 auto 20px; stroke: #707ea0; stroke-width: 1.2; fill: none; }
 .instrument-test .studio-empty h2 { color: var(--studio-text); font-size: 18px; font-weight: 400; letter-spacing: -.015em; margin-bottom: 10px; }
 .studio-empty p { font-size: 13px; }
 .instrument-test .output-result { min-width: 0; margin: 0; }
@@ -49,14 +49,14 @@
 .studio-log { border-top: 1px solid var(--studio-line); }
 .instrument-test summary { color: var(--studio-muted); font-size: 12px; cursor: pointer; user-select: none; }
 .studio-log summary { padding: 12px 22px; }
-.instrument-test .output-log { color: var(--studio-muted); background: #1d1e22; border-radius: 0; padding: 14px 22px; max-height: 185px; font-family: inherit; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; word-break: normal; }
+.instrument-test .output-log { color: var(--studio-muted); background: #0e1013; border-radius: 0; padding: 14px 22px; max-height: 185px; font-family: inherit; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; word-break: normal; }
 .instrument-test .gen-panel { padding: 19px 21px 17px; margin-top: 16px; border-radius: 12px; background: var(--studio-panel); border: 1px solid var(--studio-line); }
 .instrument-test .form-group { margin-bottom: 14px; min-width: 0; }
 .instrument-test .form-group label, .studio-reference-label label, .instrument-test .config-bar label { display: block; font-size: 12px; color: var(--studio-muted); margin: 0 0 7px; }
-.instrument-test .form-group textarea, .instrument-test .form-group input[type='text'], .instrument-test .config-bar input, .instrument-test .form-group select { display: block; width: 100%; min-width: 0; padding: 10px 11px; background: #1c1d21; color: var(--studio-text); border: 1px solid var(--studio-line); border-radius: 7px; font-size: 13px; min-height: 42px; box-shadow: none; }
+.instrument-test .form-group textarea, .instrument-test .form-group input[type='text'], .instrument-test .config-bar input, .instrument-test .form-group select { display: block; width: 100%; min-width: 0; padding: 10px 11px; background: #0e0f13; color: var(--studio-text); border: 1px solid var(--studio-line); border-radius: 7px; font-size: 13px; min-height: 42px; box-shadow: none; }
 .instrument-test .form-group select { cursor: pointer; padding-right: 24px; }
 .instrument-test .form-group textarea { padding: 0; border: 0; border-radius: 0; background: transparent; min-height: 66px; resize: vertical; max-height: 300px; line-height: 1.75; }
-.instrument-test textarea::placeholder, .instrument-test input::placeholder { color: #93949d; opacity: 1; }
+.instrument-test textarea::placeholder, .instrument-test input::placeholder { color: #7d8aa8; opacity: 1; }
 .instrument-test :is(button, input, select, textarea, summary, [tabindex], a):focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 3px; }
 .instrument-test .form-group textarea:focus { border-color: var(--studio-accent); }
 .studio-prompt label { margin-bottom: 10px; }
@@ -65,20 +65,20 @@
 .studio-reference-row { display: flex; align-items: stretch; gap: 8px; }
 .studio-add-reference { width: 46px; min-height: 46px; flex: none; background: transparent; color: var(--studio-muted); border: 1px solid var(--studio-line); border-radius: 7px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .studio-add-reference svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.5; fill: none; }
-.studio-add-reference:hover { background: #2c2d32; color: var(--studio-text); }
-.instrument-test .image-upload-area { display: flex; align-items: center; min-width: 0; width: 100%; padding: 10px 12px; border: 1px dashed #62636c; border-radius: 7px; text-align: left; }
+.studio-add-reference:hover { background: #171a20; color: var(--studio-text); }
+.instrument-test .image-upload-area { display: flex; align-items: center; min-width: 0; width: 100%; padding: 10px 12px; border: 1px dashed #444c5e; border-radius: 7px; text-align: left; }
 .instrument-test .image-upload-area:hover, .instrument-test .image-upload-area.is-dragging { border-color: var(--studio-accent); }
 .instrument-test .image-upload-hint { color: var(--studio-muted); font-size: 11px; }
 .instrument-test .image-preview-list { gap: 7px; }
 .instrument-test .image-preview-item { width: 56px; height: 56px; border-radius: 4px; }
-.instrument-test .image-preview-item .remove-btn { width: 24px; height: 24px; font-size: 16px; background: #191a1deb; }
+.instrument-test .image-preview-item .remove-btn { width: 24px; height: 24px; font-size: 16px; background: #0b0d12eb; }
 .studio-composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 2px; }
 .studio-prompt-shortcut { margin-right: auto; color: var(--studio-muted); font-size: 11px; }
-.instrument-test .btn-generate { width: auto; min-width: 160px; min-height: 42px; padding: 10px 18px; border-radius: 7px; background: var(--studio-accent); color: #231d1b; border: 1px solid transparent; font-size: 12px; font-weight: 600; }
-.instrument-test .btn-generate:hover:not(:disabled) { background: #ffb291; }
-.instrument-test .btn-generate:disabled { color: #b3aaa5; background: #49403d; cursor: not-allowed; }
+.instrument-test .btn-generate { width: auto; min-width: 160px; min-height: 42px; padding: 10px 18px; border-radius: 7px; background: var(--studio-accent); color: #0e0f13; border: 1px solid transparent; font-size: 12px; font-weight: 600; }
+.instrument-test .btn-generate:hover:not(:disabled) { background: #73e0b8; }
+.instrument-test .btn-generate:disabled { color: #96a1b9; background: #232731; cursor: not-allowed; }
 .studio-cancel { min-height: 42px; padding: 9px 13px; color: var(--studio-text); border: 1px solid var(--studio-line); border-radius: 7px; background: transparent; font-size: 12px; cursor: pointer; }
-.studio-cancel:hover { background: #323338; }
+.studio-cancel:hover { background: #1b1e25; }
 .studio-inspector { border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-panel); overflow: hidden; min-width: 0; }
 .studio-mobile-settings { background: var(--studio-panel); border: 1px solid var(--studio-line); border-radius: 12px; overflow: hidden; }
 .studio-mobile-settings > summary { padding: 12px 18px; color: var(--studio-text); font-size: 13px; }
@@ -90,7 +90,7 @@
 .studio-parameter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .studio-parameter-note { color: var(--studio-muted); font-size: 11px; margin: -2px 0 15px; }
 .studio-parameter-action { color: var(--studio-accent); background: transparent; border: 1px solid var(--studio-line); border-radius: 7px; font-size: 12px; padding: 8px 12px; margin-bottom: 15px; }
-.studio-parameter-action:hover { background: #303137; }
+.studio-parameter-action:hover { background: #1a1d24; }
 .studio-model-details { overflow-wrap: anywhere; }
 .studio-model-details summary { font-size: 11px; }
 .instrument-test #selectedModelName { font-size: 11px; color: var(--studio-text); font-weight: 400; margin: 12px 0 8px; line-height: 1.8; }
@@ -100,17 +100,17 @@
 .instrument-test .config-bar input { margin-bottom: 13px; padding: 9px 11px; }
 .instrument-test .config-note { color: var(--studio-muted); font-size: 12px; line-height: 1.75; margin: 0; }
 .studio-catalog > h2 { font-size: 12px; margin-bottom: 14px; }
-.instrument-test #modelSidebar { width: 100%; max-height: 260px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #666770 transparent; padding-right: 3px; }
+.instrument-test #modelSidebar { width: 100%; max-height: 260px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #495164 transparent; padding-right: 3px; }
 .instrument-test .model-section { margin-bottom: 10px; }
-.instrument-test .section-title { color: var(--studio-muted); padding: 9px 10px; background: #292a2f; border: 1px solid var(--studio-line); font-size: 11px; font-weight: 400; border-radius: 6px 6px 0 0; gap: 8px; }
+.instrument-test .section-title { color: var(--studio-muted); padding: 9px 10px; background: #15181d; border: 1px solid var(--studio-line); font-size: 11px; font-weight: 400; border-radius: 6px 6px 0 0; gap: 8px; }
 .instrument-test .section-title.collapsed { border-radius: 6px; }
-.instrument-test .section-title:hover { color: var(--studio-text); background: #303137; }
+.instrument-test .section-title:hover { color: var(--studio-text); background: #1a1d24; }
 .instrument-test .section-title .arrow { font-size: 8px; }
 .instrument-test .model-list { background: transparent; border-color: var(--studio-line); border-radius: 0 0 6px 6px; max-height: none; overflow: visible; }
-.instrument-test .model-item { color: var(--studio-muted); padding: 9px 10px; font-size: 11px; line-height: 1.6; border-color: #303137; gap: 8px; }
+.instrument-test .model-item { color: var(--studio-muted); padding: 9px 10px; font-size: 11px; line-height: 1.6; border-color: #1a1d24; gap: 8px; }
 .instrument-test .model-item > span:first-child { overflow-wrap: anywhere; min-width: 0; }
-.instrument-test .model-item:hover { color: var(--studio-text); background: #2b2c31; }
-.instrument-test .model-item.active { color: var(--studio-accent); background: #3c302a; }
+.instrument-test .model-item:hover { color: var(--studio-text); background: #141821; }
+.instrument-test .model-item.active { color: var(--studio-accent); background: #191c23; }
 .instrument-test .model-tag { background: transparent; border: 1px solid var(--studio-line); color: var(--studio-muted); font-size: 11px; padding: 1px 5px; flex: none; }
 @media (min-width: 1600px) { .instrument-test .studio-workspace { grid-template-columns: minmax(0, 1fr) 360px; } .studio-canvas { min-height: 420px; } }
 @media (max-width: 1100px) { .instrument-test .container { padding: 25px 24px; } .instrument-test .instrument-topbar { padding-inline: 24px; } .instrument-test .studio-workspace { grid-template-columns: minmax(0, 1fr) 288px; gap: 18px; } .studio-inspector-section { padding: 17px; } .studio-prompt-shortcut { display: none; } }

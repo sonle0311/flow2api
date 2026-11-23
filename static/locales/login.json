@@ -9,7 +9,15 @@
     "登录": "登录",
     "登录中...": "登录中...",
     "登录失败": "登录失败",
-    "网络错误,请稍后重试": "网络错误,请稍后重试"
+    "网络错误,请稍后重试": "网络错误,请稍后重试",
+    "一个接口，生成图片与视频": "一个接口，生成图片与视频",
+    "把 Google Flow 账号变成可供你所有项目调用的生成服务。": "把 Google Flow 账号变成可供你所有项目调用的生成服务。",
+    "OpenAI 与 Gemini 兼容接口": "OpenAI 与 Gemini 兼容接口",
+    "多账号轮换与并发控制": "多账号轮换与并发控制",
+    "图片、视频与参考图生成": "图片、视频与参考图生成",
+    "使用管理员账户继续": "使用管理员账户继续",
+    "显示或隐藏密码": "显示或隐藏密码",
+    "登录后可管理账号、系统配置与请求日志。": "登录后可管理账号、系统配置与请求日志。"
   },
   "en": {
     "登录 - Flow2API": "Sign in - Flow2API",
@@ -21,7 +29,15 @@
     "登录": "Sign in",
     "登录中...": "Signing in...",
     "登录失败": "Sign-in failed",
-    "网络错误,请稍后重试": "Network error. Please try again later."
+    "网络错误,请稍后重试": "Network error. Please try again later.",
+    "一个接口，生成图片与视频": "One API for images and video",
+    "把 Google Flow 账号变成可供你所有项目调用的生成服务。": "Turn your Google Flow accounts into a generation service that every project of yours can call.",
+    "OpenAI 与 Gemini 兼容接口": "OpenAI- and Gemini-compatible endpoints",
+    "多账号轮换与并发控制": "Multi-account rotation and concurrency control",
+    "图片、视频与参考图生成": "Image, video and reference-based generation",
+    "使用管理员账户继续": "Continue with your admin account",
+    "显示或隐藏密码": "Show or hide password",
+    "登录后可管理账号、系统配置与请求日志。": "After signing in you can manage accounts, settings and request logs."
   },
   "vi": {
     "登录 - Flow2API": "Đăng nhập - Flow2API",
@@ -33,6 +49,14 @@
     "登录": "Đăng nhập",
     "登录中...": "Đang đăng nhập...",
     "登录失败": "Đăng nhập thất bại",
-    "网络错误,请稍后重试": "Lỗi mạng, vui lòng thử lại sau."
+    "网络错误,请稍后重试": "Lỗi mạng, vui lòng thử lại sau.",
+    "一个接口，生成图片与视频": "Một API cho ảnh và video",
+    "把 Google Flow 账号变成可供你所有项目调用的生成服务。": "Biến các tài khoản Google Flow thành dịch vụ tạo nội dung mà mọi dự án của bạn đều gọi được.",
+    "OpenAI 与 Gemini 兼容接口": "Endpoint tương thích OpenAI và Gemini",
+    "多账号轮换与并发控制": "Xoay vòng nhiều tài khoản và kiểm soát đồng thời",
+    "图片、视频与参考图生成": "Tạo ảnh, video và tạo từ ảnh tham chiếu",
+    "使用管理员账户继续": "Tiếp tục bằng tài khoản quản trị",
+    "显示或隐藏密码": "Hiện hoặc ẩn mật khẩu",
+    "登录后可管理账号、系统配置与请求日志。": "Sau khi đăng nhập, bạn quản lý được tài khoản, cấu hình và nhật ký yêu cầu."
   }
 }

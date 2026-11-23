@@ -604,6 +604,15 @@ _add("GET /static/{asset_name}",
      ("Serves only an allowlist of shipped Instrument CSS/JavaScript assets with no-cache headers. Unknown names return404. It does not expose static HTML pages or account/configuration files.",
       "Chỉ phục vụ danh sách CSS/JavaScript Instrument được phép với header không cache. Tên không hợp lệ trả404. Không mở truy cập HTML tĩnh hay tệp tài khoản/cấu hình.",
       "仅提供允许列表中的 Instrument CSS/JavaScript，使用不缓存标头。未知名称返回404，不公开静态 HTML 或账号/配置文件。"), auth="public")
+_add("GET /console", ("Open the separate admin console", "Mở console quản trị mới", "打开新版管理控制台"),
+     ("HTML console (new frontend, currently the generation Studio) guarded by a valid admin_session cookie; without one it redirects to /login with HTTP 302. The classic /manage and /test pages remain available. Missing console HTML returns HTTP 404 after the session check.",
+      "Console HTML (frontend mới, hiện có Studio tạo nội dung) được bảo vệ bằng cookie admin_session hợp lệ; thiếu cookie sẽ chuyển /login HTTP 302. Trang cũ /manage và /test vẫn dùng được. Thiếu HTML trả HTTP 404 sau kiểm tra phiên.",
+      "新版 HTML 控制台（目前包含生成工作室），要求有效 admin_session Cookie，否则以 HTTP 302 跳转 /login。旧版 /manage 与 /test 页面仍可使用。通过会话检查后若缺少 HTML 则返回 HTTP 404。"), auth=None)
+_add("GET /static/console/{asset_name}",
+     ("Load console interface assets", "Tải tài nguyên giao diện console", "加载控制台界面资源"),
+     ("Serves only an allowlist of the console's own CSS, JavaScript and interface text with no-cache headers. Unknown names return404. It does not expose the console HTML, other static pages or account/configuration files.",
+      "Chỉ phục vụ danh sách CSS, JavaScript và văn bản giao diện của console được phép, với header không cache. Tên không hợp lệ trả404. Không mở truy cập HTML console, trang tĩnh khác hay tệp tài khoản/cấu hình.",
+      "仅提供允许列表中的控制台 CSS、JavaScript 与界面文本，使用不缓存标头。未知名称返回404，不公开控制台 HTML、其他静态页面或账号/配置文件。"), auth="public")
 _add("GET /static/fonts/{font_name}",
      ("Load self-hosted interface fonts", "Tải font giao diện từ máy chủ", "加载本地界面字体"),
      ("Serves the two bundled Be Vietnam Pro font files as font/ttf. Unknown font names return404. No account credentials are needed.",

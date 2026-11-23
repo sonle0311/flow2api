@@ -391,6 +391,31 @@ async def instrument_asset(asset_name: str):
     )
 
 
+_CONSOLE_ASSETS = {
+    "console.css": "text/css",
+    "studio.css": "text/css",
+    "app.js": "application/javascript",
+    "api.js": "application/javascript",
+    "models.js": "application/javascript",
+    "studio.js": "application/javascript",
+    "request-preview.js": "application/javascript",
+    "locales.json": "application/json",
+}
+
+
+@app.get("/static/console/{asset_name}", include_in_schema=False)
+async def console_asset(asset_name: str):
+    """Serve only the console's own scripts and styles, never its HTML."""
+    media_type = _CONSOLE_ASSETS.get(asset_name)
+    asset_path = static_path / "console" / asset_name
+    if media_type is None or not asset_path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(
+        str(asset_path), media_type=media_type,
+        headers=_STATIC_PAGE_NO_CACHE_HEADERS,
+    )
+
+
 @app.get("/static/fonts/{font_name}", include_in_schema=False)
 async def instrument_font(font_name: str):
     if font_name not in {"be-vietnam-pro-regular.ttf", "be-vietnam-pro-semibold.ttf"}:
@@ -444,6 +469,18 @@ async def manage_page(request: Request):
     if manage_file.exists():
         return _static_page_response(manage_file)
     return HTMLResponse(content="<h1>Management Page Not Found</h1>", status_code=404)
+
+
+@app.get("/console", response_class=HTMLResponse)
+async def console_page(request: Request):
+    """Separate admin console (new frontend); the legacy pages stay available."""
+    guard_response = _ensure_admin_page_session(request)
+    if guard_response is not None:
+        return guard_response
+    console_file = static_path / "console" / "index.html"
+    if console_file.exists():
+        return _static_page_response(console_file)
+    return HTMLResponse(content="<h1>Console Not Found</h1>", status_code=404)
 
 
 @app.get("/test", response_class=HTMLResponse)

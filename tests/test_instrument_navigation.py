@@ -21,18 +21,25 @@ def test_management_navigation_retains_inputs_and_modal_visibility(browser_page,
     page, base = browser_page
     page.set_viewport_size({"width": width, "height": 900})
     open_page(page, base + "/manage")
-    page.locator("#tabSettings").click()
+
+    def go(tab):
+        # Below 900px the sidebar is a drawer that has to be opened first.
+        if page.locator(".instrument-menu-toggle").is_visible():
+            page.locator(".instrument-menu-toggle").click()
+        page.locator(tab).click()
+
+    go("#tabSettings")
     page.locator("#cfgAdminUsername").fill("Keep local 保存")
     page.locator("[data-language-select]").select_option("vi")
     assert page.locator("#cfgAdminUsername").input_value() == "Keep local 保存"
     playwright_api.expect(page.locator("#tabSettings")).to_have_attribute("aria-current", "page")
-    page.locator("#tabIntegration").click()
+    go("#tabIntegration")
     page.locator("#integrationServerUrl").fill("https://example.invalid/flow")
     # Settings intentionally reload on entry; local integration inputs do not.
-    page.locator("#tabLogs").click()
-    page.locator("#tabIntegration").click()
+    go("#tabLogs")
+    go("#tabIntegration")
     assert page.locator("#integrationServerUrl").input_value() == "https://example.invalid/flow"
-    page.locator("#tabTokens").click()
+    go("#tabTokens")
     page.locator('button[onclick="openAddModal()"]').click()
     playwright_api.expect(page.locator("#addModal")).to_be_visible()
     page.locator('button[onclick="closeAddModal()"]').first.click()
