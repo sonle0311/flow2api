@@ -19,7 +19,10 @@ from src.core.config import config
 def cache(tmp_path):
     directory = tmp_path / "media"
     directory.mkdir()
-    handler = SimpleNamespace(file_cache=SimpleNamespace(cache_dir=directory))
+    handler = SimpleNamespace(
+        file_cache=SimpleNamespace(cache_dir=directory),
+        admission_preflight=AsyncMock(return_value=None),
+    )
     with patch.object(routes, "generation_handler", handler):
         yield directory
 

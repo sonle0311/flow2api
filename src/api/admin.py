@@ -18,6 +18,14 @@ import urllib.request
 from urllib.parse import urlparse
 from curl_cffi.requests import AsyncSession
 from ..core.auth import AuthManager
+from ..services.client_keys import (
+    DEFAULT_MAX_CONCURRENT,
+    DEFAULT_RATE_LIMIT_PER_MINUTE,
+    MAX_CONCURRENT,
+    MAX_NAME_LENGTH,
+    MAX_RATE_LIMIT_PER_MINUTE,
+    ClientKeyService,
+)
 from ..core.database import Database
 from ..core.config import (
     config,
@@ -55,6 +63,7 @@ token_manager: TokenManager = None
 proxy_manager: ProxyManager = None
 db: Database = None
 concurrency_manager: Optional[ConcurrencyManager] = None
+client_key_service: Optional[ClientKeyService] = None
 captcha_runtime_prepare_tasks: Dict[str, asyncio.Task] = {}
 
 # Store active admin session tokens (in production, use Redis or database)
@@ -693,6 +702,12 @@ def set_dependencies(
     proxy_manager = pm
     db = database
     concurrency_manager = cm
+
+
+def set_client_key_service(service: ClientKeyService):
+    """Set the per-client API key service."""
+    global client_key_service
+    client_key_service = service
 
 
 # ========== Request Models ==========
@@ -1494,6 +1509,84 @@ async def import_tokens(
         "message": f"导入完成: 新增 {added} 个, 更新 {updated} 个"
         + (f", {len(errors)} 个失败" if errors else ""),
     }
+
+
+# ========== Client API Keys ==========
+
+
+class CreateClientKeyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=MAX_NAME_LENGTH)
+    rate_limit_per_minute: int = Field(
+        default=DEFAULT_RATE_LIMIT_PER_MINUTE, ge=0, le=MAX_RATE_LIMIT_PER_MINUTE
+    )
+    max_concurrent: int = Field(default=DEFAULT_MAX_CONCURRENT, ge=0, le=MAX_CONCURRENT)
+
+
+class UpdateClientKeyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=MAX_NAME_LENGTH)
+    is_active: Optional[bool] = None
+    rate_limit_per_minute: Optional[int] = Field(
+        default=None, ge=0, le=MAX_RATE_LIMIT_PER_MINUTE
+    )
+    max_concurrent: Optional[int] = Field(default=None, ge=0, le=MAX_CONCURRENT)
+
+
+def _client_keys() -> ClientKeyService:
+    if client_key_service is None:
+        raise HTTPException(status_code=503, detail="Client key service is not ready")
+    return client_key_service
+
+
+@router.get("/api/client-keys")
+async def list_client_keys(token: str = Depends(verify_admin_token)):
+    """List per-client API keys (never the secret) with live usage."""
+    return {"success": True, "client_keys": _client_keys().list()}
+
+
+@router.post("/api/client-keys")
+async def create_client_key(
+    request: CreateClientKeyRequest, token: str = Depends(verify_admin_token)
+):
+    """Create a client API key. The secret is returned only in this response."""
+    client_key, api_key = await _client_keys().create(
+        request.name, request.rate_limit_per_minute, request.max_concurrent
+    )
+    return {"success": True, "client_key": client_key, "api_key": api_key}
+
+
+@router.put("/api/client-keys/{key_id}")
+async def update_client_key(
+    key_id: int, request: UpdateClientKeyRequest, token: str = Depends(verify_admin_token)
+):
+    """Rename, enable/disable or change the limits of a client key."""
+    client_key = await _client_keys().update(
+        key_id, **request.model_dump(exclude_unset=True)
+    )
+    if client_key is None:
+        raise HTTPException(status_code=404, detail="Client key not found")
+    return {"success": True, "client_key": client_key}
+
+
+@router.post("/api/client-keys/{key_id}/rotate")
+async def rotate_client_key(key_id: int, token: str = Depends(verify_admin_token)):
+    """Issue a new secret for the key; the previous secret stops working at once."""
+    rotated = await _client_keys().rotate(key_id)
+    if rotated is None:
+        raise HTTPException(status_code=404, detail="Client key not found")
+    client_key, api_key = rotated
+    return {"success": True, "client_key": client_key, "api_key": api_key}
+
+
+@router.delete("/api/client-keys/{key_id}")
+async def delete_client_key(key_id: int, token: str = Depends(verify_admin_token)):
+    """Delete a client key permanently."""
+    if not await _client_keys().delete(key_id):
+        raise HTTPException(status_code=404, detail="Client key not found")
+    return {"success": True}
 
 
 # ========== Config Management ==========

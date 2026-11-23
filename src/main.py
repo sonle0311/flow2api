@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from .core.config import config
+from .core.auth import set_client_key_service
 from .core.database import Database
 from .core.i18n import I18nMiddleware
 from .core.monitoring import CONTENT_TYPE_LATEST, render_main_metrics
@@ -21,6 +22,7 @@ from .services.proxy_manager import ProxyManager
 from .services.token_manager import TokenManager
 from .services.managed_browser import ManagedBrowserService
 from .services.managed_captcha import ManagedCaptchaService
+from .services.client_keys import ClientKeyService
 from .services.load_balancer import LoadBalancer
 from .services.concurrency_manager import ConcurrencyManager
 from .services.generation_handler import GenerationHandler
@@ -124,6 +126,8 @@ async def lifespan(app: FastAPI):
     # 启动时统一把数据库配置同步到内存，避免 personal/brower 相关运行时配置遗漏。
     await db.reload_config_to_memory()
     await managed_browser.initialize()
+    await client_keys.initialize()
+    client_keys.start()
     generation_handler.file_cache.set_timeout(config.cache_timeout)
     cache_cleanup_enabled = await generation_handler.file_cache.refresh_cleanup_task()
     captcha_config = await db.get_captcha_config()
@@ -246,6 +250,7 @@ async def lifespan(app: FastAPI):
         pass
     await token_manager.stop_protocol_refresher()
     await managed_captcha.close()
+    await client_keys.close()
     await managed_browser.shutdown()
     # Close browser if initialized
     if browser_service:
@@ -265,6 +270,8 @@ managed_browser = ManagedBrowserService(db, token_manager)
 token_manager.managed_browser = managed_browser
 managed_captcha = ManagedCaptchaService(managed_browser)
 flow_client.managed_captcha = managed_captcha
+client_keys = ClientKeyService(db)
+set_client_key_service(client_keys)
 concurrency_manager = ConcurrencyManager()
 load_balancer = LoadBalancer(token_manager, concurrency_manager)
 generation_handler = GenerationHandler(
@@ -279,6 +286,7 @@ generation_handler = GenerationHandler(
 # Set dependencies
 routes.set_generation_handler(generation_handler)
 admin.set_dependencies(token_manager, proxy_manager, db, concurrency_manager)
+admin.set_client_key_service(client_keys)
 
 # Create FastAPI app
 app = FastAPI(
@@ -376,6 +384,8 @@ async def browser_desktop_script():
 _INSTRUMENT_ASSETS = {
     "instrument.css": "text/css",
     "instrument-utilities.css": "text/css",
+    "client-keys.css": "text/css",
+    "client-keys.js": "application/javascript",
     "instrument-shell.js": "application/javascript",
     "instrument-access.css": "text/css",
     "instrument-studio.css": "text/css",

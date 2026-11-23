@@ -525,3 +525,40 @@ class LoadBalancer:
                 return "当前有符合档位的账号，但视频生成功能已全部禁用。"
 
         return None
+
+    async def concurrency_saturated(
+        self,
+        *,
+        for_image_generation: bool = False,
+        for_video_generation: bool = False,
+        model: Optional[str] = None,
+    ) -> bool:
+        """True when capable accounts exist and every one is at its concurrency limit.
+
+        Used to tell "busy, wait for a slot" apart from "no usable account".
+        """
+        manager = self.concurrency_manager
+        if manager is None:
+            return False
+        capable = []
+        for token in await self.token_manager.get_active_tokens():
+            if model and not supports_model_for_tier(
+                model, normalize_user_paygate_tier(token.user_paygate_tier)
+            ):
+                continue
+            if for_image_generation and not token.image_enabled:
+                continue
+            if for_video_generation and not token.video_enabled:
+                continue
+            if (for_image_generation or for_video_generation) and not (
+                await self._check_extension_route(token)
+            )[0]:
+                continue
+            capable.append(token)
+        if not capable:
+            return False
+        can_use = manager.can_use_image if for_image_generation else manager.can_use_video
+        for token in capable:
+            if await can_use(token.id):
+                return False
+        return True

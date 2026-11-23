@@ -13,11 +13,14 @@ image_timeout_retry_count = 1
 image_timeout_retry_delay = 0.8
 image_timeout_use_media_proxy_fallback = true
 image_prefer_media_proxy = false
-image_slot_wait_timeout = 480
+# 所有账号并发已满时请求排队等待：每种类型最多排队 queue_max_waiting 个，等待上限为 *_slot_wait_timeout 秒；
+# 队列已满或等待超时返回 HTTP 429 + Retry-After
+queue_max_waiting = 50
+image_slot_wait_timeout = 120
 image_launch_soft_limit = 20
 image_launch_wait_timeout = 480
 image_launch_stagger_ms = 0
-video_slot_wait_timeout = 480
+video_slot_wait_timeout = 120
 video_launch_soft_limit = 20
 video_launch_wait_timeout = 480
 video_launch_stagger_ms = 0

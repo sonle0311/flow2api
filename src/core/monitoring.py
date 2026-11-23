@@ -368,7 +368,10 @@ def record_generation_result(
     )
     normalized_result = (
         result
-        if result in {"success", "failed", "cancelled", "no_token", "invalid"}
+        if result in {
+            "success", "failed", "cancelled", "no_token", "invalid",
+            "queue_full", "queue_timeout",
+        }
         else "unknown"
     )
     GENERATION_REQUESTS_TOTAL.labels(

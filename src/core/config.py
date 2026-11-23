@@ -257,6 +257,15 @@ class Config:
             return 0
 
     @property
+    def flow_queue_max_waiting(self) -> int:
+        """每种生成类型最多排队等待槽位的请求数(超出立即返回 429)。"""
+        value = self._config.get("flow", {}).get("queue_max_waiting", 50)
+        try:
+            return max(0, min(1000, int(value)))
+        except Exception:
+            return 50
+
+    @property
     def poll_interval(self) -> float:
         return self._config["flow"]["poll_interval"]
 

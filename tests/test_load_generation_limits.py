@@ -74,10 +74,14 @@ class GenerationLimitLoadTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cache = patch.object(type(config), "cache_enabled", new_callable=PropertyMock, return_value=False)
         self.mode = patch.object(type(config), "call_logic_mode", new_callable=PropertyMock, return_value="default")
+        # No wait line: these bursts check the raw account capacity.
+        self.queue = patch.object(type(config), "flow_queue_max_waiting", new_callable=PropertyMock, return_value=0)
         self.cache.start()
         self.mode.start()
+        self.queue.start()
         self.addCleanup(self.cache.stop)
         self.addCleanup(self.mode.stop)
+        self.addCleanup(self.queue.stop)
 
     async def assert_released(self, handler, tokens):
         for token in tokens:
@@ -130,7 +134,8 @@ class GenerationLimitLoadTests(unittest.IsolatedAsyncioTestCase):
         for chunks in results:
             error = json.loads(chunks[-1]).get("error")
             if error:
-                self.assertEqual(error["status_code"], 503)
+                self.assertEqual(error["status_code"], 429)
+                self.assertGreater(error["retry_after"], 0)
         await self.assert_released(handler, tokens)
 
     async def test_finite_image_and_video_bursts_respect_account_capacity(self):

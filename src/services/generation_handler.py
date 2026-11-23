@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import inspect
 import json
 import math
 import time
@@ -19,6 +20,7 @@ from ..core.account_tiers import (
     supports_model_for_tier,
 )
 from .file_cache import FileCache
+from .admission_queue import AdmissionQueue, AdmissionRejected
 
 
 def _video_poll_attempt_budget(
@@ -1720,22 +1722,43 @@ class GenerationHandler:
             debug_logger.log_info(f"[GENERATION] 正在选择可用Token...")
             token_select_started_at = time.time()
 
-            if generation_type == "image":
-                token = await self.load_balancer.select_token(
-                    for_image_generation=True,
-                    model=model,
-                    reserve=True,
-                    track_pending=False,
-                    exclude_token_ids=failed_token_ids,
-                )
-            else:
-                token = await self.load_balancer.select_token(
-                    for_video_generation=True,
-                    model=model,
-                    reserve=True,
-                    track_pending=False,
-                    exclude_token_ids=failed_token_ids,
-                )
+            select_kwargs = self._select_kwargs(generation_type, model, failed_token_ids)
+            token = await self.load_balancer.select_token(**select_kwargs)
+            # Only the first selection queues: later ones are failovers.
+            if token is None and not failed_token_ids and await self._capacity_saturated(
+                generation_type, model
+            ):
+                if stream:
+                    yield self._create_stream_chunk("当前请求较多，正在排队等待可用账号...\n")
+                try:
+                    token = await self.admission_queue.wait_for_slot(
+                        generation_type,
+                        lambda: self.load_balancer.select_token(**select_kwargs),
+                        lambda: self._capacity_saturated(generation_type, model),
+                    )
+                except AdmissionRejected as rejected:
+                    error_msg = self._admission_rejection_message(rejected)
+                    debug_logger.log_error(f"[GENERATION] {error_msg}")
+                    record_generation_result(
+                        generation_type, rejected.reason, time.time() - start_time
+                    )
+                    await self._log_request(
+                        token_id=None,
+                        operation=request_operation,
+                        request_data=request_payload,
+                        response_data={"error": error_msg, "performance": perf_trace},
+                        status_code=429,
+                        duration=time.time() - start_time,
+                        log_id=request_log_state.get("id"),
+                        status_text="failed",
+                        progress=request_log_state.get("progress", 0),
+                    )
+                    if stream:
+                        yield self._create_stream_chunk(f"错误: {error_msg}\n")
+                    yield self._create_error_response(
+                        error_msg, status_code=429, retry_after=rejected.retry_after
+                    )
+                    return
             perf_trace["token_select_ms"] = int(
                 (time.time() - token_select_started_at) * 1000
             )
@@ -2122,8 +2145,64 @@ class GenerationHandler:
             except asyncio.CancelledError as error:
                 cancellation = error
         cleanup.result()
+        self.admission_queue.notify()
         if cancellation is not None:
             raise cancellation
+
+    @property
+    def admission_queue(self) -> AdmissionQueue:
+        # Created on first use so handlers built without __init__ still work.
+        queue = self.__dict__.get("_admission_queue")
+        if queue is None:
+            queue = self._admission_queue = AdmissionQueue(
+                max_waiting=lambda: config.flow_queue_max_waiting,
+                wait_timeout=lambda kind: (
+                    config.flow_image_slot_wait_timeout
+                    if kind == "image"
+                    else config.flow_video_slot_wait_timeout
+                ),
+            )
+        return queue
+
+    @staticmethod
+    def _select_kwargs(generation_type: str, model: str, excluded) -> Dict[str, Any]:
+        return {
+            "for_image_generation" if generation_type == "image" else "for_video_generation": True,
+            "model": model,
+            "reserve": True,
+            "track_pending": False,
+            "exclude_token_ids": excluded,
+        }
+
+    async def _capacity_saturated(self, generation_type: str, model: str) -> bool:
+        """True when accounts exist but all are at their concurrency limit."""
+        check = getattr(self.load_balancer, "concurrency_saturated", None)
+        if check is None:
+            return False
+        flag = "for_image_generation" if generation_type == "image" else "for_video_generation"
+        result = check(**{flag: True}, model=model)
+        if inspect.isawaitable(result):
+            result = await result
+        return result is True
+
+    async def admission_preflight(self, model: str) -> Optional[AdmissionRejected]:
+        """Rejection to return before a stream starts when the wait line is full."""
+        model_config = MODEL_CONFIG.get(model)
+        if not model_config:
+            return None
+        kind = model_config["type"]
+        if self.admission_queue.is_full(kind) and await self._capacity_saturated(kind, model):
+            return AdmissionRejected("queue_full", kind)
+        return None
+
+    @staticmethod
+    def _admission_rejection_message(rejected: AdmissionRejected) -> str:
+        if rejected.reason == "queue_full":
+            return f"服务繁忙：排队队列已满，请 {rejected.retry_after} 秒后重试"
+        return (
+            f"服务繁忙：等待可用账号超时（已等待 {int(rejected.waited_seconds)} 秒），"
+            f"请 {rejected.retry_after} 秒后重试"
+        )
 
     def _get_no_token_error_message(self, generation_type: str) -> str:
         """获取无可用Token时的详细错误信息"""
@@ -3529,20 +3608,32 @@ class GenerationHandler:
 
         return json.dumps(response, ensure_ascii=False)
 
-    def _create_error_response(self, error_message: str, status_code: int = 500) -> str:
+    def _create_error_response(
+        self,
+        error_message: str,
+        status_code: int = 500,
+        retry_after: Optional[int] = None,
+    ) -> str:
         """创建错误响应"""
         import json
 
+        error_type = (
+            "rate_limit_error"
+            if status_code == 429
+            else "server_error"
+            if status_code >= 500
+            else "invalid_request_error"
+        )
         error = {
             "error": {
                 "message": error_message,
-                "type": "server_error"
-                if status_code >= 500
-                else "invalid_request_error",
-                "code": "generation_failed",
+                "type": error_type,
+                "code": "server_busy" if status_code == 429 else "generation_failed",
                 "status_code": status_code,
             }
         }
+        if retry_after is not None:
+            error["error"]["retry_after"] = retry_after
 
         return json.dumps(error, ensure_ascii=False)
 

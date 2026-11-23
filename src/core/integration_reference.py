@@ -150,6 +150,7 @@ def build_capacity(settings, tokens):
             "launch_soft_limit": launch_limit,
             "launch_stagger_ms": max(0, int(getattr(settings, f"flow_{kind}_launch_stagger_ms") or 0)),
             "queue_wait_timeout_seconds": int(getattr(settings, f"flow_{kind}_slot_wait_timeout")),
+            "queue_max_waiting": max(0, int(getattr(settings, "flow_queue_max_waiting", 0) or 0)),
             # 0 means no account can currently serve this kind of request.
             "recommended_max_parallel_requests": 0 if not enabled else (min(bounds) if bounds else None),
         }

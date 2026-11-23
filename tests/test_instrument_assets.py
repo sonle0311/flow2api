@@ -13,6 +13,8 @@ from src.main import app
     ("instrument-utilities.css", "text/css"),
     ("instrument-shell.js", "application/javascript"),
     ("instrument-access.css", "text/css"),
+    ("client-keys.css", "text/css"),
+    ("client-keys.js", "application/javascript"),
 ])
 def test_instrument_assets_are_current_local_files(name, media_type):
     async def check():

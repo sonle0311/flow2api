@@ -9,6 +9,20 @@ from .config import config
 security = HTTPBearer()
 optional_security = HTTPBearer(auto_error=False)
 
+# ClientKeyService, wired by the app. Client keys are accepted only by
+# verify_api_key_flexible (model listing and generation); every other use of
+# the API key, such as the CAPTCHA WebSocket, still requires the master key.
+_client_keys = None
+
+
+def set_client_key_service(service) -> None:
+    global _client_keys
+    _client_keys = service
+
+
+def get_client_key_service():
+    return _client_keys
+
 
 class AuthManager:
     """Authentication manager"""
@@ -60,7 +74,10 @@ async def verify_api_key_flexible(
     elif key:
         api_key = key
 
-    if not api_key or not AuthManager.verify_api_key(api_key):
+    if not api_key or not (
+        AuthManager.verify_api_key(api_key)
+        or (_client_keys is not None and _client_keys.authenticate(api_key) is not None)
+    ):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     return api_key

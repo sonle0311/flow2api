@@ -24,7 +24,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..core.auth import AuthManager, verify_api_key_flexible
+from ..core.auth import AuthManager, get_client_key_service, verify_api_key_flexible
 from ..core.config import config
 from ..core.logger import debug_logger
 from ..core.model_resolver import (
@@ -40,6 +40,7 @@ from ..core.models import (
 )
 from ..services.generation_handler import MODEL_CONFIG, GenerationHandler
 from ..services.browser_captcha_extension import ExtensionCaptchaService
+from ..services.client_keys import NO_LEASE, ClientLimitExceeded, Lease
 
 router = APIRouter()
 
@@ -121,11 +122,47 @@ async def _close_owned_stream(iterator) -> None:
 class GenerationStreamingResponse(StreamingResponse):
     """Own the suspended iterator across ASGI send errors and disconnects."""
 
+    def __init__(self, *args, on_close=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._on_close = on_close
+
     async def __call__(self, scope, receive, send):
         try:
             await super().__call__(scope, receive, send)
         finally:
-            await _close_owned_stream(self.body_iterator)
+            try:
+                await _close_owned_stream(self.body_iterator)
+            finally:
+                if self._on_close is not None:
+                    self._on_close()
+
+
+def _admit_client(api_key: str) -> Lease:
+    """Count the request against its client key; raises ClientLimitExceeded.
+
+    The master key and unknown keys already authenticated carry no limits.
+    """
+    service = get_client_key_service()
+    record = service.authenticate(api_key) if service is not None else None
+    return service.admit(record) if record is not None else NO_LEASE
+
+
+def _client_limit_response(exc: ClientLimitExceeded, *, gemini: bool = False) -> JSONResponse:
+    if gemini:
+        body = _build_gemini_error_payload(429, exc.message)
+    else:
+        body = {
+            "error": {
+                "message": exc.message,
+                "type": "rate_limit_error",
+                "code": exc.code,
+                "status_code": 429,
+                "retry_after": exc.retry_after,
+            }
+        }
+    return JSONResponse(
+        status_code=429, content=body, headers={"Retry-After": str(exc.retry_after)}
+    )
 
 
 @dataclass
@@ -681,8 +718,34 @@ def _get_error_status_code(payload: Dict[str, Any]) -> int:
     return 200
 
 
+def _retry_after_headers(payload: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    error = payload.get("error")
+    if isinstance(error, dict) and error.get("retry_after") is not None:
+        return {"Retry-After": str(int(error["retry_after"]))}
+    return None
+
+
 def _build_openai_json_response(payload: Dict[str, Any]) -> JSONResponse:
-    return JSONResponse(content=payload, status_code=_get_error_status_code(payload))
+    return JSONResponse(
+        content=payload,
+        status_code=_get_error_status_code(payload),
+        headers=_retry_after_headers(payload),
+    )
+
+
+def _rejection_response(rejected, *, gemini: bool = False) -> JSONResponse:
+    """429 with Retry-After for a request the wait line cannot take."""
+    handler = _ensure_generation_handler()
+    payload = _parse_handler_result(
+        handler._create_error_response(
+            handler._admission_rejection_message(rejected),
+            status_code=429,
+            retry_after=rejected.retry_after,
+        )
+    )
+    if gemini:
+        return _build_gemini_error_response_from_handler(payload)
+    return _build_openai_json_response(payload)
 
 
 def _build_gemini_error_payload(status_code: int, message: str) -> Dict[str, Any]:
@@ -702,6 +765,7 @@ def _build_gemini_error_response_from_handler(payload: Dict[str, Any]) -> JSONRe
     return JSONResponse(
         status_code=status_code,
         content=_build_gemini_error_payload(status_code, message),
+        headers=_retry_after_headers(payload),
     )
 
 
@@ -1016,6 +1080,11 @@ async def create_chat_completion(
 ):
     """OpenAI-compatible unified generation endpoint."""
     try:
+        lease = _admit_client(api_key)
+    except ClientLimitExceeded as exc:
+        return _client_limit_response(exc)
+    handed_off = False
+    try:
         request_base_url = _get_request_base_url(raw_request)
         normalized = await _normalize_openai_request(
             request, request_base_url=request_base_url
@@ -1024,7 +1093,12 @@ async def create_chat_completion(
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
         if request.stream:
-            return GenerationStreamingResponse(
+            rejected = await _ensure_generation_handler().admission_preflight(
+                normalized.model
+            )
+            if rejected is not None:
+                return _rejection_response(rejected)
+            response = GenerationStreamingResponse(
                 _iterate_openai_stream(normalized, request_base_url),
                 media_type="text/event-stream",
                 headers={
@@ -1032,7 +1106,10 @@ async def create_chat_completion(
                     "Connection": "keep-alive",
                     "X-Accel-Buffering": "no",
                 },
+                on_close=lease.release,
             )
+            handed_off = True
+            return response
 
         payload = _parse_handler_result(
             await _collect_non_stream_result(
@@ -1049,6 +1126,9 @@ async def create_chat_completion(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if not handed_off:
+            lease.release()
 
 
 @router.post("/v1beta/models/{model}:generateContent")
@@ -1060,6 +1140,10 @@ async def generate_content(
     api_key: str = Depends(verify_api_key_flexible),
 ):
     """Gemini official generateContent endpoint."""
+    try:
+        lease = _admit_client(api_key)
+    except ClientLimitExceeded as exc:
+        return _client_limit_response(exc, gemini=True)
     try:
         request_base_url = _get_request_base_url(raw_request)
         normalized = await _normalize_gemini_request(
@@ -1096,6 +1180,8 @@ async def generate_content(
             status_code=500,
             content=_build_gemini_error_payload(500, str(exc)),
         )
+    finally:
+        lease.release()
 
 
 @router.post("/v1beta/models/{model}:streamGenerateContent")
@@ -1109,14 +1195,24 @@ async def stream_generate_content(
 ):
     """Gemini official streamGenerateContent endpoint."""
     try:
+        lease = _admit_client(api_key)
+    except ClientLimitExceeded as exc:
+        return _client_limit_response(exc, gemini=True)
+    handed_off = False
+    try:
         request_base_url = _get_request_base_url(raw_request)
         normalized = await _normalize_gemini_request(
             model, request, request_base_url=request_base_url
         )
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+        rejected = await _ensure_generation_handler().admission_preflight(
+            normalized.model
+        )
+        if rejected is not None:
+            return _rejection_response(rejected, gemini=True)
 
-        return GenerationStreamingResponse(
+        response = GenerationStreamingResponse(
             _iterate_gemini_stream(normalized, normalized.model, request_base_url),
             media_type="text/event-stream",
             headers={
@@ -1124,7 +1220,10 @@ async def stream_generate_content(
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
             },
+            on_close=lease.release,
         )
+        handed_off = True
+        return response
     except HTTPException as exc:
         return JSONResponse(
             status_code=exc.status_code,
@@ -1135,6 +1234,9 @@ async def stream_generate_content(
             status_code=500,
             content=_build_gemini_error_payload(500, str(exc)),
         )
+    finally:
+        if not handed_off:
+            lease.release()
 
 
 @router.websocket("/captcha_ws")

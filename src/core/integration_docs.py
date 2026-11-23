@@ -17,9 +17,9 @@ _ADMIN = _text(
     " 需要有效管理会话：Authorization: Bearer <ADMIN_SESSION>，或登录返回的 admin_session Cookie。生成 API Key 和插件连接令牌不能用于此接口。会话保存在进程内存中，重启后失效。请求校验可能返回 HTTP 422；除 HTTP 状态外还应检查 success/message。",
 )
 _API = _text(
-    " Requires the configured generation API key via Authorization: Bearer <API_KEY>, x-goog-api-key, or ?key=<API_KEY>, in that priority order. Missing/invalid keys return HTTP 401. Admin sessions and plugin connection tokens are separate credentials.",
-    " Cần khóa API tạo nội dung qua Authorization: Bearer <API_KEY>, x-goog-api-key hoặc ?key=<API_KEY>, theo thứ tự ưu tiên đó. Thiếu/sai khóa trả HTTP 401. Phiên quản trị và token kết nối plugin là thông tin xác thực riêng.",
-    " 需要配置的生成 API Key，依次支持 Authorization: Bearer <API_KEY>、x-goog-api-key、?key=<API_KEY>。缺失或无效返回 HTTP 401。管理会话和插件连接令牌属于不同凭据。",
+    " Requires a generation API key via Authorization: Bearer <API_KEY>, x-goog-api-key, or ?key=<API_KEY>, in that priority order. The server's master key or a per-client key (sk-flow-..., issued in the admin console or with POST /api/client-keys) is accepted; a disabled, rotated or deleted client key is rejected. Missing/invalid keys return HTTP 401. A client key may carry its own requests-per-minute and concurrency limits on generation routes; exceeding them returns HTTP 429 with Retry-After. Client keys work only on model listing and generation routes. Admin sessions and plugin connection tokens are separate credentials.",
+    " Cần khóa API tạo nội dung qua Authorization: Bearer <API_KEY>, x-goog-api-key hoặc ?key=<API_KEY>, theo thứ tự ưu tiên đó. Chấp nhận khóa gốc của server hoặc khóa riêng của khách (sk-flow-..., cấp trong trang quản trị hoặc bằng POST /api/client-keys); khóa khách đã tắt, đã đổi hoặc đã xóa bị từ chối. Thiếu/sai khóa trả HTTP 401. Khóa khách có thể có giới hạn số request mỗi phút và số request đồng thời trên route tạo nội dung; vượt giới hạn trả HTTP 429 kèm Retry-After. Khóa khách chỉ dùng được cho route liệt kê model và tạo nội dung. Phiên quản trị và token kết nối plugin là thông tin xác thực riêng.",
+    " 需要生成 API Key，依次支持 Authorization: Bearer <API_KEY>、x-goog-api-key、?key=<API_KEY>。接受服务器主 Key，或按客户端分配的 Key（sk-flow-...，在管理后台或通过 POST /api/client-keys 签发）；已停用、已轮换或已删除的客户端 Key 会被拒绝。缺失或无效返回 HTTP 401。客户端 Key 在生成路由上可带有每分钟请求数和并发上限，超出时返回 HTTP 429 和 Retry-After。客户端 Key 仅可用于模型列表和生成路由。管理会话和插件连接令牌属于不同凭据。",
 )
 _PLUGIN = _text(
     " Requires the plugin connection_token in Authorization (Bearer <PLUGIN_CONNECTION_TOKEN> or the raw token). Empty, missing or wrong tokens return HTTP 401. This is distinct from the generation API key, admin session, and CAPTCHA WebSocket authentication.",
@@ -398,6 +398,34 @@ _add(["POST /v1beta/models/{model}:streamGenerateContent", "POST /models/{model}
       "Hai đường dẫn nhận cùng body Gemini như generateContent và luôn trả text/event-stream. alt được nhận để tương thích SDK (thường alt=sse) nhưng không đổi phương thức truyền. Sự kiện chuyển luồng thành candidates/lỗi dạng Gemini và chuyển media cuối khi có. Xác minh prompt/model/ảnh trước khi bắt đầu; lỗi chuẩn hóa trước luồng dùng JSON Gemini, lỗi trong luồng cần đọc SSE. Kết nối luồng không cung cấp ID tác vụ tiếp tục hay đường dẫn thăm dò riêng.",
       "两个路径接受与 generateContent 相同的 Gemini 正文，并始终返回 text/event-stream。alt 为 SDK 兼容而接受（通常 alt=sse），不会用于切换传输格式。事件将生成流转换为 Gemini candidates/错误，并在输出可用时转换最终媒体。应在启动前验证提示词、模型和参考图；流开始前的规范化错误用 Gemini JSON 返回，流中错误应从 SSE 处理。流式连接不提供可恢复任务 ID 或独立状态轮询接口。"), auth="api", query={"alt": "sse"},
      body={"contents": [{"role": "user", "parts": [{"text": "<GENERATION_PROMPT>"}]}], "generationConfig": {"videoConfig": {"durationSeconds": 8, "aspectRatio": "16:9"}}})
+_CLIENT_KEY_FIELDS = {
+    "name": "String, 1-64 characters, required on create. A label for the client; not a secret.",
+    "rate_limit_per_minute": "Integer 0-100000, default 60 on create. Generation requests allowed per rolling 60 seconds; 0 means unlimited. Over the limit: HTTP 429, code rate_limit_exceeded, Retry-After.",
+    "max_concurrent": "Integer 0-1000, default 3 on create. Generation requests this key may have running at once, streams included until they end; 0 means unlimited. Over the limit: HTTP 429, code concurrency_limit_exceeded, Retry-After 5.",
+    "is_active": "Boolean, update only. false makes the key fail authentication at once (HTTP 401).",
+}
+_add("GET /api/client-keys", ("List per-client API keys", "Liệt kê API key theo khách", "列出按客户端分配的 API Key"),
+     ("Returns every client key with name, key_prefix (only the first characters, never the secret), is_active, rate_limit_per_minute, max_concurrent (0 means unlimited), total_requests, created_at, last_used_at and live in_flight and requests_last_minute counters. The secret is shown only when a key is created or rotated, because only its hash is stored. Counters live in server memory; total_requests is saved periodically.",
+      "Trả mọi khóa khách với name, key_prefix (chỉ vài ký tự đầu, không bao giờ là secret), is_active, rate_limit_per_minute, max_concurrent (0 là không giới hạn), total_requests, created_at, last_used_at cùng bộ đếm trực tiếp in_flight và requests_last_minute. Secret chỉ hiện khi tạo hoặc đổi khóa vì server chỉ lưu hash. Bộ đếm nằm trong bộ nhớ server; total_requests được lưu định kỳ.",
+      "返回全部客户端 Key，包括 name、key_prefix（仅前几个字符，绝不含密钥）、is_active、rate_limit_per_minute、max_concurrent（0 表示不限）、total_requests、created_at、last_used_at，以及实时的 in_flight 和 requests_last_minute 计数。密钥只在创建或轮换时显示，因为服务端只保存其哈希。计数保存在服务端内存中，total_requests 定期写入存储。"))
+_add("POST /api/client-keys", ("Create a per-client API key", "Tạo API key riêng cho khách", "创建按客户端分配的 API Key"),
+     ("Creates a key for one client. The response contains api_key, the only time the secret is shown: copy it at once and give it to the client, who uses it like the master key (Authorization: Bearer sk-flow-...). Each client gets its own rate_limit_per_minute and max_concurrent, so one client cannot use all the capacity. Limits apply to generation requests, live in server memory and reset on restart. Invalid values return HTTP 422.",
+      "Tạo khóa cho một khách. Phản hồi có api_key, lần duy nhất secret được hiển thị: hãy sao chép ngay và đưa cho khách, họ dùng như khóa gốc (Authorization: Bearer sk-flow-...). Mỗi khách có rate_limit_per_minute và max_concurrent riêng nên một khách không thể chiếm hết năng lực. Giới hạn áp dụng cho request tạo nội dung, nằm trong bộ nhớ server và đặt lại khi khởi động lại. Giá trị không hợp lệ trả HTTP 422.",
+      "为一个客户端创建 Key。响应中的 api_key 是密钥唯一一次显示：请立即复制并交给客户端，客户端像主 Key 一样使用它（Authorization: Bearer sk-flow-...）。每个客户端有独立的 rate_limit_per_minute 和 max_concurrent，因此单个客户端无法占满全部容量。限制只作用于生成请求，保存在服务端内存中，重启后重置。值无效返回 HTTP 422。"),
+     body={"name": "<CLIENT_NAME>", "rate_limit_per_minute": 60, "max_concurrent": 3}, fields=_CLIENT_KEY_FIELDS)
+_add("PUT /api/client-keys/{key_id}", ("Update a client API key", "Cập nhật API key của khách", "更新客户端 API Key"),
+     ("Partial update of name, is_active, rate_limit_per_minute or max_concurrent; omitted fields stay unchanged. Disabling a key makes its next requests fail with HTTP 401 at once; requests already running continue. New limits apply from the next request. An unknown key_id returns HTTP 404; invalid values return HTTP 422.",
+      "Cập nhật một phần name, is_active, rate_limit_per_minute hoặc max_concurrent; trường bỏ trống giữ nguyên. Tắt khóa khiến request sau đó lỗi HTTP 401 ngay; request đang chạy vẫn tiếp tục. Giới hạn mới áp dụng từ request kế tiếp. key_id không tồn tại trả HTTP 404; giá trị không hợp lệ trả HTTP 422.",
+      "部分更新 name、is_active、rate_limit_per_minute 或 max_concurrent，省略的字段保持不变。停用 Key 后，其后续请求立即返回 HTTP 401，已在运行的请求继续。新限制从下一个请求开始生效。未知 key_id 返回 HTTP 404，值无效返回 HTTP 422。"),
+     body={"is_active": True, "rate_limit_per_minute": 120}, fields=_CLIENT_KEY_FIELDS)
+_add("POST /api/client-keys/{key_id}/rotate", ("Rotate a client API key", "Đổi secret của API key khách", "轮换客户端 API Key"),
+     ("Issues a new secret and invalidates the previous one at once: requests using the old secret return HTTP 401. The new secret is returned only in this response. Name, limits and usage counters are kept. Use it when a client key leaks or a client changes. An unknown key_id returns HTTP 404.",
+      "Cấp secret mới và vô hiệu secret cũ ngay lập tức: request dùng secret cũ trả HTTP 401. Secret mới chỉ có trong phản hồi này. Giữ nguyên tên, giới hạn và bộ đếm sử dụng. Dùng khi khóa khách bị lộ hoặc khách thay đổi. key_id không tồn tại trả HTTP 404.",
+      "签发新密钥并立即使旧密钥失效：使用旧密钥的请求返回 HTTP 401。新密钥只在此响应中返回。名称、限制和使用计数保持不变。客户端 Key 泄露或客户变更时使用。未知 key_id 返回 HTTP 404。"))
+_add("DELETE /api/client-keys/{key_id}", ("Delete a client API key", "Xóa API key của khách", "删除客户端 API Key"),
+     ("Deletes the key permanently: it stops authenticating at once and its usage counters are lost. Requests already running continue. Prefer is_active=false through PUT when the key may return. An unknown key_id returns HTTP 404.",
+      "Xóa vĩnh viễn khóa: khóa ngừng xác thực ngay và bộ đếm sử dụng bị mất. Request đang chạy vẫn tiếp tục. Nên dùng is_active=false qua PUT nếu khóa có thể dùng lại. key_id không tồn tại trả HTTP 404.",
+      "永久删除 Key：它立即停止通过认证，使用计数随之丢失。已在运行的请求继续。如果 Key 之后可能恢复使用，请优先通过 PUT 设置 is_active=false。未知 key_id 返回 HTTP 404。"))
 _add("WEBSOCKET /captcha_ws", ("Connect a CAPTCHA extension worker", "Kết nối worker extension CAPTCHA", "连接 CAPTCHA 扩展工作端"),
      ("WebSocket control channel for extension CAPTCHA mode, not a generation REST endpoint. Authenticate with the GENERATION API key in ?key=, ?api_key=, x-goog-api-key, or Authorization: Bearer; a Bearer header overrides the other sources. Missing/invalid credentials close with code 1008 before accept. Optional route_key/client_label query parameters identify a browser/account route. Client may send JSON {type:'register',route_key,client_label}; server replies register_ack. Server sends {type:'get_token',req_id,action,project_id,route_key}; the owning socket replies with the same req_id, status:'success',token:<captcha token>, or a failure status/error. Responses from another socket are ignored. Route matching is exact: an empty account route only uses an empty extension route, never borrows a keyed worker. Requests have an internal timeout (default service timeout 20 seconds); disconnected/unmatched workers fail generation. Plugin connection_token does not authenticate this channel.",
       "Kênh điều khiển WebSocket cho chế độ CAPTCHA extension, không phải REST tạo nội dung. Xác thực bằng khóa API TẠO NỘI DUNG trong ?key=, ?api_key=, x-goog-api-key hoặc Authorization: Bearer; header Bearer ghi đè nguồn khác. Thiếu/sai khóa đóng mã 1008 trước accept. Query route_key/client_label tùy chọn nhận diện tuyến trình duyệt/tài khoản. Máy khách gửi JSON {type:'register',route_key,client_label}, máy chủ trả register_ack. Máy chủ gửi {type:'get_token',req_id,action,project_id,route_key}; socket sở hữu trả cùng req_id, status:'success',token:<captcha token> hoặc trạng thái lỗi/error. Bỏ phản hồi từ socket khác. Tuyến phải khớp chính xác: tuyến tài khoản rỗng chỉ dùng extension tuyến rỗng, không mượn worker có khóa. Yêu cầu có timeout nội bộ (mặc định dịch vụ 20 giây); worker ngắt/không khớp làm tạo thất bại. connection_token plugin không xác thực kênh này.",
@@ -535,6 +563,15 @@ _response("POST /v1/chat/completions", {"id": "<CHAT_COMPLETION_ID>", "object": 
 _response(["POST /v1beta/models/{model}:generateContent", "POST /models/{model}:generateContent"], {"candidates": [{"content": {"role": "model", "parts": [{"inlineData": {"mimeType": "image/png", "data": "<BASE64_IMAGE_BYTES>"}}]}, "finishReason": "STOP", "index": 0}], "modelVersion": "<RESOLVED_MODEL_ID>"})
 _response(["POST /v1beta/models/{model}:streamGenerateContent", "POST /models/{model}:streamGenerateContent"], "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"<PROGRESS_OR_OUTPUT>\"}]},\"index\":0}],\"modelVersion\":\"<RESOLVED_MODEL_ID>\"}\n\n")
 _response("GET /api/integration/reference", {"version": 1, "endpoints": [], "models": [], "aliases": [], "model_parameters": [], "schemas": {}})
+_CLIENT_KEY_EXAMPLE = {
+    "id": 1, "name": "<CLIENT_NAME>", "key_prefix": "sk-flow-ab12", "is_active": True,
+    "rate_limit_per_minute": 60, "max_concurrent": 3, "total_requests": 0,
+    "created_at": "<ISO_8601_TIMESTAMP>", "last_used_at": None, "in_flight": 0, "requests_last_minute": 0,
+}
+_response("GET /api/client-keys", {"success": True, "client_keys": [_CLIENT_KEY_EXAMPLE]})
+_response(["POST /api/client-keys", "POST /api/client-keys/{key_id}/rotate"], {"success": True, "client_key": _CLIENT_KEY_EXAMPLE, "api_key": "<CLIENT_API_KEY_SHOWN_ONCE>"})
+_response("PUT /api/client-keys/{key_id}", {"success": True, "client_key": _CLIENT_KEY_EXAMPLE})
+_response("DELETE /api/client-keys/{key_id}", {"success": True})
 
 
 _MODEL_PARAMETER_NOTES = _text(
@@ -555,6 +592,19 @@ for _key in (
 ):
     for _language in ("en", "vi", "zh-CN"):
         ENDPOINT_NOTES[_key]["details"][_language] += _MODEL_PARAMETER_NOTES[_language] + _MEDIA_CONFIG_NOTES[_language]
+
+_BUSY_NOTES = _text(
+    " Capacity and limits: when every account is at its concurrency limit the request waits in a bounded first-in-first-out queue (its length and wait time come from the server configuration; see capacity in the integration reference). A full queue or an expired wait returns HTTP 429 with a Retry-After header in seconds; the error has type rate_limit_error, code server_busy and retry_after, and no generation was started. A per-client key can also return HTTP 429 with code rate_limit_exceeded (requests per minute) or concurrency_limit_exceeded (concurrent requests), also with Retry-After. For streaming, a rejection known before streaming starts is a normal HTTP 429 response; a wait that expires after streaming began is delivered as an SSE error event with status_code 429 and retry_after. When no account can serve the model at all the response stays HTTP 503.",
+    " Năng lực và giới hạn: khi mọi tài khoản đều đạt giới hạn đồng thời, request chờ trong hàng đợi vào trước ra trước có giới hạn (độ dài và thời gian chờ lấy từ cấu hình server, xem capacity trong tài liệu tích hợp). Hàng đợi đầy hoặc hết thời gian chờ trả HTTP 429 kèm header Retry-After (giây); lỗi có type rate_limit_error, code server_busy và retry_after, và việc tạo chưa bắt đầu. Khóa riêng của khách còn có thể trả HTTP 429 với code rate_limit_exceeded (số request mỗi phút) hoặc concurrency_limit_exceeded (số request đồng thời), cũng kèm Retry-After. Với stream, từ chối biết trước khi luồng bắt đầu là phản hồi HTTP 429 bình thường; chờ hết hạn sau khi luồng đã bắt đầu được gửi dưới dạng sự kiện lỗi SSE có status_code 429 và retry_after. Khi không tài khoản nào phục vụ được model, phản hồi vẫn là HTTP 503.",
+    " 容量与限制：所有账号都达到并发上限时，请求在服务端有界先进先出队列中等待（长度与等待时间来自服务端配置，见集成参考中的 capacity）。队列已满或等待到期时返回 HTTP 429 和 Retry-After 响应头（秒）；错误含 type rate_limit_error、code server_busy 和 retry_after，且生成尚未开始。按客户端分配的 Key 还可能返回 HTTP 429，code 为 rate_limit_exceeded（每分钟请求数）或 concurrency_limit_exceeded（并发请求数），同样带 Retry-After。对流式路由，流开始前即可判定的拒绝是普通 HTTP 429 响应；流开始后才到期的等待以 status_code 429 和 retry_after 的 SSE 错误事件送达。若没有任何账号能服务该模型，仍返回 HTTP 503。",
+)
+for _key in (
+    "POST /v1/chat/completions",
+    "POST /v1beta/models/{model}:generateContent", "POST /models/{model}:generateContent",
+    "POST /v1beta/models/{model}:streamGenerateContent", "POST /models/{model}:streamGenerateContent",
+):
+    for _language in ("en", "vi", "zh-CN"):
+        ENDPOINT_NOTES[_key]["details"][_language] += _BUSY_NOTES[_language]
 
 
 

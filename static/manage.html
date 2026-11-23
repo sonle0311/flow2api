@@ -8,7 +8,9 @@
     <script src="/static/integration-recipes.js" defer></script>
     <script src="/static/integration.js" defer></script>
     <script src="/static/managed-browser.js" defer></script>
+    <script src="/static/client-keys.js" defer></script>
     <link rel="stylesheet" href="/static/instrument-utilities.css">
+    <link rel="stylesheet" href="/static/client-keys.css">
     <style>
         @keyframes slide-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         .animate-slide-up{animation:slide-up .3s ease-out}
@@ -228,6 +230,44 @@
                         </div>
                     </div>
                     <button onclick="updateAPIKey()" class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 w-full mt-4"><span data-i18n="更新 API Key">更新 API Key</span></button>
+                </div>
+
+                <!-- 客户 API Key -->
+                <div id="clientKeysCard" class="client-keys-card rounded-lg border border-border bg-background p-6">
+                    <h3 class="text-lg font-semibold mb-2"><span data-i18n="客户 API Key">客户 API Key</span></h3>
+                    <p class="client-keys-intro text-muted-foreground" data-i18n="为每个客户单独签发密钥，并设置每分钟请求数和并发上限（0 表示不限）。限制保存在服务端内存中，重启后重置。完整密钥只在创建或轮换时显示一次。">为每个客户单独签发密钥，并设置每分钟请求数和并发上限（0 表示不限）。限制保存在服务端内存中，重启后重置。完整密钥只在创建或轮换时显示一次。</p>
+                    <form id="clientKeyForm" class="client-keys-form">
+                        <div>
+                            <label for="clientKeyName" data-i18n="客户名称">客户名称</label>
+                            <input id="clientKeyName" class="client-keys-input" type="text" maxlength="64" required autocomplete="off" placeholder="例如：acme" data-i18n-placeholder="例如：acme">
+                        </div>
+                        <div>
+                            <label for="clientKeyRate" data-i18n="每分钟请求数">每分钟请求数</label>
+                            <input id="clientKeyRate" class="client-keys-input" type="number" min="0" max="100000" step="1" value="60" required>
+                        </div>
+                        <div>
+                            <label for="clientKeyConcurrent" data-i18n="并发上限">并发上限</label>
+                            <input id="clientKeyConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" value="3" required>
+                        </div>
+                        <button id="clientKeySubmit" type="submit" class="client-keys-primary" data-i18n="创建密钥">创建密钥</button>
+                    </form>
+                    <p id="clientKeysError" class="client-keys-error" role="alert" hidden></p>
+                    <div class="relative w-full overflow-x-auto">
+                        <table class="client-keys-table">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="名称">名称</th>
+                                    <th data-i18n="状态">状态</th>
+                                    <th data-i18n="限制">限制</th>
+                                    <th data-i18n="进行中 / 近 1 分钟">进行中 / 近 1 分钟</th>
+                                    <th data-i18n="累计请求">累计请求</th>
+                                    <th data-i18n="最近使用">最近使用</th>
+                                    <th data-i18n="操作">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clientKeysBody"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- 代理配置 -->
@@ -1146,6 +1186,39 @@
                 <button id="managedBrowserStop" type="button" data-i18n="停止浏览器同步">停止浏览器同步</button>
             </div>
         </div>
+    </dialog>
+    <dialog id="clientKeySecretDialog" class="managed-browser-dialog" aria-labelledby="clientKeySecretTitle" aria-describedby="clientKeySecretNotice">
+        <div class="managed-browser-content">
+            <h2 id="clientKeySecretTitle">客户密钥已创建</h2>
+            <p id="clientKeySecretNotice" data-i18n="完整密钥只显示这一次，关闭后无法再次查看。请立即复制并交给客户；丢失后只能轮换生成新密钥。">完整密钥只显示这一次，关闭后无法再次查看。请立即复制并交给客户；丢失后只能轮换生成新密钥。</p>
+            <code id="clientKeySecretValue" class="client-keys-secret" aria-label="API Key"></code>
+            <div class="managed-browser-actions">
+                <button id="clientKeyCopy" type="button" data-i18n="复制">复制</button>
+                <button id="clientKeySecretClose" type="button" data-i18n="关闭">关闭</button>
+            </div>
+        </div>
+    </dialog>
+    <dialog id="clientKeyEditDialog" class="managed-browser-dialog" aria-labelledby="clientKeyEditTitle">
+        <form id="clientKeyEditForm" class="managed-browser-content">
+            <h2 id="clientKeyEditTitle" data-i18n="编辑客户密钥">编辑客户密钥</h2>
+            <div class="client-keys-dialog-field">
+                <label for="clientKeyEditName" data-i18n="客户名称">客户名称</label>
+                <input id="clientKeyEditName" class="client-keys-input" type="text" maxlength="64" required autocomplete="off">
+            </div>
+            <div class="client-keys-dialog-field">
+                <label for="clientKeyEditRate" data-i18n="每分钟请求数">每分钟请求数</label>
+                <input id="clientKeyEditRate" class="client-keys-input" type="number" min="0" max="100000" step="1" required>
+            </div>
+            <div class="client-keys-dialog-field">
+                <label for="clientKeyEditConcurrent" data-i18n="并发上限">并发上限</label>
+                <input id="clientKeyEditConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" required>
+            </div>
+            <p id="clientKeyEditError" class="managed-browser-error" role="alert" hidden></p>
+            <div class="managed-browser-actions">
+                <button type="submit" data-i18n="保存">保存</button>
+                <button id="clientKeyEditCancel" type="button" data-i18n="取消">取消</button>
+            </div>
+        </form>
     </dialog>
     <script>
     I18n.ready.then(() => {
