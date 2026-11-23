@@ -112,7 +112,7 @@ def build_integration_reference(app):
     }
 
 
-_BROWSER_CAPTCHA_METHODS = {"personal", "browser"}
+_LOCAL_BROWSER_CAPTCHA_METHODS = {"personal", "browser", "managed"}
 
 
 def _limit(value):
@@ -132,9 +132,10 @@ def build_capacity(settings, tokens):
     """
     method = str(settings.captcha_method or "")
     captcha_slots = None
-    if method in _BROWSER_CAPTCHA_METHODS:
-        captcha_slots = min(50, settings.browser_count * settings.personal_max_resident_tabs) \
-            if method == "personal" else settings.browser_count
+    if method == "personal":
+        captcha_slots = min(50, settings.browser_count * settings.personal_max_resident_tabs)
+    elif method == "browser":
+        captcha_slots = settings.browser_count
 
     def per_kind(kind):
         enabled = [t for t in tokens if t.is_active and getattr(t, f"{kind}_enabled", True)]
@@ -155,7 +156,7 @@ def build_capacity(settings, tokens):
 
     return {
         "captcha_method": method,
-        "captcha_third_party": method not in _BROWSER_CAPTCHA_METHODS and method != "remote_browser",
+        "captcha_third_party": method not in _LOCAL_BROWSER_CAPTCHA_METHODS and method != "remote_browser",
         "captcha_parallel_slots": captcha_slots,
         "image": per_kind("image"),
         "video": per_kind("video"),

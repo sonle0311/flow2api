@@ -24,6 +24,10 @@ from .browser_cookie_utils import is_partitioned_cookie, validate_flow_cookie_st
 FLOW_URL = "https://flow.google.com/projects"
 
 
+class ProfileBusyError(RuntimeError):
+    """A sync or sign-in currently owns the account's browser profile."""
+
+
 def _timing(token_id, step, started):
     # Stage timings only (no cookies or identities) to diagnose slow hand-offs.
     loop = asyncio.get_running_loop()
@@ -151,6 +155,40 @@ class ManagedBrowserService:
             "error_code": row.get("error_code", ""),
             "interval_minutes": self._interval(token),
         }
+
+    async def open_context(self, token_id, *, wait_seconds=30):
+        """Return the account's running headless profile, launching it when needed.
+
+        Serialized with sync and login. Raises ProfileBusyError when one of them
+        keeps the profile longer than wait_seconds, or a manual sign-in window
+        has it open.
+        """
+        token = await self._token(token_id)
+        lock = self._lock(token_id)
+        try:
+            await asyncio.wait_for(lock.acquire(), timeout=wait_seconds)
+        except asyncio.TimeoutError:
+            raise ProfileBusyError("profile_busy") from None
+        try:
+            if self._closing:
+                raise RuntimeError("Browser service is shutting down")
+            manual = self._manual_browsers.get(token_id)
+            if manual is not None and manual.is_running:
+                raise ProfileBusyError("profile_busy")
+            context, _ = await self._context(token, headless=True)
+            return context
+        finally:
+            lock.release()
+
+    async def release_context(self, token_id):
+        """Close an idle headless profile; skipped while sync or sign-in uses it."""
+        lock = self._lock(token_id)
+        task = self._login_tasks.get(token_id)
+        if lock.locked() or (task and not task.done()):
+            return False
+        async with lock:
+            await self._close_context(token_id)
+        return True
 
     async def _proxy(self, token):
         raw = str(token.proxy_url or "").strip()

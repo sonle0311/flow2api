@@ -305,7 +305,7 @@ _CAPTCHA_BODY = {
     "browser_personal_fresh_restart_every_n_solves": 10, "personal_idle_tab_ttl_seconds": 600,
 }
 _CAPTCHA_FIELDS = {
-    "captcha_method": "Supported operational modes: yescaptcha, flow2api_team, captcharun, twocaptcha, capmonster, ezcaptcha, capsolver, browser, personal, remote_browser, extension. Lowercased; empty/missing becomes yescaptcha. Unknown strings are not rejected here and can fail during solving.",
+    "captcha_method": "Supported operational modes: yescaptcha, flow2api_team, captcharun, twocaptcha, capmonster, ezcaptcha, capsolver, browser, personal, managed, remote_browser, extension. managed mints reCAPTCHA tokens headless inside each account's own signed-in Chrome profile (managed browser session required, no third-party solver cost). Lowercased; empty/missing becomes yescaptcha. Unknown strings are not rejected here and can fail during solving.",
     "yescaptcha_task_type": "One of RecaptchaV3TaskProxyless, RecaptchaV3TaskProxylessM1, RecaptchaV3TaskProxylessM1S7, RecaptchaV3TaskProxylessM1S9; invalid/missing falls back to M1S9 (0.9).",
     "remote_browser_timeout": "Integer seconds, default 60, minimum 5; invalid integer returns success=false.",
     "remote_browser_base_url": "HTTP(S) base URL; required nonempty in remote_browser mode.",

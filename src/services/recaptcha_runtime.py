@@ -3,6 +3,9 @@
 import json
 
 
+# Public reCAPTCHA Enterprise site key that flow.google.com loads for its own page.
+FLOW_RECAPTCHA_SITE_KEY = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
+
 TRUSTED_RECAPTCHA_HOOK_SOURCE = r"""
 (() => {
     if (window.__flow2apiTrustedRecaptchaHookInstalled) return;

@@ -94,6 +94,8 @@ class _FlowClientBase(FlowFrontendMixin):
         self.labs_base_url = config.flow_labs_base_url
         self.api_base_url = config.flow_api_base_url
         self.timeout = config.flow_timeout
+        # ManagedCaptchaService, wired by the app; mints tokens in each account's own Chrome profile.
+        self.managed_captcha = None
         # 缓存每个账号的 User-Agent
         self._user_agent_cache = {}
         # 当前请求链路绑定的浏览器指纹（基于 contextvar，避免并发串扰）
@@ -4955,6 +4957,17 @@ class _FlowClientBase(FlowFrontendMixin):
                 )
             except Exception:
                 pass
+        elif method == "managed":
+            service = self.managed_captcha
+            if service is not None:
+                try:
+                    await service.report_flow_error(
+                        token_id=context.get("token_id"),
+                        error_reason=error_reason or "",
+                        error_message=error_message or "",
+                    )
+                except Exception:
+                    pass
         elif method == "remote_browser" and browser_id:
             try:
                 session_id = quote(str(browser_id), safe="")
@@ -5583,6 +5596,21 @@ class _FlowClientBase(FlowFrontendMixin):
                     f"[reCAPTCHA {captcha_method}] 已将打码 UA 注入请求指纹: "
                     f"{captcha_user_agent[:80]}"
                 )
+            return token, None
+        elif captcha_method == "managed":
+            service = self.managed_captcha
+            if service is None:
+                debug_logger.log_error("[reCAPTCHA Managed] 服务未初始化")
+                self._set_request_fingerprint(None)
+                return None, None
+            token = await service.get_token(project_id, action, token_id=token_id)
+            self._set_request_fingerprint(None)
+            if token:
+                self._set_captcha_request_context({
+                    "method": "managed", "browser_ref": None,
+                    "token_id": token_id, "project_id": project_id,
+                    "owner": asyncio.current_task(),
+                })
             return token, None
         else:
             debug_logger.log_info(f"[reCAPTCHA] 未知的打码方式: {captcha_method}")

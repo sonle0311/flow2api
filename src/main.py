@@ -20,6 +20,7 @@ from .services.flow_client import FlowClient
 from .services.proxy_manager import ProxyManager
 from .services.token_manager import TokenManager
 from .services.managed_browser import ManagedBrowserService
+from .services.managed_captcha import ManagedCaptchaService
 from .services.load_balancer import LoadBalancer
 from .services.concurrency_manager import ConcurrencyManager
 from .services.generation_handler import GenerationHandler
@@ -244,6 +245,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await token_manager.stop_protocol_refresher()
+    await managed_captcha.close()
     await managed_browser.shutdown()
     # Close browser if initialized
     if browser_service:
@@ -261,6 +263,8 @@ flow_client = FlowClient(proxy_manager, db)
 token_manager = TokenManager(db, flow_client)
 managed_browser = ManagedBrowserService(db, token_manager)
 token_manager.managed_browser = managed_browser
+managed_captcha = ManagedCaptchaService(managed_browser)
+flow_client.managed_captcha = managed_captcha
 concurrency_manager = ConcurrencyManager()
 load_balancer = LoadBalancer(token_manager, concurrency_manager)
 generation_handler = GenerationHandler(
