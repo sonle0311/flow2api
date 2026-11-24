@@ -883,15 +883,22 @@ def test_integration_parameter_preview_uses_simple_models_and_registered_choices
     assert page.locator("#integrationRequestEndpoint").inner_text().endswith("/omni-1.2-flash:generateContent")
 
     page.locator("#integrationModel").select_option("veo-3.1-quality")
-    assert set(page.locator("#integrationMode option").all_text_contents()) == {"t2v", "i2v", "extend"}
+    assert set(page.locator("#integrationMode option").all_text_contents()) == {"t2v", "i2v"}
     page.locator("#integrationMode").select_option("i2v")
     assert page.locator("#integrationDuration").input_value() == "4"
     assert "fileData" in json.dumps(preview())
+
+    page.locator("#integrationModel").select_option("omni-1.2-flash")
+    assert {"extend", "edit"} <= set(page.locator("#integrationMode option").all_text_contents())
     page.locator("#integrationMode").select_option("extend")
     assert page.locator("#integrationProtocol").input_value() == "openai"
     assert page.locator("#integrationProtocol option[value=gemini]").is_disabled()
-    assert page.locator("#integrationDuration option").all_text_contents() == ["8"]
+    assert page.locator("#integrationDuration option").all_text_contents() == [str(n) for n in range(3, 11)]
     assert set(page.locator("#integrationAspect option").all_text_contents()) == {"16:9", "9:16"}
+    assert "extend://" in json.dumps(preview())
+    page.locator("#integrationMode").select_option("edit")
+    assert page.locator("#integrationProtocol option[value=gemini]").is_disabled()
+    assert page.locator("#integrationDuration option").all_text_contents() == [str(n) for n in range(3, 16)]
     assert "extend://" in json.dumps(preview())
 
     page.locator("#integrationModel").select_option("veo-3.1-lite")
@@ -1031,7 +1038,7 @@ def test_authenticated_model_catalog_shows_all_current_image_and_video_models(br
 def test_model_sidebar_keeps_legacy_and_unknown_ids_and_omni_image_inputs(browser_page):
     page, base = browser_page
     ids = ["veo_3_1_t2v_fast", "veo_3_1_interpolation_lite_8s", "omni-1.1-flash-4s-landscape",
-           "veo-3.1-fast-extend-8s-landscape", "future-image-model", "future-video-model"]
+           "omni-1.2-flash-extend-4s-landscape", "future-image-model", "future-video-model"]
     page.route("**/v1/models", lambda route: route.fulfill(json={"data": [{"id": model, "description": model} for model in ids]}))
     open_page(page, base + "/test")
     page.locator("#apiKey").fill("test-api-key")
@@ -1081,7 +1088,7 @@ def test_extend_requires_source_and_sends_backend_compatible_reference(browser_p
 
     page, base = browser_page
     models = [
-        "veo-3.1-fast-extend-8s-landscape",
+        "omni-1.2-flash-extend-4s-landscape",
         "omni-1.2-flash-4s-landscape",
         "veo-3.1-fast-8s-landscape",
     ]

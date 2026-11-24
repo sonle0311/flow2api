@@ -21,6 +21,7 @@ from ..core.account_tiers import (
 )
 from .file_cache import FileCache
 from .admission_queue import AdmissionQueue, AdmissionRejected
+from .video_sources import VideoSourceStore, parse_source
 
 
 def _video_poll_attempt_budget(
@@ -693,26 +694,6 @@ MODEL_CONFIG = {
             "model_key": "veo_3_1_upsampler_1080p",
         },
     },
-    # ========== 视频续写 (Extend - Video Continuation) ==========
-    # 基于已生成的视频续写7秒，最多续写20次（最长148秒）
-    # 需要提供源视频的 mediaGenerationId
-    # VEO 3.1 Extend (横竖屏)
-    "veo_3_1_extend_portrait": {
-        "type": "video",
-        "video_type": "extend",
-        "model_key": "veo_3_1_extend_fast_portrait_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
-        "supports_images": False,
-        "requires_video_id": True,
-    },
-    "veo_3_1_extend": {
-        "type": "video",
-        "video_type": "extend",
-        "model_key": "veo_3_1_extend_fast_ultra",
-        "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
-        "supports_images": False,
-        "requires_video_id": True,
-    },
     # ========== Gemini Omni Flash ==========
     # 2026-11-08 实测上游真实请求：
     # - 纯文本 -> YhhmEf, videoModelKey=macaron_cookie_t2v_8s
@@ -842,10 +823,6 @@ def _apply_veo_3_1_model_updates():
     MODEL_CONFIG["veo_3_1_i2v_s_landscape"].update({"model_key": "veo_3_1_i2v_s_fl"})
     MODEL_CONFIG["veo_3_1_i2v_s_portrait"].update(
         {"model_key": "veo_3_1_i2v_s_portrait_fl"}
-    )
-    MODEL_CONFIG["veo_3_1_extend"].update({"model_key": "veo_3_1_extend_landscape"})
-    MODEL_CONFIG["veo_3_1_extend_portrait"].update(
-        {"model_key": "veo_3_1_extend_portrait"}
     )
 
     for seconds in (4, 6):
@@ -1188,17 +1165,6 @@ def _apply_current_flow_model_catalog():
             "allow_tier_upgrade": False,
         }
 
-    def extend(model_key: str, aspect_ratio: str) -> Dict[str, Any]:
-        return {
-            "type": "video",
-            "video_type": "extend",
-            "model_key": model_key,
-            "aspect_ratio": aspect_ratio,
-            "supports_images": False,
-            "use_v2_model_config": True,
-            "allow_tier_upgrade": False,
-        }
-
     # Veo 3.1 Lite. 实测 2026-09：Pro 账号对 lite 全系（含 *_low_priority 变体）
     # 均返回 MODEL_ACCESS_DENIED，veo 系需更高级别订阅；key 保持上游默认值。
     for seconds, key in (
@@ -1315,6 +1281,42 @@ def _apply_current_flow_model_catalog():
                 },
                 f"Omni 1.2 Flash 360p · {seconds}s · {orientation}",
             )
+    # Omni Extend adds N seconds (3-10) after an existing video; Omni Edit rewrites an existing
+    # video of N seconds (3-15). Both take the source from an extend://MEDIA_ID image_url and need
+    # a Google AI Plus/Pro/Ultra plan. Protocol: docs/flow-omni-edit-extend-protocol.md.
+    for seconds in range(3, 11):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"omni-1.2-flash-extend-{seconds}s-{orientation}",
+                {
+                    "type": "video",
+                    "video_type": "extend",
+                    "model_key": f"macaron_cookie_extend_{seconds}s",
+                    "aspect_ratio": ratio,
+                    "supports_images": False,
+                    "requires_video_id": True,
+                    "use_v2_model_config": True,
+                    "allow_tier_upgrade": False,
+                },
+                f"Omni 1.2 Flash Extend · +{seconds}s · {orientation}",
+            )
+    for seconds in range(3, 16):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"omni-1.2-flash-edit-{seconds}s-{orientation}",
+                {
+                    "type": "video",
+                    "video_type": "edit",
+                    "model_key": "macaron_cookie_edit",
+                    "source_seconds": seconds,
+                    "aspect_ratio": ratio,
+                    "supports_images": False,
+                    "requires_video_id": True,
+                    "use_v2_model_config": True,
+                    "allow_tier_upgrade": False,
+                },
+                f"Omni 1.2 Flash Edit · {seconds}s source · {orientation}",
+            )
     # Current image-to-video and reference-video variants.
     for seconds, lite_key, fast_key, quality_key in (
         (
@@ -1358,36 +1360,6 @@ def _apply_current_flow_model_catalog():
             f"veo-3.1-lite-r2v-8s-{orientation}",
             r2v("veo_3_1_r2v_lite", ratio),
             f"Veo 3.1 - Lite R2V · 8s · {orientation}",
-        )
-
-    for orientation, ratio, fast_key, quality_key in (
-        (
-            "landscape",
-            landscape,
-            "veo_3_1_extend_fast_landscape_ultra_relaxed",
-            "veo_3_1_extend_landscape",
-        ),
-        (
-            "portrait",
-            portrait,
-            "veo_3_1_extend_fast_portrait_ultra_relaxed",
-            "veo_3_1_extend_portrait",
-        ),
-    ):
-        register(
-            f"veo-3.1-fast-extend-8s-{orientation}",
-            extend(fast_key, ratio),
-            f"Veo 3.1 - Fast Extend · {orientation}",
-        )
-        register(
-            f"veo-3.1-quality-extend-8s-{orientation}",
-            extend(quality_key, ratio),
-            f"Veo 3.1 - Quality Extend · {orientation}",
-        )
-        register(
-            f"veo-3.1-lite-extend-8s-{orientation}",
-            extend("veo_3_1_extension_lite", ratio),
-            f"Veo 3.1 - Lite Extend · {orientation}",
         )
 
     register(
@@ -1711,11 +1683,10 @@ class GenerationHandler:
         model_config = MODEL_CONFIG[model]
         generation_type = model_config["type"]
         video_type_for_op = model_config.get("video_type", "")
-        request_operation = (
-            "extend_video"
-            if video_type_for_op == "extend"
-            else f"generate_{generation_type}"
-        )
+        request_operation = {
+            "extend": "extend_video",
+            "edit": "edit_video",
+        }.get(video_type_for_op, f"generate_{generation_type}")
         prompt_for_log = (
             prompt if len(prompt) <= 2000 else f"{prompt[:2000]}...(truncated)"
         )
@@ -1750,6 +1721,31 @@ class GenerationHandler:
                 progress=0,
             )
 
+        # Extend and edit run in the project that holds the source video, on its owner account.
+        source_project_id: Optional[str] = None
+        pinned_excluded: set = set()
+        if video_type_for_op in {"extend", "edit"} and video_media_id:
+            video_media_id, explicit_project = parse_source(video_media_id)
+            source_project_id = explicit_project or await self.video_sources.project_of(video_media_id)
+            source_project = (
+                await self.db.get_project_by_id(source_project_id) if source_project_id else None
+            )
+            if source_project is None:
+                error_msg = (
+                    "找不到源视频所属的项目，请使用 extend://MEDIA_ID?project=PROJECT_ID 指定"
+                    if not source_project_id
+                    else f"源视频所属项目不属于任何账号: {source_project_id}"
+                )
+                debug_logger.log_error(f"[GENERATION] {error_msg}")
+                record_generation_result(generation_type, "invalid", time.time() - start_time)
+                if stream:
+                    yield self._create_stream_chunk(f"{error_msg}\n")
+                yield self._create_error_response(error_msg, status_code=400)
+                return
+            pinned_excluded = {
+                owner.id for owner in await self.db.get_all_tokens() if owner.id != source_project.token_id
+            }
+
         # 2. 选择Token（账号配额耗尽时自动切换到其他账号重试）
         failed_token_ids: set = set()
         last_failover_error: Optional[str] = None
@@ -1767,7 +1763,9 @@ class GenerationHandler:
             debug_logger.log_info(f"[GENERATION] 正在选择可用Token...")
             token_select_started_at = time.time()
 
-            select_kwargs = self._select_kwargs(generation_type, model, failed_token_ids)
+            select_kwargs = self._select_kwargs(
+                generation_type, model, failed_token_ids | pinned_excluded
+            )
             token = await self.load_balancer.select_token(**select_kwargs)
             # Only the first selection queues: later ones are failovers.
             if token is None and not failed_token_ids and await self._capacity_saturated(
@@ -1904,7 +1902,7 @@ class GenerationHandler:
                     return
 
                 ensure_project_started_at = time.time()
-                project_id = await self.token_manager.ensure_project_exists(token.id)
+                project_id = source_project_id or await self.token_manager.ensure_project_exists(token.id)
                 perf_trace["ensure_project_ms"] = int(
                     (time.time() - ensure_project_started_at) * 1000
                 )
@@ -2208,6 +2206,13 @@ class GenerationHandler:
                 ),
             )
         return queue
+
+    @property
+    def video_sources(self) -> VideoSourceStore:
+        store = self.__dict__.get("_video_sources")
+        if store is None:
+            store = self._video_sources = VideoSourceStore(self.db)
+        return store
 
     @staticmethod
     def _select_kwargs(generation_type: str, model: str, excluded) -> Dict[str, Any]:
@@ -3041,32 +3046,43 @@ class GenerationHandler:
                     google_cookies=getattr(token, "google_cookies", None),
                 )
 
-            # Extend: 视频续写
-            elif video_type == "extend":
+            # Extend / edit: both start from an existing Flow video (extend://MEDIA_ID).
+            elif video_type in {"extend", "edit"}:
                 if not video_media_id:
-                    error_msg = "视频续写需要提供源视频的 mediaGenerationId，请在 image_url 中传入 extend://VIDEO_MEDIA_ID"
+                    error_msg = (
+                        "视频续写需要提供源视频的 mediaGenerationId，请在 image_url 中传入 extend://VIDEO_MEDIA_ID"
+                        if video_type == "extend"
+                        else "视频编辑需要提供源视频的 mediaGenerationId，请在 image_url 中传入 extend://VIDEO_MEDIA_ID"
+                    )
                     if stream:
                         yield self._create_stream_chunk(f"{error_msg}\n")
                     self._mark_generation_failed(generation_result, error_msg)
                     yield self._create_error_response(error_msg, status_code=400)
                     return
 
-                debug_logger.log_info(f"[EXTEND] 续写视频: {video_media_id}")
+                debug_logger.log_info(f"[{video_type.upper()}] 源视频: {video_media_id}")
                 if stream:
                     yield self._create_stream_chunk(
-                        f"视频续写任务提交中，源视频: {video_media_id[:8]}...\n"
+                        f"视频{'续写' if video_type == 'extend' else '编辑'}任务提交中，源视频: {video_media_id[:8]}...\n"
                     )
-                result = await self.flow_client.generate_video_extend(
-                    at=token.at,
-                    project_id=project_id,
-                    prompt=prompt,
-                    video_media_id=video_media_id,
-                    model_key=model_config["model_key"],
-                    aspect_ratio=model_config["aspect_ratio"],
-                    user_paygate_tier=normalized_tier,
-                    token_id=token.id,
-                    token_video_concurrency=token.video_concurrency,
-                )
+                source_call = {
+                    "at": token.at,
+                    "project_id": project_id,
+                    "prompt": prompt,
+                    "video_media_id": video_media_id,
+                    "model_key": model_config["model_key"],
+                    "aspect_ratio": model_config["aspect_ratio"],
+                    "user_paygate_tier": normalized_tier,
+                    "token_id": token.id,
+                    "token_video_concurrency": token.video_concurrency,
+                    "google_cookies": getattr(token, "google_cookies", None),
+                }
+                if video_type == "edit":
+                    result = await self.flow_client.generate_video_edit(
+                        source_seconds=model_config["source_seconds"], **source_call
+                    )
+                else:
+                    result = await self.flow_client.generate_video_extend(**source_call)
 
             # T2V 或 R2V无图: 纯文本生成
             else:
@@ -3323,6 +3339,10 @@ class GenerationHandler:
                     media_name = resolved_video["media_name"]
                     metadata = resolved_video["metadata"]
                     video_info = resolved_video["video_info"]
+                    try:
+                        await self.video_sources.record(video_media_id, project_id, token.id)
+                    except Exception as source_error:  # never fail a finished generation over bookkeeping
+                        debug_logger.log_warning(f"[VIDEO] 记录源视频归属失败: {source_error}")
 
                     if not video_url:
                         media_name_for_fetch = operation.get("mediaName") or operation[

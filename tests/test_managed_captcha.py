@@ -42,6 +42,12 @@ class FakePage:
         self.tracker = tracker
         self.delay = delay
         self.executed = []
+        self.moves = []
+        self.viewport_size = {"width": 1000, "height": 800}
+        self.mouse = SimpleNamespace(move=self._move)
+
+    async def _move(self, x, y, steps=1):
+        self.moves.append((x, y, steps))
 
     async def goto(self, url, **kwargs):
         self.gotos.append(url)
@@ -117,6 +123,16 @@ class ManagedCaptchaServiceTests(unittest.IsolatedAsyncioTestCase):
         self.browser = FakeBrowser()
         self.service = ManagedCaptchaService(self.browser)
         self.addAsyncCleanup(self.service.close)
+
+    async def test_pointer_moves_happen_only_when_asked_and_stay_inside_the_viewport(self):
+        # Flow rejects extend/edit tokens minted without pointer activity; other mints stay untouched.
+        await self.service.get_token(PROJECT, "VIDEO_GENERATION", token_id=1)
+        page = pages_of(self.browser)[0]
+        self.assertEqual(page.moves, [])
+        self.assertEqual(await self.service.get_token(PROJECT, "VIDEO_GENERATION", token_id=1, interact=True), "token-VIDEO_GENERATION")
+        self.assertGreaterEqual(len(page.moves), 10)
+        self.assertTrue(all(0 < x < 1000 and 0 < y < 800 for x, y, _ in page.moves))
+        self.assertGreater(len({(x, y) for x, y, _ in page.moves}), 10)
 
     async def test_first_mint_opens_project_page_and_later_mints_reuse_the_tab(self):
         image = await self.service.get_token(PROJECT, "image_generation", token_id=1)
@@ -292,9 +308,16 @@ class FlowClientManagedRoutingTests(unittest.IsolatedAsyncioTestCase):
         with self.managed():
             result = await client._get_recaptcha_token(PROJECT, "VIDEO_GENERATION", token_id=7)
         self.assertEqual(result, ("minted", None))
-        client.managed_captcha.get_token.assert_awaited_once_with(PROJECT, "VIDEO_GENERATION", token_id=7)
+        client.managed_captcha.get_token.assert_awaited_once_with(PROJECT, "VIDEO_GENERATION", token_id=7, interact=False)
         self.assertIsNone(client.get_request_fingerprint())
         self.assertEqual(client._get_captcha_request_context()["method"], "managed")
+
+    async def test_interact_flag_reaches_the_managed_service(self):
+        client = FlowClient(None)
+        client.managed_captcha = SimpleNamespace(get_token=AsyncMock(return_value="minted"))
+        with self.managed():
+            await client._get_recaptcha_token(PROJECT, "VIDEO_GENERATION", token_id=7, interact=True)
+        client.managed_captcha.get_token.assert_awaited_once_with(PROJECT, "VIDEO_GENERATION", token_id=7, interact=True)
 
     async def test_unconfigured_service_or_empty_mint_yields_no_token(self):
         client = FlowClient(None)

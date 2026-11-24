@@ -66,7 +66,7 @@
                 variants = variants.filter(item => item.mode === modeSelect.value);
                 const defaults = selectedModel.mode_defaults?.[modeSelect.value] || selectedModel.defaults;
                 const duration = resetModel || resetMode ? defaults.durationSeconds : durationSelect.value;
-                options(durationSelect, variants.map(item => item.durationSeconds), duration);
+                options(durationSelect, variants.map(item => item.durationSeconds).sort((a, b) => a - b), duration);
                 variants = variants.filter(item => String(item.durationSeconds) === durationSelect.value);
             }
             const aspect = resetModel || resetMode ? selectedModel.defaults.aspectRatio : aspectSelect.value;
@@ -78,7 +78,7 @@
             }
             selectedVariant = variants[0] || null;
             const geminiOption = protocolSelect.querySelector('option[value="gemini"]');
-            geminiOption.disabled = selectedVariant?.mode === 'extend';
+            geminiOption.disabled = ['extend', 'edit'].includes(selectedVariant?.mode);
             if (geminiOption.disabled) protocolSelect.value = 'openai';
             renderRequest();
         }
@@ -98,9 +98,10 @@
                 return { contents: [{ role: 'user', parts }], generationConfig };
             }
             let content = prompt;
-            if (images || selectedVariant.mode === 'extend') {
+            const needsSource = ['extend', 'edit'].includes(selectedVariant.mode);
+            if (images || needsSource) {
                 content = [{ type: 'text', text: prompt }];
-                if (selectedVariant.mode === 'extend') content.push({ type: 'image_url', image_url: { url: 'extend://<FLOW_MEDIA_GENERATION_ID>' } });
+                if (needsSource) content.push({ type: 'image_url', image_url: { url: 'extend://<FLOW_MEDIA_GENERATION_ID>' } });
                 else for (let index = 0; index < images; index++) content.push({ type: 'image_url', image_url: { url: '<HTTPS_IMAGE_URL_OR_DATA_IMAGE_URI>' } });
             }
             return { model: selectedModel.id, messages: [{ role: 'user', content }], stream: false, generationConfig };
@@ -126,7 +127,7 @@
                     validated: selectedVariant.locally_validated_min_images ?? '?',
                 })
                 : '';
-            document.getElementById('integrationExtensionHelp').hidden = selectedVariant?.mode !== 'extend';
+            document.getElementById('integrationExtensionHelp').hidden = !['extend', 'edit'].includes(selectedVariant?.mode);
             renderGuide();
         }
 

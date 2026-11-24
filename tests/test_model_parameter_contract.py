@@ -39,7 +39,8 @@ def test_omni_base_selects_requested_duration_and_orientation(seconds, ratio, ex
     ("veo-3.1-fast", {"durationSeconds": 6, "aspectRatio": "9:16"}, "veo-3.1-fast-6s-portrait"),
     ("veo-3.1-quality", {"mode": "i2v", "durationSeconds": 6, "aspectRatio": "9:16"}, "veo-3.1-quality-i2v-6s-portrait"),
     ("veo-3.1-lite", {"mode": "r2v", "aspectRatio": "9:16"}, "veo-3.1-lite-r2v-8s-portrait"),
-    ("veo-3.1-fast", {"mode": "extend", "aspectRatio": "9:16"}, "veo-3.1-fast-extend-8s-portrait"),
+    ("omni-1.2-flash", {"mode": "extend", "durationSeconds": 4, "aspectRatio": "9:16"}, "omni-1.2-flash-extend-4s-portrait"),
+    ("omni-1.2-flash", {"mode": "edit", "durationSeconds": 12}, "omni-1.2-flash-edit-12s-landscape"),
     ("veo-3.1-lite", {"mode": "i2v"}, "veo-3.1-lite-i2v-4s-landscape"),
 ])
 def test_veo_modes_and_omni_11_use_existing_public_variants(model, config, expected):
@@ -133,7 +134,13 @@ def test_capability_combinations_come_from_the_registry():
     assert omni["config_path"] == "generationConfig.videoConfig"
     assert omni["defaults"] == {"durationSeconds": 8, "aspectRatio": "16:9", "mode": "auto"}
     # Upstream: both orientations support 3s-15s (11s-15s need AI Plus/Pro/Ultra).
-    assert len(omni["variants"]) == 26
+    by_mode = {}
+    for item in omni["variants"]:
+        by_mode.setdefault(item["mode"], []).append(item)
+    assert {mode: len(items) for mode, items in by_mode.items()} == {"auto": 26, "extend": 16, "edit": 26}
+    assert {item["durationSeconds"] for item in by_mode["extend"]} == set(range(3, 11))
+    # Veo Extend was retired by Flow on 2026-11-05; nothing may offer it any more.
+    assert "extend" not in contracts["veo-3.1-fast"]["parameters"]["mode"]["values"]
     assert {(item["durationSeconds"], item["aspectRatio"]) for item in omni["variants"]} == {
         (seconds, ratio) for seconds in range(3, 16) for ratio in ("16:9", "9:16")
     }
@@ -145,6 +152,8 @@ def test_capability_combinations_come_from_the_registry():
     reduced = dict(MODEL_CONFIG)
     del reduced["omni-1.2-flash-15s-portrait"]
     del reduced["omni-1.2-flash-15s-landscape"]
+    del reduced["omni-1.2-flash-edit-15s-portrait"]
+    del reduced["omni-1.2-flash-edit-15s-landscape"]
     reduced_contract = next(item for item in model_resolver.get_model_parameter_contracts(reduced) if item["id"] == "omni-1.2-flash")
     assert 15 not in reduced_contract["parameters"]["durationSeconds"]["values"]
     with pytest.raises(ValueError):

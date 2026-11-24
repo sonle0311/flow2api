@@ -111,7 +111,7 @@ def test_studio_image_and_video_mode_parameters_follow_catalog(browser_page):
         "gemini-3.1-flash-image", "gemini-3.1-flash-image-landscape",
         "gemini-3.1-flash-image-portrait-2k", "gemini-3.1-flash-image-landscape-4k",
         "veo-3.1-fast", "veo-3.1-fast-8s-landscape",
-        "veo-3.1-fast-i2v-4s-portrait", "veo-3.1-fast-extend-8s-landscape",
+        "veo-3.1-fast-i2v-4s-portrait", "omni-1.2-flash-8s-landscape", "omni-1.2-flash-extend-4s-landscape",
     ]
     page.route("**/v1/models", lambda route: route.fulfill(json={
         "data": [{"id": model, "description": model} for model in ids],
@@ -119,7 +119,7 @@ def test_studio_image_and_video_mode_parameters_follow_catalog(browser_page):
     open_page(page, base + "/test")
     page.locator("#apiKey").fill("synthetic-key")
     page.locator("#apiKey").dispatch_event("change")
-    page.wait_for_function("document.querySelectorAll('.model-item').length === 8")
+    page.wait_for_function("document.querySelectorAll('.model-item').length === 9")
     page.locator("#studioModel").select_option("gemini-3.1-flash-image")
     page.locator("#studioAspect").select_option("9:16")
     assert page.locator("#studioSize").input_value() == "2K"
@@ -130,8 +130,9 @@ def test_studio_image_and_video_mode_parameters_follow_catalog(browser_page):
     assert page.locator("#studioDuration").input_value() == "4"
     assert page.locator("#studioAspect").input_value() == "9:16"
     playwright_api.expect(page.locator("#imageUploadGroup")).to_be_visible()
+    page.locator("#studioModel").select_option("omni-1.2-flash")
     page.locator("#studioMode").select_option("extend")
-    assert page.evaluate("STATE.selectedModel") == "veo-3.1-fast-extend-8s-landscape"
+    assert page.evaluate("STATE.selectedModel") == "omni-1.2-flash-extend-4s-landscape"
     playwright_api.expect(page.locator("#videoSourceGroup")).to_be_visible()
     playwright_api.expect(page.locator("#imageUploadGroup")).to_be_hidden()
 

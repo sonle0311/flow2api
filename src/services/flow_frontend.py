@@ -366,6 +366,8 @@ class FlowFrontendMixin:
         video_media_id: Optional[str] = None,
         resolution: Optional[str] = None,
         output_spec: Optional[Any] = None,
+        source_seconds: Optional[int] = None,
+        source_operation_id: Optional[str] = None,
     ) -> tuple[str, List[Any]]:
         prompt_value = self._frontend_prompt(prompt)
         prompt_message = [None, None, prompt_value]
@@ -422,18 +424,34 @@ class FlowFrontendMixin:
                 output_spec,
                 resolution_value,
             ]
-        elif normalized_mode == "extend":
-            rpc_id = "fZytfe"
-            request = [
-                [None, str(video_media_id or "").strip()],
-                prompt_message,
-                model_key,
-                aspect_value,
-                None,
-                metadata,
-                None,
-                output_spec,
-            ]
+        elif normalized_mode in {"extend", "edit"}:
+            # Omni Extend / Omni Edit, layouts captured from the Flow web app on 2026-11-24
+            # (docs/flow-omni-edit-extend-protocol.md). The request header names the source
+            # video's current operation and its length in frames (24 fps); Flow answers anything
+            # else with UNUSUAL_ACTIVITY.
+            if not source_operation_id or not source_seconds or source_seconds < 1:
+                raise ValueError("Omni extend/edit needs the source video's current operation and length")
+            frames = int(source_seconds) * 24
+            source = [None, str(video_media_id or "").strip(), None, None, str(uuid.uuid4()).upper()]
+            if normalized_mode == "extend":
+                rpc_id = "fZytfe"
+                request = [
+                    [None, source_operation_id, 0, frames],
+                    prompt_message,
+                    model_key,
+                    aspect_value,
+                    None,
+                    source,
+                ]
+            else:
+                rpc_id = "jIps6"
+                request = [
+                    [None, source_operation_id, 0, frames, None, [], [int(source_seconds)]],
+                    prompt_message,
+                    model_key,
+                    aspect_value,
+                    source,
+                ]
         elif normalized_mode == "upsample":
             rpc_id = "p0UkFb"
             request = [

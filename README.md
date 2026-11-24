@@ -221,7 +221,8 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 | `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}` | Omni 1.1 Flash (`abra`，上游 2026-12-05 下线) | 文生/参考图视频 |
 | `veo-3.1-{lite,fast,quality}-i2v-{4,6}s-{landscape,portrait}` | Veo 3.1 | 首帧/首尾帧视频 |
 | `veo-3.1-{lite,fast}-r2v-8s-{landscape,portrait}` | Veo 3.1 | 多参考图视频 |
-| `veo-3.1-{lite,fast,quality}-extend-8s-{landscape,portrait}` | Veo 3.1 | 视频续写 |
+| `omni-1.2-flash-extend-{3..10}s-{landscape,portrait}` | Omni 1.2 Flash (`macaron_cookie_extend_Ns`) | 视频续写（追加 N 秒，720p） |
+| `omni-1.2-flash-edit-{3..15}s-{landscape,portrait}` | Omni 1.2 Flash (`macaron_cookie_edit`) | 视频编辑（重写整段视频，720p） |
 
 表格中的花括号表示任选其中一个值。例如 `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` 包含 4/6/8 秒与横屏/竖屏组合。
 

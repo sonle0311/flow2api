@@ -220,10 +220,13 @@ class ManagedBrowserService:
                 self._playwright = await async_playwright().start()
         # Chromium otherwise discards session-only Google cookies on clean
         # browser shutdown despite using a persistent profile directory.
+        # Flow's reCAPTCHA also rates the automation flag: without it a token passes the stricter
+        # extend/edit check (PUBLIC_ERROR_UNUSUAL_ACTIVITY otherwise, verified 2026-11-24).
         options = {
             "headless": headless, "proxy": proxy, "timeout": 30000,
             "viewport": {"width": 1200, "height": 850},
-            "args": ["--restore-last-session"],
+            "args": ["--restore-last-session", "--disable-blink-features=AutomationControlled"],
+            "ignore_default_args": ["--enable-automation"],
         }
         if sys.platform == "darwin":
             # Profiles are signed in through ordinary Chrome, which encrypts
@@ -231,7 +234,7 @@ class ManagedBrowserService:
             # Playwright's default mock keychain cannot decrypt them, and
             # Chrome then deletes the undecryptable cookies, signing the
             # account out of its own profile.
-            options["ignore_default_args"] = ["--use-mock-keychain"]
+            options["ignore_default_args"].append("--use-mock-keychain")
         if os.environ.get("FLOW2API_CHROME_SANDBOX", "").lower() in {"1", "true", "yes", "on"}:
             options["chromium_sandbox"] = True
         channel = read_profile_channel(profile_path) or "chrome"

@@ -405,11 +405,6 @@ VIDEO_BASE_MODELS = {
         "landscape": "veo_3_1_r2v_fast_ultra_relaxed_8s",
         "portrait": "veo_3_1_r2v_fast_portrait_ultra_relaxed_8s",
     },
-    # Extend models (视频续写)
-    "veo_3_1_extend": {
-        "landscape": "veo_3_1_extend",
-        "portrait": "veo_3_1_extend_portrait",
-    },
 }
 
 
@@ -775,7 +770,7 @@ class ModelParameterError(ValueError):
 
 
 _PUBLIC_VIDEO_VARIANT_RE = re.compile(
-    r"^(?P<family>.+?)(?:-(?P<mode>i2v|r2v|extend))?"
+    r"^(?P<family>.+?)(?:-(?P<mode>i2v|r2v|extend|edit))?"
     r"-(?P<seconds>\d+)s-(?P<orientation>landscape|portrait)$"
 )
 _VIDEO_RATIOS = {"landscape": "16:9", "portrait": "9:16"}
@@ -796,7 +791,7 @@ def _get_public_video_contracts(model_config: Dict[str, Any]) -> list:
             continue
         video_type = config.get("video_type")
         mode = "auto" if video_type == "omni" else video_type
-        if mode not in {"auto", "t2v", "i2v", "r2v", "extend"}:
+        if mode not in {"auto", "t2v", "i2v", "r2v", "extend", "edit"}:
             continue
         families.setdefault(family, []).append({
             "id": model_id,

@@ -487,16 +487,17 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(getattr(page, "trimmed", False) for page in extras))
         self.assertTrue(context.closed)
 
-    async def test_macos_headless_sync_uses_real_keychain(self):
+    async def test_launch_hides_the_automation_flag_and_macos_uses_the_real_keychain(self):
         launch = AsyncMock(return_value=FakeContext())
         self.service._playwright = SimpleNamespace(chromium=SimpleNamespace(launch_persistent_context=launch), stop=AsyncMock())
         with patch("src.services.managed_browser.sys.platform", "darwin"):
             await self.service._launch_browser(Path(self.temp.name) / "browser", headless=True, proxy=None)
-        self.assertEqual(["--use-mock-keychain"], launch.await_args.kwargs["ignore_default_args"])
+        self.assertEqual(["--enable-automation", "--use-mock-keychain"], launch.await_args.kwargs["ignore_default_args"])
+        self.assertIn("--disable-blink-features=AutomationControlled", launch.await_args.kwargs["args"])
         launch.reset_mock()
         with patch("src.services.managed_browser.sys.platform", "linux"):
             await self.service._launch_browser(Path(self.temp.name) / "browser", headless=True, proxy=None)
-        self.assertNotIn("ignore_default_args", launch.await_args.kwargs)
+        self.assertEqual(["--enable-automation"], launch.await_args.kwargs["ignore_default_args"])
 
     async def test_real_browser_preserves_session_cookie_after_clean_exit(self):
         """Use only an invented loopback cookie, without visiting Google."""

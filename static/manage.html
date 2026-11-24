@@ -852,7 +852,7 @@
                 <p id="integrationDefaultsHelp" class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.defaultsHelp">Video defaults: 8 seconds, 16:9, t2v for Veo and auto for Omni. I2V defaults to 4 seconds. Omni auto accepts text or reference images.</p>
                 <p class="max-w-3xl text-xs leading-5 text-muted-foreground" data-i18n="integration.combinationsHelp">Choices follow registered variants. Not every duration, mode and aspect ratio can be combined. Unsupported combinations return a validation error.</p>
                 <p id="integrationSelectedLimits" class="text-xs leading-5 text-muted-foreground"></p>
-                <p id="integrationExtensionHelp" class="text-xs leading-5 text-muted-foreground" hidden data-i18n="integration.extensionHelp">Extension needs a Flow mediaGenerationId in extend://. Use OpenAI; Gemini does not forward an extension source ID.</p>
+                <p id="integrationExtensionHelp" class="text-xs leading-5 text-muted-foreground" hidden data-i18n="integration.extensionHelp">Extend and edit need the source video ID (data-media-id of a streaming result) in an extend:// marker. Use OpenAI format; Gemini does not forward the source ID.</p>
             </div>
                     <div class="instrument-integration-request">
             <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -1394,6 +1394,7 @@
                 generate_image:'生成图片',
                 generate_video:'生成视频',
                 extend_video:'续写视频',
+                edit_video:'编辑视频',
                 upsample_image:'放大图片',
                 upsample_video:'放大视频',
             };

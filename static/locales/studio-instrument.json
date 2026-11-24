@@ -32,6 +32,7 @@
     "图生视频": "图生视频",
     "多图视频": "多图视频",
     "视频续写": "视频续写",
+    "视频编辑": "视频编辑",
     "参考图片": "参考图片",
     "移除参考图片": "移除参考图片"
   },
@@ -68,6 +69,7 @@
     "图生视频": "Image to video",
     "多图视频": "References to video",
     "视频续写": "Extend video",
+    "视频编辑": "Edit video",
     "参考图片": "Reference image",
     "移除参考图片": "Remove reference image"
   },
@@ -104,6 +106,7 @@
     "图生视频": "Ảnh thành video",
     "多图视频": "Ảnh tham chiếu thành video",
     "视频续写": "Nối dài video",
+    "视频编辑": "Chỉnh sửa video",
     "参考图片": "Ảnh tham chiếu",
     "移除参考图片": "Xóa ảnh tham chiếu"
   }

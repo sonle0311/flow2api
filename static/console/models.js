@@ -4,7 +4,7 @@
 // Earlier parameters constrain later ones; changing one repairs the ones after it.
 const ORDER = ['mode', 'durationSeconds', 'aspectRatio', 'imageSize'];
 const FALLBACK_MAX_IMAGES = 10;
-const MODE_ORDER = ['auto', 't2v', 'i2v', 'r2v', 'extend'];
+const MODE_ORDER = ['auto', 't2v', 'i2v', 'r2v', 'extend', 'edit'];
 
 export function parameterNames(contract) {
     return ORDER.filter(name => contract.parameters && contract.parameters[name]);
@@ -108,7 +108,7 @@ export function referenceRules(contract, selection) {
         images: Boolean(variant.supports_images) && limit > 0,
         maxImages: limit,
         minImages: variant.locally_validated_min_images || 0,
-        needsMediaId: variant.mode === 'extend',
+        needsMediaId: variant.mode === 'extend' || variant.mode === 'edit',
     };
 }
 

@@ -199,8 +199,8 @@ function getModelFamily(modelId) {
   if (norm.includes("image")) return "image";
   if (norm.includes("i2v") || norm.includes("interpolation")) return "i2v";
   if (norm.includes("r2v")) return "r2v";
+  if (/-(?:extend|edit)-\d+s-/.test(norm)) return "extend";
   if (norm.includes("omni") || norm.includes("abra")) return "omni";
-  if (norm.includes("extend")) return "extend";
   return "t2v";
 }
 
@@ -220,8 +220,8 @@ function getModelCategory(modelId) {
     return '其他图片模型';
   }
   if (id.includes('4k') || id.includes('1080p')) return '视频放大 (Upsample)';
+  if (/-(?:extend|edit)-\d+s-/.test(id)) return '视频续写 (Extend)';
   if (/^(?:omni|abra)(?:[_.-]|$)/.test(id)) return 'Omni 视频';
-  if (id.includes('extend')) return '视频续写 (Extend)';
   if (id.includes('i2v') || id.includes('interpolation')) return 'Veo 3.1 图生视频 (I2V)';
   if (id.includes('r2v')) return 'Veo 3.1 多图视频 (R2V)';
   if (/^veo(?:_|-)/.test(id)) return 'Veo 3.1 文生视频 (T2V)';
@@ -334,7 +334,7 @@ function parseStudioVariant(id) {
   const image = /^(gemini-3\.[01]-(?:flash(?:-lite)?|pro)-image)-(landscape|portrait|square|four-three|three-four)(?:-(2k|4k))?$/.exec(id);
   const ratios = {landscape: '16:9', portrait: '9:16', square: '1:1', 'four-three': '4:3', 'three-four': '3:4'};
   if (image) return {family: image[1], id, aspect: ratios[image[2]], size: (image[3] || '1k').toUpperCase()};
-  const video = /^(.+?)(?:-(i2v|r2v|extend))?-(\d+)s-(landscape|portrait)$/.exec(id);
+  const video = /^(.+?)(?:-(i2v|r2v|extend|edit))?-(\d+)s-(landscape|portrait)$/.exec(id);
   if (video && /^(?:veo-3\.1|omni-|abra-)/.test(id)) {
     return {family: video[1], id, mode: video[2] || (/^(?:omni|abra)-/.test(id) ? 'auto' : 't2v'), duration: Number(video[3]), aspect: ratios[video[4]]};
   }
@@ -378,7 +378,7 @@ function preferredStudioVariant(variants) {
   )[0];
 }
 
-const studioModeLabels = {auto: '自动', t2v: '文生视频', i2v: '图生视频', r2v: '多图视频', extend: '视频续写'};
+const studioModeLabels = {auto: '自动', t2v: '文生视频', i2v: '图生视频', r2v: '多图视频', extend: '视频续写', edit: '视频编辑'};
 function syncStudioControls() {
   const variant = parseStudioVariant(STATE.selectedModel || '');
   const family = variant?.family || STATE.selectedModel;

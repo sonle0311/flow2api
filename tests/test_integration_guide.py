@@ -110,7 +110,7 @@ def test_documented_recipes_use_supported_models_and_valid_payloads():
             elif isinstance(payload, dict) and "contents" in payload:
                 GeminiGenerateContentRequest.model_validate(payload)
         assert demonstrated_video_models == {"veo-3.1-fast", "veo-3.1-lite", "veo-3.1-quality", "omni-1.1-flash", "omni-1.2-flash"}
-        assert demonstrated_modes == {"t2v", "i2v", "r2v", "auto", "extend"}
+        assert demonstrated_modes == {"t2v", "i2v", "r2v", "auto", "extend", "edit"}
         assert 'extra_body={"generationConfig": {"videoConfig":' in guide
         for block in re.findall(r"```python\n(.*?)\n```", guide, re.S):
             compile(block, "integration-recipe", "exec")

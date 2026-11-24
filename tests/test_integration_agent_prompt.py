@@ -132,7 +132,7 @@ def test_contract_tables_preserve_exact_image_tuples_and_reference_bounds(prompt
 def test_sparse_registry_does_not_infer_cartesian_combinations():
     contracts = copy.deepcopy(get_model_parameter_contracts(MODEL_CONFIG))
     video = next(item for item in contracts if item["id"] == "omni-1.2-flash")
-    video["variants"] = [item for item in video["variants"] if
+    video["variants"] = [item for item in video["variants"] if item["mode"] == "auto" and
                          (item["durationSeconds"], item["aspectRatio"]) in {(3, "16:9"), (15, "9:16")}]
     image = next(item for item in contracts if item["id"] == "gemini-3.1-flash-image")
     image["variants"] = [item for item in image["variants"] if
@@ -193,7 +193,7 @@ def test_examples_parse_and_resolve_against_registry(prompts):
             elif "contents" in payload:
                 GeminiGenerateContentRequest.model_validate(payload)
         assert video_families == {family for family in FAMILIES if not family.startswith("gemini")}
-        assert modes == {"t2v", "i2v", "r2v", "auto", "extend"}
+        assert modes == {"t2v", "i2v", "r2v", "auto", "extend", "edit"}
         for block in re.findall(r"```python\n(.*?)\n```", prompt, re.S):
             compile(block, "agent-prompt-example", "exec")
         for block in re.findall(r"```javascript\n(.*?)\n```", prompt, re.S):

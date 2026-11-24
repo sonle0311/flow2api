@@ -6,6 +6,7 @@ the retired Labs tRPC and AI Sandbox REST endpoints.
 """
 
 import base64
+import json
 import re
 import time
 import uuid
@@ -296,6 +297,95 @@ class CurrentFlowClientMixin:
         )
         return str((media.get("video") or {}).get("fifeUrl") or "").strip() or None
 
+    async def get_source_state(
+        self,
+        media_id: str,
+        project_id: str,
+        google_cookies: Optional[str] = None,
+        token_id: Optional[int] = None,
+    ) -> tuple[str, str, int]:
+        """(Flow media ID, operation that last produced it, total length in seconds).
+
+        Flow requires all three for an extend/edit request. ``media_id`` may be the ID this
+        server returned (the generating operation's ID) or Flow's own media ID. The operation
+        and length change after every extend/edit, so they are read fresh: the operation from
+        the project's media list (RPC Zzl0ze) and the length from that operation (RPC as29s).
+        """
+        normalized = self._normalize_media_name(media_id)
+        source_path = f"/project/{project_id}/edit/{normalized}"
+        media = normalized
+        try:
+            generating = await self._current_rpc(
+                rpc_id="as29s",
+                argument=[normalized],
+                google_cookies=google_cookies,
+                token_id=token_id,
+                project_id=project_id,
+                source_path=source_path,
+            )
+            if isinstance(generating, list) and len(generating) > 2 and self._is_uuid(generating[2]):
+                media = str(generating[2])
+        except RuntimeError as error:
+            # code=[5]: not an operation, so it is already Flow's media ID.
+            if "code=[5]" not in str(error):
+                raise
+        listing = await self._current_rpc(
+            rpc_id="Zzl0ze",
+            argument=[f"projects/{project_id}", None, None, None, [1]],
+            google_cookies=google_cookies,
+            token_id=token_id,
+            project_id=project_id,
+            source_path=source_path,
+        )
+
+        def find_operation(value: Any) -> str:
+            if isinstance(value, list):
+                info = value[3] if len(value) > 3 else None
+                if (
+                    value
+                    and value[0] == media
+                    and isinstance(info, list)
+                    and len(info) > 4
+                    and self._is_uuid(info[4])
+                ):
+                    return str(info[4])
+                for item in value:
+                    found = find_operation(item)
+                    if found:
+                        return found
+            return ""
+
+        operation_id = find_operation(listing)
+        if not operation_id:
+            raise RuntimeError(f"Flow's media list for the project has no video {media}")
+        operation = await self._current_rpc(
+            rpc_id="as29s",
+            argument=[operation_id],
+            google_cookies=google_cookies,
+            token_id=token_id,
+            project_id=project_id,
+            source_path=source_path,
+        )
+
+        def find_seconds(value: Any) -> int:
+            if isinstance(value, list):
+                if (
+                    len(value) == 3 and value[0] is None and value[1] is None
+                    and isinstance(value[2], list) and len(value[2]) == 1
+                    and type(value[2][0]) is int and value[2][0] > 0
+                ):
+                    return value[2][0]
+                for item in value:
+                    found = find_seconds(item)
+                    if found:
+                        return found
+            return 0
+
+        seconds = find_seconds(operation)
+        if not seconds:
+            raise RuntimeError(f"Flow reported no length for video {media}")
+        return media, operation_id, seconds
+
     async def delete_media(
         self,
         st: str,
@@ -557,8 +647,18 @@ class CurrentFlowClientMixin:
         end_media_id: Optional[str] = None,
         video_media_id: Optional[str] = None,
         resolution: Optional[str] = None,
+        source_seconds: Optional[int] = None,
     ) -> dict:
         await self._frontend_cookie(google_cookies, token_id)
+        source_operation_id: Optional[str] = None
+        if mode in {"extend", "edit"}:
+            # What Flow reports for the source decides the request header, not the caller.
+            video_media_id, source_operation_id, source_seconds = await self.get_source_state(
+                video_media_id or "",
+                project_id,
+                google_cookies=google_cookies,
+                token_id=token_id,
+            )
         max_retries = max(1, int(self._get_runtime_config().flow_max_retries or 1))
         model_keys = [str(model_key or "").strip()]
         # Flow currently exposes both relaxed and standard short-duration keys.
@@ -579,6 +679,8 @@ class CurrentFlowClientMixin:
                     action="VIDEO_GENERATION",
                     token_id=token_id,
                     website_url=self._build_flow_frontend_project_page_url(project_id),
+                    # Flow rejects extend/edit tokens minted without any pointer activity.
+                    interact=mode in {"extend", "edit"},
                 )
                 if not token:
                     raise RuntimeError("Failed to obtain reCAPTCHA token")
@@ -597,6 +699,8 @@ class CurrentFlowClientMixin:
                     end_media_id=end_media_id,
                     video_media_id=video_media_id,
                     resolution=resolution,
+                    source_seconds=source_seconds,
+                    source_operation_id=source_operation_id,
                 )
                 payload = await self._current_rpc(
                     rpc_id=rpc_id,
@@ -605,6 +709,15 @@ class CurrentFlowClientMixin:
                     token_id=token_id,
                     project_id=project_id,
                     timeout=max(self._get_video_submit_timeout(), 90),
+                    # The web app sends extend/edit from the source video's edit page.
+                    source_path=(
+                        f"/project/{project_id}/edit/{video_media_id}"
+                        if mode in {"extend", "edit"} and video_media_id
+                        else None
+                    ),
+                )
+                debug_logger.log_info(
+                    f"[VIDEO {rpc_id}] RPC response: {json.dumps(payload, ensure_ascii=False, default=str)[:1500]}"
                 )
                 return self._normalize_frontend_video_submission(
                     payload,
@@ -806,6 +919,33 @@ class CurrentFlowClientMixin:
             google_cookies=google_cookies,
         )
 
+    async def generate_video_edit(
+        self,
+        at: str,
+        project_id: str,
+        prompt: str,
+        model_key: str,
+        aspect_ratio: str,
+        video_media_id: str,
+        source_seconds: int,
+        user_paygate_tier: str = "PAYGATE_TIER_ONE",
+        token_id: Optional[int] = None,
+        token_video_concurrency: Optional[int] = None,
+        google_cookies: Optional[str] = None,
+    ) -> dict:
+        return await self._current_generate_video(
+            project_id=project_id,
+            prompt=prompt,
+            model_key=model_key,
+            aspect_ratio=aspect_ratio,
+            mode="edit",
+            video_media_id=video_media_id,
+            source_seconds=source_seconds,
+            token_id=token_id,
+            token_video_concurrency=token_video_concurrency,
+            google_cookies=google_cookies,
+        )
+
     async def generate_omni_reference_video(
         self,
         at: str,
@@ -887,6 +1027,9 @@ class CurrentFlowClientMixin:
             token_id=token_id,
             project_id=project_id or None,
             timeout=max(self._get_video_poll_timeout(), 30),
+        )
+        debug_logger.log_info(
+            f"[VIDEO POLL] jwpduf response: {json.dumps(payload, ensure_ascii=False, default=str)[:1500]}"
         )
         normalized = self._normalize_frontend_video_status(payload, operations)
         checked_operations = normalized.get("operations") or []

@@ -3973,13 +3973,13 @@ class _FlowClientBase(FlowFrontendMixin):
         token_id: Optional[int] = None,
         token_video_concurrency: Optional[int] = None,
     ) -> dict:
-        """视频续写,基于已生成的视频延伸7秒
+        """Omni 1.2 视频续写：在已有视频末尾追加几秒（模型键 macaron_cookie_extend_Ns）
 
         Args:
             at: Access Token
             project_id: 项目ID
             prompt: 续写提示词
-            model_key: veo_3_1_extend_portrait / veo_3_1_extend 等
+            model_key: macaron_cookie_extend_3s .. macaron_cookie_extend_10s
             aspect_ratio: 视频宽高比
             video_media_id: 源视频的 mediaGenerationId
             user_paygate_tier: 用户等级
@@ -5276,6 +5276,7 @@ class _FlowClientBase(FlowFrontendMixin):
         token_id: Optional[int] = None,
         website_url: Optional[str] = None,
         method_override: Optional[str] = None,
+        interact: bool = False,
     ) -> tuple[Optional[str], Optional[Union[int, str]]]:
         """获取reCAPTCHA token - 支持多种打码方式
         
@@ -5603,7 +5604,7 @@ class _FlowClientBase(FlowFrontendMixin):
                 debug_logger.log_error("[reCAPTCHA Managed] 服务未初始化")
                 self._set_request_fingerprint(None)
                 return None, None
-            token = await service.get_token(project_id, action, token_id=token_id)
+            token = await service.get_token(project_id, action, token_id=token_id, interact=interact)
             self._set_request_fingerprint(None)
             if token:
                 self._set_captcha_request_context({

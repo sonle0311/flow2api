@@ -124,7 +124,7 @@ def test_reference_rules_and_blocking_follow_the_variant(tmp_path):
     for item in run(script, {"contracts": CONTRACTS}, tmp_path):
         variant, rules = variants[item["id"]], item["rules"]
         assert item["empty"] == "studio.block.prompt"
-        assert rules["needsMediaId"] == (variant.get("mode") == "extend")
+        assert rules["needsMediaId"] == (variant.get("mode") in {"extend", "edit"})
         assert rules["minImages"] == variant["locally_validated_min_images"]
         if variant["max_images"] is not None:
             assert rules["maxImages"] == variant["max_images"]

@@ -69,6 +69,7 @@ class ManagedCaptchaService:
         project_id: str,
         action: str = "IMAGE_GENERATION",
         token_id: Optional[int] = None,
+        interact: bool = False,
     ) -> Optional[str]:
         project_id = str(project_id or "").strip()
         if token_id is None or not project_id or self._closed:
@@ -83,7 +84,7 @@ class ManagedCaptchaService:
                 started = time.monotonic()
                 try:
                     page = await self._ready_page(token_id, project_id)
-                    token = await self._execute(page, action)
+                    token = await self._execute(page, action, interact)
                     if token:
                         debug_logger.log_info(
                             f"[ManagedCaptcha] Token-{token_id} {action} ok "
@@ -207,7 +208,27 @@ class ManagedCaptchaService:
         # Leaving flow.google.com means the saved profile has no session.
         raise RuntimeError("login_required" if host != "flow.google.com" else "recaptcha_unavailable")
 
-    async def _execute(self, page, action: str) -> Optional[str]:
+    @staticmethod
+    async def _move_pointer(page) -> None:
+        """Real pointer events across the page.
+
+        reCAPTCHA scores a token higher with pointer activity behind it. Flow accepts a token
+        minted without any for generation but rejects it (PUBLIC_ERROR_UNUSUAL_ACTIVITY) for
+        extend and edit; a few real mouse moves are enough (verified 2026-11-24).
+        """
+        size = getattr(page, "viewport_size", None) or {"width": 1200, "height": 850}
+        width, height = size["width"], size["height"]
+        for index in range(14):
+            await page.mouse.move(
+                width * (0.12 + 0.05 * index),
+                height * (0.25 + 0.06 * (index % 4)),
+                steps=8,
+            )
+            await asyncio.sleep(0.035)
+
+    async def _execute(self, page, action: str, interact: bool = False) -> Optional[str]:
+        if interact:
+            await self._move_pointer(page)
         result = await asyncio.wait_for(
             page.evaluate(
                 build_recaptcha_execute_script(
