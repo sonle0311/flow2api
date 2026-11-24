@@ -36,6 +36,12 @@ _RECAPTCHA_READY_SCRIPT = """(projectId) =>
 _RECAPTCHA_ERROR_MARKERS = ("unusual_activity", "recaptcha", "403")
 
 
+def _report(token_id: int, action: str, begun: float, reason: str) -> None:
+    """Always-on line in server.log: the debug log is off in normal operation, and without
+    this a failed upload or generation only says "Failed to obtain reCAPTCHA token"."""
+    print(f"[managed-captcha] token={token_id} {action} gave up after {time.monotonic() - begun:.1f}s: {reason}", flush=True)
+
+
 class ManagedCaptchaService:
     """One headless Flow project tab per account, serialized per account."""
 
@@ -72,6 +78,7 @@ class ManagedCaptchaService:
         async with self._lock(token_id):
             self._last_used[token_id] = time.monotonic()
             reason = ""
+            begun = time.monotonic()
             for attempt in (1, 2):
                 started = time.monotonic()
                 try:
@@ -90,6 +97,7 @@ class ManagedCaptchaService:
                     debug_logger.log_warning(
                         f"[ManagedCaptcha] Token-{token_id} profile is busy (sync or sign-in)"
                     )
+                    _report(token_id, action, begun, "profile busy (sync or sign-in)")
                     return None
                 except Exception as exc:
                     reason = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -97,6 +105,7 @@ class ManagedCaptchaService:
                     f"[ManagedCaptcha] Token-{token_id} {action} attempt {attempt} failed: {reason}"
                 )
                 await self._drop_page(token_id)
+            _report(token_id, action, begun, f"2 attempts failed, last: {reason}")
             return None
 
     async def report_flow_error(

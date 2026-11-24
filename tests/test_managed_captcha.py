@@ -4,6 +4,8 @@ All browsers are fakes; no Chrome is launched and no Flow request is sent.
 """
 
 import asyncio
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -169,6 +171,28 @@ class ManagedCaptchaServiceTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(FakePage, "goto", to_sign_in):
             self.assertIsNone(await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))
+
+    async def test_every_give_up_leaves_a_reason_in_the_always_on_log(self):
+        # The debug log is off in normal operation; server.log must still say why a mint failed.
+        self.browser.busy = True
+        with contextlib.redirect_stdout(io.StringIO()) as busy:
+            await self.service.get_token(PROJECT, "UPLOAD_IMAGE", token_id=1)
+        self.assertRegex(busy.getvalue(), r"\[managed-captcha\] token=1 UPLOAD_IMAGE gave up after [\d.]+s: profile busy")
+
+        self.browser.busy = False
+        self.service.READY_SECONDS = 0.05
+
+        async def to_sign_in(page, url, **kwargs):
+            page.url = "https://accounts.google.com/v3/signin"
+
+        with patch.object(FakePage, "goto", to_sign_in), contextlib.redirect_stdout(io.StringIO()) as signed_out:
+            await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1)
+        self.assertIn("2 attempts failed, last: RuntimeError: login_required", signed_out.getvalue())
+
+    async def test_a_successful_mint_prints_nothing(self):
+        with contextlib.redirect_stdout(io.StringIO()) as quiet:
+            await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1)
+        self.assertEqual(quiet.getvalue(), "")
 
     async def test_missing_account_or_project_returns_none_without_opening_a_browser(self):
         self.assertIsNone(await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=None))
