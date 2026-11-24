@@ -139,8 +139,8 @@ def test_sparse_registry_does_not_infer_cartesian_combinations():
                          (item["imageSize"], item["aspectRatio"]) in {("1K", "16:9"), ("4K", "9:16")}]
     prompt = build_prompts({"model_parameters": contracts}, locales=("en",))[0]
     assert table_rows(prompt, video["id"]) == [
-        [video["id"], "auto", "16:9", "3", "0–3"],
-        [video["id"], "auto", "9:16", "15", "0–3"],
+        [video["id"], "auto", "16:9", "3", "0–10"],
+        [video["id"], "auto", "9:16", "15", "0–10"],
     ]
     assert table_rows(prompt, image["id"]) == [
         [image["id"], "16:9", "1K", "0–unspecified"],

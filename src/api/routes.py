@@ -31,6 +31,7 @@ from ..core.model_resolver import (
     ModelParameterError,
     get_base_model_aliases,
     get_model_families,
+    is_model_retired,
     resolve_model_name,
 )
 from ..core.models import (
@@ -244,15 +245,17 @@ def _ensure_generation_handler() -> GenerationHandler:
 
 def _build_model_description(model_config: Dict[str, Any]) -> str:
     """Build a human-readable description for model listing endpoints."""
+    retires_on = model_config.get("retires_on")
+    suffix = f" (retires {retires_on})" if retires_on else ""
     display_name = str(model_config.get("display_name") or "").strip()
     if display_name:
-        return display_name
+        return display_name + suffix
     description = f"{model_config['type'].capitalize()} generation"
     if model_config["type"] == "image":
         description += f" - {model_config['model_name']}"
     else:
         description += f" - {model_config['model_key']}"
-    return description
+    return description + suffix
 
 
 def _get_openai_model_catalog() -> List[Dict[str, str]]:
@@ -263,7 +266,7 @@ def _get_openai_model_catalog() -> List[Dict[str, str]]:
             "description": _build_model_description(model_config),
         }
         for model_id, model_config in MODEL_CONFIG.items()
-        if model_config.get("listed", True)
+        if model_config.get("listed", True) and not is_model_retired(model_config)
     ]
 
 
@@ -272,7 +275,7 @@ def _get_gemini_model_catalog() -> Dict[str, str]:
     catalog: Dict[str, str] = {}
 
     for model_id, model_config in MODEL_CONFIG.items():
-        if not model_config.get("listed", True):
+        if not model_config.get("listed", True) or is_model_retired(model_config):
             continue
         catalog.setdefault(model_id, _build_model_description(model_config))
 
@@ -609,6 +612,12 @@ def _resolve_request_model(
         )
     except ModelParameterError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    retired = MODEL_CONFIG.get(resolved_model)
+    if retired and is_model_retired(retired):
+        raise HTTPException(
+            status_code=400,
+            detail=f"模型 {resolved_model} 已于 {retired['retires_on']} 被 Flow 下线",
+        )
     if resolved_model != model:
         debug_logger.log_info(f"[ROUTE] 模型名已转换: {model} → {resolved_model}")
     return resolved_model

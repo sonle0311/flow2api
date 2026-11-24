@@ -88,7 +88,8 @@ def test_complete_integration_reference_keeps_local_features_and_adds_omni_12():
     reference = build_integration_reference(app)
     models = {model["id"]: model for model in reference["models"]}
     assert models["omni-1.2-flash-15s-portrait"]["duration_seconds"] == 15
-    assert models["omni-1.2-flash-15s-portrait"]["max_images"] == 3
+    assert models["omni-1.2-flash-15s-portrait"]["max_images"] == 10
+    assert models["omni-1.2-flash-360p-8s-landscape"]["max_images"] == 10
     assert models["omni-1.2-flash-15s-landscape"]["duration_seconds"] == 15
     assert "omni-1.1-flash-8s-landscape" in models
     endpoints = {(entry["method"], entry["path"]) for entry in reference["endpoints"]}
@@ -99,11 +100,18 @@ def test_complete_integration_reference_keeps_local_features_and_adds_omni_12():
 
 def test_public_catalog_preserves_previous_models_and_lists_all_omni_12_variants():
     listed = {model["id"] for model in _get_openai_model_catalog()}
-    expected = {"omni-1.2-flash"}
-    expected.update(
+    standard = {"omni-1.2-flash"}
+    standard.update(
         f"omni-1.2-flash-{seconds}s-{orientation}"
         for seconds in range(3, 16) for orientation in ("landscape", "portrait")
     )
-    assert {model for model in listed if model.startswith("omni-1.2-")} == expected
-    assert len(listed - expected) == 82
-    assert len(expected) == 27
+    draft_360p = {
+        f"omni-1.2-flash-360p-{seconds}s-{orientation}"
+        for seconds in range(3, 16) for orientation in ("landscape", "portrait")
+    }
+    assert {model for model in listed if model.startswith("omni-1.2-")} == standard | draft_360p
+    assert len(standard) == 27 and len(draft_360p) == 26
+    # The 82 IDs listed before Nano Banana Pro (15 variants) and 360p drafts were added are unchanged.
+    nano_banana_pro = {model for model in listed if model.startswith("gemini-3.0-pro-image-")}
+    assert len(nano_banana_pro) == 15
+    assert len(listed - standard - draft_360p - nano_banana_pro) == 82

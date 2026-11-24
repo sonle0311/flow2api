@@ -12,6 +12,7 @@ Example:
 """
 
 import re
+from datetime import date, datetime, timezone
 from io import BytesIO
 from typing import Optional, Dict, Any, List, Tuple
 from ..core.logger import debug_logger
@@ -761,6 +762,14 @@ def resolve_model_name(
     return model
 
 
+def is_model_retired(config: Dict[str, Any], today: Optional[date] = None) -> bool:
+    """True once a model's ``retires_on`` date (ISO, UTC) has been reached."""
+    retires_on = config.get("retires_on")
+    if not retires_on:
+        return False
+    return (today or datetime.now(timezone.utc).date()) >= date.fromisoformat(retires_on)
+
+
 class ModelParameterError(ValueError):
     """A public family was requested with an unsupported parameter combination."""
 
@@ -776,14 +785,14 @@ _IMAGE_RATIOS = {**_VIDEO_RATIOS, "square": "1:1", "four-three": "4:3", "three-f
 def _get_public_video_contracts(model_config: Dict[str, Any]) -> list:
     families = {}
     for model_id, config in sorted(model_config.items()):
-        if config.get("type") != "video" or not config.get("listed", True):
+        if config.get("type") != "video" or not config.get("listed", True) or is_model_retired(config):
             continue
         match = _PUBLIC_VIDEO_VARIANT_RE.fullmatch(model_id)
         if not match:
             continue
         family = match["family"]
         base = model_config.get(family)
-        if not base or base.get("type") != "video" or not base.get("listed", True):
+        if not base or base.get("type") != "video" or not base.get("listed", True) or is_model_retired(base):
             continue
         video_type = config.get("video_type")
         mode = "auto" if video_type == "omni" else video_type
@@ -1026,7 +1035,7 @@ def get_model_catalog(model_config: Dict[str, Any]) -> List[Dict[str, str]]:
     families = get_model_families(model_config)
     entries: Dict[str, Dict[str, str]] = {}
     for model_id, config in model_config.items():
-        if config.get("listed", True):
+        if config.get("listed", True) and not is_model_retired(config):
             kind = "family" if model_id in families else "model"
             entries[model_id] = {"id": model_id, "type": config["type"], "kind": kind}
     for name, family in families.items():

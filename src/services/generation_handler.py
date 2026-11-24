@@ -725,7 +725,7 @@ MODEL_CONFIG = {
         "aspect_ratio": "VIDEO_ASPECT_RATIO_LANDSCAPE",
         "supports_images": True,
         "min_images": 0,
-        "max_images": 3,
+        "max_images": 10,
         "use_v2_model_config": True,
         "allow_tier_upgrade": False,
         "reference_model_key": "macaron_cookie_r2v_8s",
@@ -739,7 +739,7 @@ MODEL_CONFIG = {
         "aspect_ratio": "VIDEO_ASPECT_RATIO_PORTRAIT",
         "supports_images": True,
         "min_images": 0,
-        "max_images": 3,
+        "max_images": 10,
         "use_v2_model_config": True,
         "allow_tier_upgrade": False,
         "reference_model_key": "macaron_cookie_r2v_8s",
@@ -1147,6 +1147,16 @@ def _apply_current_flow_model_catalog():
             "Nano Banana 2 Lite",
         )
 
+    # Nano Banana Pro is GEM_PIX_2 in the live Flow model table.
+    pro_variants = [
+        (model_id, dict(entry)) for model_id, entry in MODEL_CONFIG.items()
+        if entry.get("type") == "image"
+        and model_id.startswith("gemini-3.0-pro-image-")
+        and entry.get("model_name") == "GEM_PIX_2"
+    ]
+    for model_id, entry in pro_variants:
+        register(model_id, entry, "Nano Banana Pro")
+
     def t2v(model_key: str, aspect_ratio: str) -> Dict[str, Any]:
         return _make_t2v_config(
             model_key,
@@ -1253,7 +1263,7 @@ def _apply_current_flow_model_catalog():
                     "aspect_ratio": ratio,
                     "supports_images": True,
                     "min_images": 0,
-                    "max_images": 3,
+                    "max_images": 7,
                     "use_v2_model_config": True,
                     "allow_tier_upgrade": False,
                 },
@@ -1277,11 +1287,33 @@ def _apply_current_flow_model_catalog():
                     "aspect_ratio": ratio,
                     "supports_images": True,
                     "min_images": 0,
-                    "max_images": 3,
+                    "max_images": 10,
                     "use_v2_model_config": True,
                     "allow_tier_upgrade": False,
                 },
                 f"Omni 1.2 Flash · {seconds}s · {orientation}",
+            )
+    # 360p drafts cost one third of 720p (8 vs 24 credits for 8s). Keys come from the
+    # live Flow model table: macaron_cookie_{t2v,r2v}_{N}s_360p for 3s-15s. Requested by
+    # explicit ID (omni-1.2-flash-360p-{N}s-{orientation}); there is no 360p family name.
+    for seconds in range(3, 16):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"omni-1.2-flash-360p-{seconds}s-{orientation}",
+                {
+                    "type": "video",
+                    "video_type": "omni",
+                    "model_key": f"macaron_cookie_t2v_{seconds}s_360p",
+                    "reference_model_key": f"macaron_cookie_r2v_{seconds}s_360p",
+                    "reference_duration": seconds,
+                    "aspect_ratio": ratio,
+                    "supports_images": True,
+                    "min_images": 0,
+                    "max_images": 10,
+                    "use_v2_model_config": True,
+                    "allow_tier_upgrade": False,
+                },
+                f"Omni 1.2 Flash 360p · {seconds}s · {orientation}",
             )
     # Current image-to-video and reference-video variants.
     for seconds, lite_key, fast_key, quality_key in (
@@ -1384,7 +1416,7 @@ def _apply_current_flow_model_catalog():
             "aspect_ratio": landscape,
             "supports_images": True,
             "min_images": 0,
-            "max_images": 3,
+            "max_images": 7,
             "use_v2_model_config": True,
             "allow_tier_upgrade": False,
         },
@@ -1401,12 +1433,25 @@ def _apply_current_flow_model_catalog():
             "aspect_ratio": landscape,
             "supports_images": True,
             "min_images": 0,
-            "max_images": 3,
+            "max_images": 10,
             "use_v2_model_config": True,
             "allow_tier_upgrade": False,
         },
         "Omni 1.2 Flash · 8s · landscape",
     )
+
+    # Flow's model table marks Veo 3.1 Fast, Veo 3.1 Quality and Omni 1.1 Flash as
+    # leaving on 2026-12-05. Keep them usable until then; the API stops listing and
+    # accepting them from that date (see is_model_retired).
+    for config_entry in MODEL_CONFIG.values():
+        key = str(config_entry.get("model_key") or "")
+        legacy_omni = key.startswith(("abra_", "omni_flash_"))
+        legacy_veo = (
+            key.startswith("veo_3_1_")
+            and not any(part in key for part in ("lite", "upsampler", "extend", "extension"))
+        )
+        if config_entry.get("type") == "video" and (legacy_omni or legacy_veo):
+            config_entry["retires_on"] = "2026-12-05"
 
 
 _apply_current_flow_model_catalog()
