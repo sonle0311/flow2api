@@ -31,6 +31,8 @@ python3 $S image "giữ nhân vật, đổi bối cảnh" --ref nhanvat.png --ou
 python3 $S video "prompt" --aspect 9:16 --duration 8 --out ...                   # Omni 1.2, mặc định
 python3 $S video "prompt" --draft --duration 3 --out ...                         # nháp 360p, 1/3 credit
 python3 $S video "camera chậm" --ref a.png --ref b.png --out ...                 # Omni: 0–10 ảnh tham chiếu
+python3 $S video "ngày chuyển thành đêm" --mode i2v --ref dau.png [--ref cuoi.png] --duration 5 --out ...   # Omni Frames: hình đầu, hoặc đầu + cuối
+python3 $S video "..." --draft --mode i2v --ref dau.png --ref cuoi.png --duration 3 --out ...             # Frames nháp 360p
 python3 $S video "..." --model veo-3.1-lite --mode i2v --ref dau.png [--ref cuoi.png]
 python3 $S video "đi tiếp" --mode extend --source <media_id> --duration 5 --out ...   # nối thêm 3–10 s
 python3 $S video "đổi màu áo" --mode edit --source <media_id> --duration <độ dài video nguồn>
@@ -49,6 +51,7 @@ python3 $S batch jobs.jsonl --parallel 3   # mỗi dòng: {"kind":"image","promp
 Chạy `models` thay vì nhớ bảng. Điều cần biết để chọn:
 
 - **Video mặc định `omni-1.2-flash`** (`--mode auto`): 3–15 s ở cả 16:9 và 9:16, tự chọn tạo từ chữ hay từ 0–10 ảnh tham chiếu. 11–15 s cần tài khoản có gói Google AI Plus, Pro hoặc Ultra.
+- **Frames to Video của Omni 1.2** (`--mode i2v`): 1 ảnh là hình đầu, 2 ảnh là hình đầu và hình cuối (video bắt đầu đúng ảnh đầu và kết thúc đúng ảnh cuối; đã kiểm bằng cách trích khung). Hình cuối chỉ có ở 3–10 s; 11–15 s chỉ nhận hình đầu. Không có `--mode i2v` thì ảnh được hiểu là ảnh tham chiếu (`auto`), không phải khung hình. Đo ngày 25/11/2026: 720p 3 s 9 credit, 4 s 12; 360p 3 s 3.
 - **`--draft`** (Omni 1.2 360p) tốn 1/3 credit: dùng để thử prompt và bố cục trước khi gen bản chuẩn.
 - **Veo 3.1** (`veo-3.1-lite`, `veo-3.1-fast`, `veo-3.1-quality`): chọn `--mode` rõ ràng. `t2v` 4/6/8 s, `i2v` 4/6 s với 1–2 ảnh (đầu, cuối), `r2v` 8 s với 1–3 ảnh (không có ở quality). Script không đoán `i2v` hay `r2v` khi có `--ref`, vì đoán sai là mất tiền. Chi phí đo ngày 25/11/2026 trên tài khoản Ultra: lite 4 s khoảng 5 credit, fast 4 s 10, fast r2v 8 s 20, **quality 4 s 100**; hỏi người dùng trước khi dùng quality. Quyền truy cập theo từng tài khoản và từng model; nếu một tài khoản bị từ chối, gateway tự chuyển sang tài khoản khác.
 - **`veo-3.1-lite-lower-priority`** (Veo 3.1 Lite [Lower Priority]): **0 credit**, cùng tổ hợp với Lite (`t2v` 4/6/8 s, `i2v` 4/6 s, `r2v` 8 s). Đo ngày 25/11/2026: 4 job (t2v 4 s, t2v 8 s, i2v, r2v) thành công, số dư mọi tài khoản không đổi, thời gian 49–149 s (Lite thường trong lịch sử: 47–152 s). Flow xếp loại này sau job trả phí nên lúc đông có thể chờ lâu hơn; mẫu đo hiện chưa cho thấy chậm hơn. Dùng khi cần thử nhiều lần.

@@ -648,6 +648,11 @@
     "aspectRatio": "16:9",
     "durationSeconds": 8,
     "mode": "extend"
+   },
+   "i2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "i2v"
    }
   },
   "parameters": {
@@ -681,7 +686,8 @@
     "values": [
      "auto",
      "edit",
-     "extend"
+     "extend",
+     "i2v"
     ]
    }
   },
@@ -1366,6 +1372,266 @@
     "min_images": 0,
     "mode": "extend",
     "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-i2v-10s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-i2v-10s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-i2v-11s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-i2v-11s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-i2v-12s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-i2v-12s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-i2v-13s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-i2v-13s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-i2v-14s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-i2v-14s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-i2v-15s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-i2v-15s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 1,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-i2v-3s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-i2v-3s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-i2v-4s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-i2v-4s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-i2v-5s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-i2v-5s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-i2v-6s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-i2v-6s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-i2v-7s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-i2v-7s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-i2v-8s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-i2v-8s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-i2v-9s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-i2v-9s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
    }
   ]
  },

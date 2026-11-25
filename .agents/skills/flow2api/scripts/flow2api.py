@@ -33,6 +33,7 @@ DEFAULT_VIDEO_MODEL = "omni-1.2-flash"
 DRAFT_FAMILY = "omni-1.2-flash"           # 360p drafts are explicit ids omni-1.2-flash-360p-{N}s-{landscape|portrait}
 DRAFT_DURATIONS = list(range(3, 16))
 DRAFT_MAX_REFS = 10
+FRAMES_END_MAX_SECONDS = 10   # Omni 1.2 frames: an end frame (2 images) exists for 3-10 s, 11-15 s take a start frame only
 ASPECT_WORDS = {"landscape": "16:9", "portrait": "9:16", "square": "1:1", "four-three": "4:3", "three-four": "3:4"}
 MAX_PAR = {"image": int(os.environ.get("FLOW2API_MAX_PARALLEL_IMAGE", 9)), "video": int(os.environ.get("FLOW2API_MAX_PARALLEL_VIDEO", 6))}
 _SEM = {k: threading.Semaphore(v) for k, v in MAX_PAR.items()}
@@ -137,16 +138,23 @@ def resolve_video(contract, model, mode, aspect, duration, nrefs, source):
 
 def resolve_draft(aspect, duration, nrefs, mode, source):
     """Omni 1.2 360p drafts (a third of the credits) are requested by explicit id, without generationConfig."""
-    if mode not in (None, "auto") or source:
-        raise Flow2APIError("--draft (360p) only supports generation (mode auto), not extend/edit")
+    if mode not in (None, "auto", "i2v") or source:
+        raise Flow2APIError("--draft (360p) only supports generation (mode auto) and frames (mode i2v), not extend/edit")
     aspect = _aspect(aspect, "16:9"); duration = int(duration or 8)
     if aspect not in ("16:9", "9:16"):
         raise Flow2APIError("aspect %s not registered for 360p drafts (allowed ['16:9', '9:16'])" % aspect)
     if duration not in DRAFT_DURATIONS:
         raise Flow2APIError("duration %s s not registered for 360p drafts (allowed %s)" % (duration, DRAFT_DURATIONS))
+    side = "landscape" if aspect == "16:9" else "portrait"
+    if mode == "i2v":
+        top = 2 if duration <= FRAMES_END_MAX_SECONDS else 1
+        if not 1 <= nrefs <= top:
+            raise Flow2APIError("360p frames take 1–%d images (an end frame only up to %d s), got %d" % (top, FRAMES_END_MAX_SECONDS, nrefs))
+        model = "%s-360p-i2v-%ds-%s" % (DRAFT_FAMILY, duration, side)
+        return {"model": model, "mode": "i2v", "variant": model, "cfg": None}
     if nrefs > DRAFT_MAX_REFS:
         raise Flow2APIError("360p drafts take 0–%d images, got %d" % (DRAFT_MAX_REFS, nrefs))
-    model = "%s-360p-%ds-%s" % (DRAFT_FAMILY, duration, "landscape" if aspect == "16:9" else "portrait")
+    model = "%s-360p-%ds-%s" % (DRAFT_FAMILY, duration, side)
     return {"model": model, "mode": "auto", "variant": model, "cfg": None}
 
 

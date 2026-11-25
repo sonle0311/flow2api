@@ -219,6 +219,7 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 | `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Fast | 文生视频 |
 | `veo-3.1-quality-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Quality | 文生视频 |
 | `omni-1.2-flash-{3..15}s-{landscape,portrait}` | Omni 1.2 Flash (`macaron_cookie`) | 文生/参考图视频 |
+| `omni-1.2-flash[-360p]-i2v-{3..15}s-{landscape,portrait}` | Omni 1.2 Flash Frames (`macaron_cookie_i2v[_fl]_Ns`) | 首帧或首尾帧生视频（首尾帧 3–10 秒，11–15 秒仅首帧；360p 为 1/3 积分） |
 | `omni-1.1-flash-{4,6,8,10}s-{landscape,portrait}` | Omni 1.1 Flash (`abra`，上游 2026-12-05 下线) | 文生/参考图视频 |
 | `veo-3.1-{lite,fast,quality}-i2v-{4,6}s-{landscape,portrait}` | Veo 3.1 | 首帧/首尾帧视频 |
 | `veo-3.1-{lite,fast}-r2v-8s-{landscape,portrait}` | Veo 3.1 | 多参考图视频 |

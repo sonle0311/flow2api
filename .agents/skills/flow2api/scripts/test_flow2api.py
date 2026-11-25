@@ -192,6 +192,24 @@ class ValidationTests(Base):
         with self.assertRaises(F.Flow2APIError):
             self.v("omni-1.2-flash", "extend", None, 4, 0, "http://x/y.mp4")   # a media id, not a URL
 
+    def test_omni_frames_take_a_start_frame_and_an_end_frame_up_to_10_seconds(self):
+        self.assertEqual(self.v("omni-1.2-flash", "i2v", "16:9", 5, 1, None)["variant"], "omni-1.2-flash-i2v-5s-landscape")
+        self.assertEqual(self.v("omni-1.2-flash", "i2v", "9:16", 10, 2, None)["cfg"], {"durationSeconds": 10, "aspectRatio": "9:16", "mode": "i2v"})
+        with self.assertRaises(F.Flow2APIError):
+            self.v("omni-1.2-flash", "i2v", None, 5, 0, None)    # frames need a start frame
+        with self.assertRaises(F.Flow2APIError):
+            self.v("omni-1.2-flash", "i2v", None, 5, 3, None)
+        self.v("omni-1.2-flash", "i2v", None, 15, 1, None)       # 11-15 s: start frame only
+        with self.assertRaises(F.Flow2APIError):
+            self.v("omni-1.2-flash", "i2v", None, 12, 2, None)   # Flow has no end-frame key above 10 s
+
+    def test_360p_frames_draft(self):
+        plan = F.resolve_draft("16:9", 4, 2, "i2v", None)
+        self.assertEqual((plan["model"], plan["mode"], plan["cfg"]), ("omni-1.2-flash-360p-i2v-4s-landscape", "i2v", None))
+        for args in (("16:9", 4, 0, "i2v", None), ("16:9", 12, 2, "i2v", None), ("16:9", 4, 3, "i2v", None)):
+            with self.assertRaises(F.Flow2APIError):
+                F.resolve_draft(*args)
+
     def test_360p_draft_is_an_explicit_id_without_generation_config(self):
         plan = F.resolve_draft("9:16", 5, 2, None, None)
         self.assertEqual((plan["model"], plan["cfg"]), ("omni-1.2-flash-360p-5s-portrait", None))

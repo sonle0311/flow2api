@@ -1281,6 +1281,23 @@ def _apply_current_flow_model_catalog():
                 },
                 f"Omni 1.2 Flash 360p · {seconds}s · {orientation}",
             )
+    # Frames to Video: one start frame, or a start and an end frame. Flow's table has
+    # macaron_cookie_i2v_{N}s (start only, 3-15 s) and macaron_cookie_i2v_fl_{N}s (start + end,
+    # 3-10 s only), plus _360p drafts. Like Veo, the "_fl" key is registered where it exists and
+    # the single-image path strips "_fl"; 11-15 s have no "_fl" key, so they take one image.
+    for seconds in range(3, 16):
+        two_frames = seconds <= 10
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            for prefix, suffix, label in (
+                ("omni-1.2-flash", "", "Omni 1.2 Flash"),
+                ("omni-1.2-flash-360p", "_360p", "Omni 1.2 Flash 360p"),
+            ):
+                key = f"macaron_cookie_i2v_{'fl_' if two_frames else ''}{seconds}s{suffix}"
+                register(
+                    f"{prefix}-i2v-{seconds}s-{orientation}",
+                    i2v(key, ratio, max_images=2 if two_frames else 1),
+                    f"{label} Frames · {seconds}s · {orientation}",
+                )
     # Omni Extend adds N seconds (3-10) after an existing video; Omni Edit rewrites an existing
     # video of N seconds (3-15). Both take the source from an extend://MEDIA_ID image_url and need
     # a Google AI Plus/Pro/Ultra plan. Protocol: docs/flow-omni-edit-extend-protocol.md.

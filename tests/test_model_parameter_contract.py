@@ -41,6 +41,8 @@ def test_omni_base_selects_requested_duration_and_orientation(seconds, ratio, ex
     ("veo-3.1-lite", {"mode": "r2v", "aspectRatio": "9:16"}, "veo-3.1-lite-r2v-8s-portrait"),
     ("omni-1.2-flash", {"mode": "extend", "durationSeconds": 4, "aspectRatio": "9:16"}, "omni-1.2-flash-extend-4s-portrait"),
     ("omni-1.2-flash", {"mode": "edit", "durationSeconds": 12}, "omni-1.2-flash-edit-12s-landscape"),
+    ("omni-1.2-flash", {"mode": "i2v", "durationSeconds": 5, "aspectRatio": "9:16"}, "omni-1.2-flash-i2v-5s-portrait"),
+    ("omni-1.2-flash", {"mode": "i2v"}, "omni-1.2-flash-i2v-8s-landscape"),
     ("veo-3.1-lite", {"mode": "i2v"}, "veo-3.1-lite-i2v-4s-landscape"),
 ])
 def test_veo_modes_and_omni_11_use_existing_public_variants(model, config, expected):
@@ -62,7 +64,7 @@ def test_public_base_defaults_keep_eight_second_landscape(model):
     ("omni-1.2-flash", {"durationSeconds": True}),
     ("omni-1.2-flash", {"aspectRatio": "1:1"}),
     ("omni-1.2-flash", {"aspectRatio": "nonsense"}),
-    ("omni-1.2-flash", {"mode": "i2v"}),
+    ("omni-1.2-flash", {"mode": "r2v"}),   # references go through mode auto; Omni 1.2 has no r2v mode
     ("omni-1.1-flash", {"durationSeconds": 5}),
     ("veo-3.1-fast", {"durationSeconds": 5}),
     ("veo-3.1-fast", {"mode": "i2v", "durationSeconds": 8}),
@@ -137,8 +139,11 @@ def test_capability_combinations_come_from_the_registry():
     by_mode = {}
     for item in omni["variants"]:
         by_mode.setdefault(item["mode"], []).append(item)
-    assert {mode: len(items) for mode, items in by_mode.items()} == {"auto": 26, "extend": 16, "edit": 26}
+    assert {mode: len(items) for mode, items in by_mode.items()} == {"auto": 26, "extend": 16, "edit": 26, "i2v": 26}
     assert {item["durationSeconds"] for item in by_mode["extend"]} == set(range(3, 11))
+    # Frames to Video: an end frame (two images) exists for 3-10 s; 11-15 s take a start frame only.
+    assert {(item["min_images"], item["max_images"]) for item in by_mode["i2v"] if item["durationSeconds"] <= 10} == {(1, 2)}
+    assert {(item["min_images"], item["max_images"]) for item in by_mode["i2v"] if item["durationSeconds"] > 10} == {(1, 1)}
     # Veo Extend was retired by Flow on 2026-11-05; nothing may offer it any more.
     assert "extend" not in contracts["veo-3.1-fast"]["parameters"]["mode"]["values"]
     assert {(item["durationSeconds"], item["aspectRatio"]) for item in omni["variants"]} == {
@@ -154,6 +159,8 @@ def test_capability_combinations_come_from_the_registry():
     del reduced["omni-1.2-flash-15s-landscape"]
     del reduced["omni-1.2-flash-edit-15s-portrait"]
     del reduced["omni-1.2-flash-edit-15s-landscape"]
+    del reduced["omni-1.2-flash-i2v-15s-portrait"]
+    del reduced["omni-1.2-flash-i2v-15s-landscape"]
     reduced_contract = next(item for item in model_resolver.get_model_parameter_contracts(reduced) if item["id"] == "omni-1.2-flash")
     assert 15 not in reduced_contract["parameters"]["durationSeconds"]["values"]
     with pytest.raises(ValueError):
