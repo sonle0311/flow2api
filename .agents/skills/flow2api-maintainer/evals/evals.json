@@ -1,0 +1,129 @@
+{
+ "skill_name": "flow2api-maintainer",
+ "note": "Decision evals: give a model the skill text (with) or only a one-line repo description (without), the observations listed per eval, and grade each assertion with an LLM judge; 3 samples per condition. Run 2026-11-25: with the skill every assertion passed 3/3; without it kickstart failed 3/3, 'proposes none of the bad actions' passed 1/3 (the baseline suggested re-importing cookies), and the three E3 facts (date, official page, live catalog) failed 3/3. The E1 cause/charge/login assertions and E2 wait/idle/health assertions passed in both conditions, so they only guard against regressions. Trigger queries scored 20/20 with an LLM classifier choosing among this skill and six other skill descriptions. These are single-shot completions without tools, not real agent runs.",
+ "evals": [
+  {
+   "id": "e1-signed-out-profile",
+   "prompt": "Job omni5 fail 2 lần với 'Failed to obtain reCAPTCHA token for image upload'. Kiểm tra lỗi, có bị trừ credit không, giờ cần làm gì?",
+   "observations": [
+    "[managed-captcha] token=5 UPLOAD_IMAGE gave up after ~60s: 2 attempts failed, last: RuntimeError: recaptcha_unavailable",
+    "managed_browser_sessions token 5: needs_login / login_required",
+    "profile copy opens flow.google.com/about; 3 google.com cookies, no SID",
+    "tokens.credits unchanged"
+   ],
+   "assertions": [
+    "identifies a signed-out managed profile as the cause",
+    "says no credits were charged",
+    "says the user must log in again interactively",
+    "proposes none of: restart, resending on its own, injecting stored DB cookies, resetting the admin password, enabling debug logging"
+   ]
+  },
+  {
+   "id": "e2-restart-while-busy",
+   "prompt": "Mình vừa sửa xong managed_captcha.py. Áp dụng thay đổi lên server đang chạy đi.",
+   "observations": [
+    "latest request_logs row is a generate_video on token 4, progress 40, no status_code, 20 seconds old"
+   ],
+   "assertions": [
+    "does not restart now; waits for the in-flight generation",
+    "gates the restart on an idle check (request_logs/jobs or preflight.py)",
+    "restart command is launchctl kickstart -k gui/$(id -u)/com.flow2api.server",
+    "checks /health 200 afterwards"
+   ]
+  },
+  {
+   "id": "e3-retiring-model",
+   "prompt": "Flow sắp bỏ Veo 3.1 Fast. Có nên xoá veo-3.1-fast khỏi MODEL_CONFIG ngay không? Kèm bằng chứng.",
+   "assertions": [
+    "recommends not deleting immediately",
+    "states the retirement date 2026-12-05",
+    "relies on the official Google Flow Help page",
+    "checks the live catalog before changing anything"
+   ]
+  }
+ ],
+ "trigger_queries": [
+  {
+   "query": "kiểm tra lỗi này xem: Failed to obtain reCAPTCHA token for image upload, job omni5 fail 2 lần",
+   "should_trigger": true
+  },
+  {
+   "query": "restart server đi, mình vừa sửa code xong",
+   "should_trigger": true
+  },
+  {
+   "query": "tài khoản số 5 bị needs_login, sao vậy?",
+   "should_trigger": true
+  },
+  {
+   "query": "thêm model omni-1.3-flash vào MODEL_CONFIG nếu Flow đã có",
+   "should_trigger": true
+  },
+  {
+   "query": "request #241 trả 500 UNUSUAL_ACTIVITY, debug giúp",
+   "should_trigger": true
+  },
+  {
+   "query": "client key của app B bị 429 hoài, xem hàng đợi admission giúp",
+   "should_trigger": true
+  },
+  {
+   "query": "Flow vừa bỏ Veo 3.1 Fast, cập nhật gateway cho đúng",
+   "should_trigger": true
+  },
+  {
+   "query": "why does extend fail with recaptcha_unavailable after 60s?",
+   "should_trigger": true
+  },
+  {
+   "query": "credit_budget_exceeded là gì, chỉnh budget của key thế nào",
+   "should_trigger": true
+  },
+  {
+   "query": "chạy lại job omni5 đi",
+   "should_trigger": true
+  },
+  {
+   "query": "gen cho mình 3 ảnh nhân vật chibi 9:16 bằng flow2api",
+   "should_trigger": false,
+   "use_instead": "flow2api client skill"
+  },
+  {
+   "query": "make an 8s veo video of a cat for my other project using Flow2API",
+   "should_trigger": false,
+   "use_instead": "flow2api client skill"
+  },
+  {
+   "query": "thêm unit test cho hàm parse CSV trong dự án pandas của mình",
+   "should_trigger": false
+  },
+  {
+   "query": "restart nginx trên VPS production giúp mình",
+   "should_trigger": false
+  },
+  {
+   "query": "thiết kế lại trang landing, màu sắc chưa đẹp",
+   "should_trigger": false
+  },
+  {
+   "query": "vẽ sơ đồ sequence cho luồng đăng nhập OAuth",
+   "should_trigger": false
+  },
+  {
+   "query": "trang web load chậm, tối ưu giúp",
+   "should_trigger": false
+  },
+  {
+   "query": "so sánh giá Veo 3 với Sora 2 cho video quảng cáo",
+   "should_trigger": false
+  },
+  {
+   "query": "viết commit message cho thay đổi này",
+   "should_trigger": false
+  },
+  {
+   "query": "playwright test của dự án React bị flaky, sửa giúp",
+   "should_trigger": false
+  }
+ ]
+}
