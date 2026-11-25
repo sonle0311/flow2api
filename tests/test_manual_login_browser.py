@@ -62,6 +62,28 @@ class ManualLoginBrowserTests(unittest.IsolatedAsyncioTestCase):
         with patch("src.services.manual_login_browser._list_tabs", side_effect=OSError("closed")):
             self.assertFalse(await browser.has_flow_tab())
 
+    def test_profile_check_sees_whether_chrome_flushed_the_sign_in_cookies(self):
+        import sqlite3
+        from src.services.manual_login_browser import profile_keeps_google_session
+        with tempfile.TemporaryDirectory() as root:
+            profile = Path(root)
+            self.assertIsNone(profile_keeps_google_session(profile))  # no cookie store at all: nothing concluded
+            store = profile / "Default/Network/Cookies"
+            store.parent.mkdir(parents=True)
+            conn = sqlite3.connect(store)
+            conn.execute("CREATE TABLE cookies (host_key TEXT, name TEXT)")
+            conn.executemany("INSERT INTO cookies VALUES (?, ?)", [(".google.com", "NID"), (".google.com", "AEC"), ("example.com", "SID")])
+            conn.commit()
+            conn.close()
+            self.assertFalse(profile_keeps_google_session(profile))  # a profile killed too early
+            conn = sqlite3.connect(store)
+            conn.execute("INSERT INTO cookies VALUES ('.google.com', '__Secure-1PSID')")
+            conn.commit()
+            conn.close()
+            self.assertTrue(profile_keeps_google_session(profile))
+            store.write_bytes(b"not sqlite")
+            self.assertIsNone(profile_keeps_google_session(profile))
+
     async def test_proxy_credentials_are_not_put_on_the_process_command_line(self):
         from src.services.manual_login_browser import launch_manual_browser
         with tempfile.TemporaryDirectory() as root:

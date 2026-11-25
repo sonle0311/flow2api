@@ -212,6 +212,26 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.service._manual_browsers)
         self.assertTrue(self.manager.save_managed_browser_cookies.await_args.kwargs["reactivate"])
 
+    async def test_browser_is_asked_to_quit_cleanly_and_given_time_before_it_is_killed(self):
+        # SIGTERM straight after sign-in loses Chrome's unflushed cookies and leaves a signed-out profile.
+        await self.attach_setup(email=self.email)
+        order = []
+        session = SimpleNamespace(send=AsyncMock(side_effect=lambda method: order.append(("send", method))))
+        self.cdp.new_browser_cdp_session = AsyncMock(return_value=session)
+        self.manual.wait_exit = AsyncMock(side_effect=lambda timeout: order.append(("wait", timeout)))
+        self.manual.close = AsyncMock(side_effect=lambda: order.append(("close",)))
+        await self.service.start_login(self.token_id)
+        self.assertEqual("ready", (await self.wait_login())["status"])
+        self.assertEqual([("send", "Browser.close"), ("wait", 10), ("close",)], order)
+
+    async def test_a_profile_that_did_not_keep_the_sign_in_is_reported_instead_of_marked_ready(self):
+        await self.attach_setup(email=self.email)
+        with patch("src.services.manual_login_browser.profile_keeps_google_session", return_value=False):
+            await self.service.start_login(self.token_id)
+            status = await self.wait_login()
+        self.assertEqual(("needs_login", "login_required"), (status["status"], status["error_code"]))
+        self.manager.save_managed_browser_cookies.assert_not_awaited()
+
     async def test_manual_login_stays_open_on_the_wrong_account_and_never_saves_it(self):
         await self.attach_setup(email="other@example.com")
         await self.service.start_login(self.token_id)

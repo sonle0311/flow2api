@@ -59,6 +59,37 @@ def read_profile_channel(profile_path):
         return None
 
 
+_SESSION_COOKIES = {"SID", "__Secure-1PSID", "__Secure-3PSID"}
+
+
+def profile_keeps_google_session(profile_path):
+    """Whether Chrome's cookie store on disk holds Google's sign-in cookies.
+
+    Chrome writes cookies to disk lazily and only a clean shutdown flushes them, so a browser that
+    is killed right after sign-in leaves a profile that looks signed out. Returns None when the
+    store cannot be read (nothing is concluded then).
+    """
+    import sqlite3
+    import tempfile
+
+    profile = Path(profile_path)
+    store = next((path for path in (profile / "Default/Network/Cookies", profile / "Default/Cookies") if path.is_file()), None)
+    if store is None:
+        return None
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            copy = Path(scratch) / "Cookies"
+            shutil.copyfile(store, copy)
+            conn = sqlite3.connect(copy)
+            try:
+                names = {row[0] for row in conn.execute("SELECT name FROM cookies WHERE host_key LIKE '%google.com'")}
+            finally:
+                conn.close()
+    except (OSError, sqlite3.Error):
+        return None
+    return bool(names & _SESSION_COOKIES)
+
+
 def _request_window_close(pid):
     if os.name != "nt":
         return False
@@ -201,6 +232,14 @@ class ManualBrowser:
     @property
     def process_running(self):
         return self.process.poll() is None
+
+    async def wait_exit(self, timeout):
+        """Wait for the process to end by itself, after it was asked to quit. True when it did."""
+        try:
+            await asyncio.to_thread(self.process.wait, timeout=timeout)
+            return True
+        except subprocess.TimeoutExpired:
+            return False
 
     async def has_flow_tab(self):
         """True when a tab sits on a Flow page past the landing page (plain HTTP, no attach)."""

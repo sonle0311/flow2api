@@ -316,6 +316,12 @@ class ManagedBrowserService:
         if browser is not None:
             await browser.close()
 
+    async def mark_signed_out(self, token_id):
+        """The account's saved profile is no longer signed in: show it as needing a new sign-in."""
+        row = await self._row(token_id)
+        if row and row["enabled"] and row["status"] not in {"opening", "awaiting_login", "syncing"}:
+            await self._write(token_id, status="needs_login", error_code="login_required")
+
     async def _finish_manual_login(self, token_id, browser, stop):
         """Read the account from a tab that reached Flow, then close the browser.
 
@@ -326,12 +332,18 @@ class ManagedBrowserService:
         try:
             await self._ensure_playwright()
             cdp = await self._playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{browser.debug_port}", timeout=10000)
+            quit_requested = False
             try:
                 if not cdp.contexts:
                     return "login_required"
                 error, result = await self._capture(token, cdp.contexts[0])
+                if result and not stop.is_set() and not self._closing:
+                    quit_requested = await self._quit_browser(cdp)
             finally:
-                await cdp.close()
+                try:
+                    await cdp.close()
+                except Exception:  # noqa: BLE001 - the browser may already be gone
+                    pass
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -346,12 +358,35 @@ class ManagedBrowserService:
             return "stopped"
         _timing(token_id, "signed-in tab read", started)
         await self._write(token_id, status="syncing", error_code="")
-        # Closing the browser commits its profile, which later headless syncs reuse.
+        # Chrome writes the sign-in cookies to the profile only on a clean shutdown. Ask it to quit
+        # and wait; a SIGTERM straight after sign-in leaves a profile that is signed out.
+        wait_exit = getattr(browser, "wait_exit", None)
+        if quit_requested and wait_exit is not None:
+            await wait_exit(10)
         await self._close_manual_browser(token_id)
         _timing(token_id, "browser closed", started)
+        from .manual_login_browser import profile_keeps_google_session
+
+        if profile_keeps_google_session(self._profile(token_id)) is False:
+            print(f"[managed-browser] token={token_id} the browser profile did not keep the sign-in; sign in again", flush=True)
+            await self._write(token_id, status="needs_login", error_code="login_required")
+            return "done"
         await self._save(token_id, result, interactive=True)
         _timing(token_id, "cookies saved", started)
         return "done"
+
+    @staticmethod
+    async def _quit_browser(cdp):
+        """Ask the browser to shut down cleanly (flushes its profile); False if it could not be asked."""
+        try:
+            session = await cdp.new_browser_cdp_session()
+        except Exception:  # noqa: BLE001 - fall back to terminating it
+            return False
+        try:
+            await session.send("Browser.close")
+        except Exception:  # noqa: BLE001 - the browser drops the connection while it quits
+            pass
+        return True
 
     async def _manual_login(self, token_id, token, stop):
         # No automation touches the sign-in pages: the browser is an ordinary one and is only

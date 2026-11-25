@@ -43,6 +43,10 @@ def _report(token_id: int, action: str, begun: float, reason: str) -> None:
     print(f"[managed-captcha] token={token_id} {action} gave up after {time.monotonic() - begun:.1f}s: {reason}", flush=True)
 
 
+class SignedOutError(RuntimeError):
+    """The account's browser profile is not signed in to Google/Flow."""
+
+
 class CaptchaStats:
     """What each account's token minting has been doing lately (kept in memory)."""
 
@@ -178,6 +182,15 @@ class ManagedCaptchaService:
                     _report(token_id, action, begun, "profile busy (sync or sign-in)")
                     self._note(token_id, action, "failed", reason="profile busy (sync or sign-in)")
                     return None
+                except SignedOutError:
+                    # Retrying cannot help: the profile needs a new sign-in.
+                    _report(token_id, action, begun, "signed out: sign this account in again")
+                    self._note(token_id, action, "failed", reason="signed out")
+                    mark = getattr(self.browser, "mark_signed_out", None)
+                    if mark is not None:
+                        await mark(token_id)
+                    await self._drop_page(token_id)
+                    return None
                 except Exception as exc:
                     reason = f"{type(exc).__name__}: {str(exc)[:200]}"
                 debug_logger.log_warning(
@@ -279,14 +292,19 @@ class ManagedCaptchaService:
         while time.monotonic() < deadline:
             if await self._is_ready(page, project_id):
                 return
+            if self._signed_out(page):
+                raise SignedOutError("login_required")
             await asyncio.sleep(0.5)
-        host = ""
+        raise RuntimeError("login_required" if self._signed_out(page) else "recaptcha_unavailable")
+
+    @staticmethod
+    def _signed_out(page) -> bool:
+        """The saved profile has no session: Google asked for a sign-in, or Flow showed its landing page."""
         try:
-            host = urlparse(page.url).hostname or ""
-        except Exception:
-            pass
-        # Leaving flow.google.com means the saved profile has no session.
-        raise RuntimeError("login_required" if host != "flow.google.com" else "recaptcha_unavailable")
+            url = urlparse(page.url)
+        except Exception:  # noqa: BLE001
+            return False
+        return url.hostname != "flow.google.com" or url.path.startswith("/about")
 
     @staticmethod
     async def _move_pointer(page) -> None:

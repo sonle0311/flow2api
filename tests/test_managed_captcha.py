@@ -237,6 +237,29 @@ class ManagedCaptchaServiceTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(FakePage, "goto", to_sign_in):
             self.assertIsNone(await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))
 
+    async def test_flow_landing_page_means_signed_out_and_fails_at_once_without_a_second_try(self):
+        # A profile whose Google cookies were lost is redirected to flow.google.com/about; waiting 30s for
+        # reCAPTCHA there (as before) only delayed the failure and hid the real cause.
+        self.service.READY_SECONDS = 30
+        marked = []
+
+        async def mark(token_id):
+            marked.append(token_id)
+
+        self.browser.mark_signed_out = mark
+
+        async def to_landing(page, url, **kwargs):
+            page.url = "https://flow.google.com/about?returnUrl=%2Fproject%2F" + PROJECT
+
+        started = asyncio.get_running_loop().time()
+        with patch.object(FakePage, "goto", to_landing), contextlib.redirect_stdout(io.StringIO()) as log:
+            self.assertIsNone(await self.service.get_token(PROJECT, "UPLOAD_IMAGE", token_id=1))
+        self.assertLess(asyncio.get_running_loop().time() - started, 5)
+        self.assertEqual([1], marked)
+        self.assertEqual(1, len(pages_of(self.browser)))  # no rebuilt tab, no second attempt
+        self.assertIn("signed out", log.getvalue())
+        self.assertEqual("signed out", self.service.stats.snapshot()[0]["last_failure"]["reason"])
+
     async def test_every_give_up_leaves_a_reason_in_the_always_on_log(self):
         # The debug log is off in normal operation; server.log must still say why a mint failed.
         self.browser.busy = True
@@ -252,7 +275,8 @@ class ManagedCaptchaServiceTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(FakePage, "goto", to_sign_in), contextlib.redirect_stdout(io.StringIO()) as signed_out:
             await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1)
-        self.assertIn("2 attempts failed, last: RuntimeError: login_required", signed_out.getvalue())
+        self.assertIn("token=1 IMAGE_GENERATION gave up", signed_out.getvalue())
+        self.assertIn("signed out: sign this account in again", signed_out.getvalue())
 
     async def test_a_successful_mint_prints_nothing(self):
         with contextlib.redirect_stdout(io.StringIO()) as quiet:
