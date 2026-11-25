@@ -368,5 +368,38 @@ class TokenCooldownPollingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(selected, [1, 2, 1, 2])
 
 
+class TokenModelAccessDeniedFailoverTests(unittest.IsolatedAsyncioTestCase):
+    """Tier-one accounts are refused Veo but work for Omni; a refusal must hand the request to another account."""
+
+    DENIED = "Flow frontend RPC rejected: rpc=YhhmEf, error=PUBLIC_ERROR_MODEL_ACCESS_DENIED"
+
+    async def test_request_moves_to_an_account_that_may_use_the_model(self):
+        handler, attempted = _build_handler([_token(1), _token(2)], {1}, self.DENIED)
+
+        with patch("src.services.load_balancer.random.random", side_effect=[0.1, 0.9] * 4):
+            chunks = await _collect(handler)
+
+        self.assertEqual(attempted, [1, 2])
+        self.assertNotIn("error", json.loads(chunks[-1]))
+
+    async def test_the_refused_account_is_not_cooled_down_or_counted_as_faulty(self):
+        handler, _ = _build_handler([_token(1), _token(2)], {1}, self.DENIED)
+
+        with patch("src.services.load_balancer.random.random", side_effect=[0.1, 0.9] * 4):
+            await _collect(handler)
+
+        # the same account still serves other models, so it must stay eligible for them
+        self.assertFalse(handler.load_balancer._in_quota_cooldown(1, "video"))
+        handler.token_manager.record_error.assert_not_awaited()
+
+    async def test_reports_the_refusal_when_no_account_has_access(self):
+        handler, attempted = _build_handler([_token(1), _token(2)], {1, 2}, self.DENIED)
+
+        chunks = await _collect(handler)
+
+        self.assertEqual(sorted(attempted), [1, 2])
+        self.assertIn("PUBLIC_ERROR_MODEL_ACCESS_DENIED", json.loads(chunks[-1])["error"]["message"])
+
+
 if __name__ == "__main__":
     unittest.main()

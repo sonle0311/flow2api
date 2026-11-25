@@ -2118,9 +2118,14 @@ class GenerationHandler:
                 error_msg = f"生成失败: {str(e)}"
                 debug_logger.log_error(f"[GENERATION] 生成失败: {error_msg}")
                 is_quota_error = self._is_quota_exhausted_error(e)
+                is_access_denied = self._is_model_access_denied_error(e)
                 if (
                     token
-                    and (is_quota_error or self._is_unusual_activity_error(e))
+                    and (
+                        is_quota_error
+                        or is_access_denied
+                        or self._is_unusual_activity_error(e)
+                    )
                     # 提交结果不确定时换号可能导致重复生成
                     and not getattr(e, "submission_uncertain", False)
                     and not getattr(e, "outcome_unknown", False)
@@ -2133,6 +2138,11 @@ class GenerationHandler:
                         )
                         failover_reason = "配额耗尽"
                         failover_notice = "当前账号配额已用尽，正在切换其他账号重试...\n"
+                    elif is_access_denied:
+                        # 只针对这个模型：同一账号仍可生成其他模型（如 Omni），所以不做冷却，
+                        # 仅在本次请求内排除该账号，由其他有权限的账号接手。
+                        failover_reason = "无该模型权限"
+                        failover_notice = "当前账号没有该模型的使用权限，正在切换其他账号重试...\n"
                     else:
                         risk_failures += 1
                         self.load_balancer.mark_risk_cooldown(token.id, scope)
@@ -2292,6 +2302,11 @@ class GenerationHandler:
         """账号配额耗尽：换一个账号通常可以成功。"""
         return "public_error_user_quota_reached" in str(error or "").lower()
 
+    @staticmethod
+    def _is_model_access_denied_error(error: Exception) -> bool:
+        """账号没有该模型的订阅权限：提交被拒、未创建任务，换有权限的账号即可。"""
+        return "public_error_model_access_denied" in str(error or "").lower()
+
     async def _refresh_token_credits(self, token) -> Optional[int]:
         """配额耗尽后刷新并落库余额，作为冷却解除的基准；失败时退回已知余额。"""
         try:
@@ -2334,6 +2349,7 @@ class GenerationHandler:
             "public_error_audio_filtered",
             "public_error_sexual",
             "public_error_user_quota_reached",
+            "public_error_model_access_denied",
             "too much traffic",
             "error_no_slot_available",
             "打码服务资源不足",
