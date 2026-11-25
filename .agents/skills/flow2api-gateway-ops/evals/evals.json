@@ -1,5 +1,5 @@
 {
- "skill_name": "flow2api-maintainer",
+ "skill_name": "flow2api-gateway-ops",
  "note": "Decision evals: give a model the skill text (with) or only a one-line repo description (without), the observations listed per eval, and grade each assertion with an LLM judge; 3 samples per condition. Run 2026-11-25: with the skill every assertion passed 3/3; without it kickstart failed 3/3, 'proposes none of the bad actions' passed 1/3 (the baseline suggested re-importing cookies), and the three E3 facts (date, official page, live catalog) failed 3/3. The E1 cause/charge/login assertions and E2 wait/idle/health assertions passed in both conditions, so they only guard against regressions. Trigger queries scored 20/20 with an LLM classifier choosing among this skill and six other skill descriptions. These are single-shot completions without tools, not real agent runs.",
  "evals": [
   {

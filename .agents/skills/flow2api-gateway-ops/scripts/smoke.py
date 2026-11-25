@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Free smoke check of the running gateway: no generation, no credits, no secrets printed.
 
-    .venv/bin/python3.11 .agents/skills/flow2api-maintainer/scripts/smoke.py [--base URL] [--db PATH] [--json]
+    .venv/bin/python3.11 .agents/skills/flow2api-gateway-ops/scripts/smoke.py [--base URL] [--db PATH] [--json]
 
 Checks, in order: GET /health; GET /v1/models with the master key read from the database
 (admin_config.api_key, never printed) and that Omni and Gemini image models are listed.

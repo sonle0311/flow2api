@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only state check before a restart or a debugging session.
 
-    .venv/bin/python3.11 .agents/skills/flow2api-maintainer/scripts/preflight.py [--db data/flow.db]
+    .venv/bin/python3.11 .agents/skills/flow2api-gateway-ops/scripts/preflight.py [--db data/flow.db]
 
 Prints: in-flight requests, active jobs, the latest requests, each account's login state.
 Never prints secrets (no tokens, cookies, keys). Exit status 0 = idle (safe to restart),

@@ -1,12 +1,12 @@
 ---
-name: flow2api-maintainer
-description: Maintains and operates the Flow2API gateway in this repo (FastAPI proxy over Google Flow - Veo, Omni, Nano Banana images; accounts, managed Chrome profiles, reCAPTCHA, queue, /v1/jobs, credit ledger). Use when changing code here or investigating an incident - generation errors (UNUSUAL_ACTIVITY, recaptcha_unavailable, "Failed to obtain reCAPTCHA token", 429, credit_budget_exceeded), an account that needs login, restarting or deploying the server, MODEL_CONFIG or Flow model-table changes - even when the user only says "job lỗi", "kiểm tra lỗi", "chạy lại", "đăng nhập lại tài khoản" or "restart server". Not for generating media from another project (use the flow2api client skill).
+name: flow2api-gateway-ops
+description: Operates, debugs and changes the Flow2API gateway server in this repo (FastAPI proxy over Google Flow - Veo, Omni, Nano Banana images; accounts, managed Chrome profiles, reCAPTCHA, queue, /v1/jobs, credit ledger). Use for server-side work - investigating a failed job or error (UNUSUAL_ACTIVITY, recaptcha_unavailable, "Failed to obtain reCAPTCHA token", 429, credit_budget_exceeded), an account that needs login, restarting or deploying the server, editing MODEL_CONFIG or the model table - even when the user only says "job lỗi", "kiểm tra lỗi", "đăng nhập lại tài khoản" or "restart server". Do NOT use it to make images or videos, even through this gateway; that is the job of the flow2api client skill.
 license: Proprietary
 metadata:
   project: flow2api
 ---
 
-# Flow2API maintainer
+# Flow2API gateway ops
 
 Flow is a closed web app that changes without notice, and every generation costs real credits. Most mistakes here come from trusting a symptom's name instead of its cause, or from touching the running server while the user is generating.
 
@@ -47,8 +47,8 @@ Flow is a closed web app that changes without notice, and every generation costs
 
 | Check | Command | Cost |
 |---|---|---|
-| Server idle? accounts logged in? | `.venv/bin/python3.11 .agents/skills/flow2api-maintainer/scripts/preflight.py` | free |
-| Gateway up, models listed | `.venv/bin/python3.11 .agents/skills/flow2api-maintainer/scripts/smoke.py` | free |
+| Server idle? accounts logged in? | `.venv/bin/python3.11 .agents/skills/flow2api-gateway-ops/scripts/preflight.py` | free |
+| Gateway up, models listed | `.venv/bin/python3.11 .agents/skills/flow2api-gateway-ops/scripts/smoke.py` | free |
 | Flow's model table vs `MODEL_CONFIG` | `.venv/bin/python scripts/flow_catalog.py` (needs a signed-in profile the server is not using) | free |
 | A real generation | `POST /v1/jobs`, Omni 360p 3 s, only with approval | about 3 credits |
 

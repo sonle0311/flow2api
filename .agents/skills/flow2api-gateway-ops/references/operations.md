@@ -10,7 +10,7 @@ launchd label `com.flow2api.server`; working dir is the repo; interpreter `.venv
 
 Run exactly this sequence; do not substitute `bootout`/`unload`.
 
-1. `.venv/bin/python3.11 .agents/skills/flow2api-maintainer/scripts/preflight.py`. Exit 1 means requests or jobs are running: **stop and wait**, a restart kills them.
+1. `.venv/bin/python3.11 .agents/skills/flow2api-gateway-ops/scripts/preflight.py`. Exit 1 means requests or jobs are running: **stop and wait**, a restart kills them.
 2. `launchctl kickstart -k gui/$(id -u)/com.flow2api.server`
 3. Poll `/health` until 200 (a few seconds), then run `scripts/preflight.py` again to confirm accounts are as before.
 
