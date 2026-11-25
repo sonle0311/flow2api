@@ -212,7 +212,7 @@ class ManualBrowser:
             return False
         for tab in tabs:
             url = urlparse(str(tab.get("url") or ""))
-            if tab.get("type") == "page" and url.hostname == "flow.google.com" and url.path.rstrip("/"):
+            if tab.get("type") == "page" and url.hostname == "flow.google.com" and url.path.startswith("/project"):
                 return True
         return False
 

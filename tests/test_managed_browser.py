@@ -236,6 +236,20 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.manual.close.assert_not_awaited()
         self.manager.save_managed_browser_cookies.assert_not_awaited()
 
+    async def test_signed_in_app_tab_is_read_even_when_the_landing_page_is_listed_first(self):
+        from src.services.managed_browser import ManagedBrowserService
+        landing, app, other = FakePage("none@example.com"), FakePage(self.email), FakePage("x@example.com")
+        landing.url = "https://flow.google.com/about?returnUrl=%2Fprojects"
+        app.url = "https://flow.google.com/projects?pli=1"
+        other.url = "https://accounts.google.com/"
+        context = FakeContext()
+        context.pages = [other, landing, app]
+        self.assertIs(app, await ManagedBrowserService._page(context))
+        context.pages = [other, landing]
+        self.assertIs(landing, await ManagedBrowserService._page(context))
+        context.pages = [other]
+        self.assertIs(other, await ManagedBrowserService._page(context))
+
     async def test_manual_login_timeout_closes_owned_window_without_importing_cookie(self):
         await self.manual_setup()
         self.service.LOGIN_TIMEOUT_SECONDS = 0.03

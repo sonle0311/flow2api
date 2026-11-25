@@ -52,6 +52,7 @@ class ManualLoginBrowserTests(unittest.IsolatedAsyncioTestCase):
         tabs = [
             {"type": "page", "url": "https://accounts.google.com/v3/signin/identifier"},
             {"type": "page", "url": "https://flow.google.com/"},
+            {"type": "page", "url": "https://flow.google.com/about?returnUrl=%2Fprojects"},
             {"type": "service_worker", "url": "https://flow.google.com/projects"},
         ]
         with patch("src.services.manual_login_browser._list_tabs", side_effect=lambda port: tabs):

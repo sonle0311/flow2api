@@ -77,6 +77,7 @@ class ManagedBrowserService:
         self._contexts: dict[int, Any] = {}
         self._login_tasks: dict[int, asyncio.Task] = {}
         self._login_stops: dict[int, asyncio.Event] = {}
+        self._attach_errors: dict[int, str] = {}
         self._closing = False
 
     async def initialize(self):
@@ -333,7 +334,11 @@ class ManagedBrowserService:
                 await cdp.close()
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            message = f"{type(exc).__name__}: {str(exc)[:200]}"
+            if self._attach_errors.get(token_id) != message:
+                self._attach_errors[token_id] = message
+                print(f"[managed-browser] token={token_id} reading the login browser failed: {message}", flush=True)
             return "login_required"
         if not result:
             return error or "login_required"
@@ -422,7 +427,10 @@ class ManagedBrowserService:
         pages = [p for p in context.pages if not p.is_closed()]
         if not pages:
             return await context.new_page()
-        return next((p for p in pages if urlparse(p.url).hostname == "flow.google.com"), pages[-1])
+        # A signed-in profile can also hold Flow's landing page (/about); only the app page is signed in.
+        flow = [p for p in pages if urlparse(p.url).hostname == "flow.google.com"]
+        app = [p for p in flow if urlparse(p.url).path.startswith("/project")]
+        return (app or flow or [pages[-1]])[0]
 
     async def _capture(self, token, context):
         page = await self._page(context)
