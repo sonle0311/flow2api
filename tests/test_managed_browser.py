@@ -188,6 +188,54 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.manager.save_managed_browser_cookies.assert_not_awaited()
         self.assertTrue(self.contexts[0].closed)
 
+    async def attach_setup(self, *, email):
+        await self.manual_setup()
+        self.service.ATTACH_POLL_SECONDS = 0
+        self.manual.debug_port = 4321
+        self.manual.has_flow_tab = AsyncMock(return_value=True)
+        self.cdp = SimpleNamespace(contexts=[FakeContext(email, "PRO")], close=AsyncMock())
+        self.service._playwright = SimpleNamespace(
+            chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=self.cdp)), stop=AsyncMock()
+        )
+
+    async def test_manual_login_finishes_when_a_tab_reaches_flow_without_closing_the_window(self):
+        await self.attach_setup(email=self.email)
+        await self.service.start_login(self.token_id)
+        status = await self.wait_login()
+        self.assertEqual("ready", status["status"])
+        self.assertEqual(self.email, self.manual_factory.await_args.kwargs["login_hint"])
+        self.service._playwright.chromium.connect_over_cdp.assert_awaited_once_with("http://127.0.0.1:4321", timeout=10000)
+        self.cdp.close.assert_awaited_once()
+        # The browser is closed by the service (profile committed) and no headless profile is opened.
+        self.manual.close.assert_awaited_once()
+        self.assertFalse(self.launches)
+        self.assertFalse(self.service._manual_browsers)
+        self.assertTrue(self.manager.save_managed_browser_cookies.await_args.kwargs["reactivate"])
+
+    async def test_manual_login_stays_open_on_the_wrong_account_and_never_saves_it(self):
+        await self.attach_setup(email="other@example.com")
+        await self.service.start_login(self.token_id)
+        status = await self.wait_for_status("awaiting_login")
+        deadline = asyncio.get_running_loop().time() + 5
+        while status["error_code"] != "identity_mismatch" and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+            status = await self.service.get_status(self.token_id)
+        self.assertEqual("identity_mismatch", status["error_code"])
+        self.assertTrue(status["browser_open"])
+        self.manual.close.assert_not_awaited()
+        self.manager.save_managed_browser_cookies.assert_not_awaited()
+
+    async def test_flow_tab_that_is_not_signed_in_yet_keeps_waiting(self):
+        await self.attach_setup(email=self.email)
+        self.service._playwright.chromium.connect_over_cdp = AsyncMock(side_effect=RuntimeError("not reachable"))
+        await self.service.start_login(self.token_id)
+        await self.wait_for_status("awaiting_login")
+        await asyncio.sleep(0.1)
+        status = await self.service.get_status(self.token_id)
+        self.assertEqual("awaiting_login", status["status"])
+        self.manual.close.assert_not_awaited()
+        self.manager.save_managed_browser_cookies.assert_not_awaited()
+
     async def test_manual_login_timeout_closes_owned_window_without_importing_cookie(self):
         await self.manual_setup()
         self.service.LOGIN_TIMEOUT_SECONDS = 0.03

@@ -53,6 +53,7 @@ class ManagedBrowserService:
 
     LOGIN_TIMEOUT_SECONDS = 600
     LOGIN_POLL_SECONDS = 2
+    ATTACH_POLL_SECONDS = 3
 
     def __init__(self, db, token_manager, profile_root=None, browser_factory=None, manual_browser_factory=None):
         self.db = db
@@ -210,14 +211,17 @@ class ManagedBrowserService:
             proxy["password"] = unquote(parsed.password or "")
         return proxy
 
-    async def _launch_browser(self, profile_path, *, headless, proxy):
-        from .manual_login_browser import read_profile_channel
-
+    async def _ensure_playwright(self):
         async with self._playwright_lock:
             if self._playwright is None:
                 from playwright.async_api import async_playwright
 
                 self._playwright = await async_playwright().start()
+
+    async def _launch_browser(self, profile_path, *, headless, proxy):
+        from .manual_login_browser import read_profile_channel
+
+        await self._ensure_playwright()
         # Chromium otherwise discards session-only Google cookies on clean
         # browser shutdown despite using a persistent profile directory.
         # Flow's reCAPTCHA also rates the automation flag: without it a token passes the stricter
@@ -311,13 +315,51 @@ class ManagedBrowserService:
         if browser is not None:
             await browser.close()
 
+    async def _finish_manual_login(self, token_id, browser, stop):
+        """Read the account from a tab that reached Flow, then close the browser.
+
+        Returns "done" once the cookies are saved, otherwise the reason it is not finished yet.
+        """
+        started = asyncio.get_running_loop().time()
+        token = await self._token(token_id)
+        try:
+            await self._ensure_playwright()
+            cdp = await self._playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{browser.debug_port}", timeout=10000)
+            try:
+                if not cdp.contexts:
+                    return "login_required"
+                error, result = await self._capture(token, cdp.contexts[0])
+            finally:
+                await cdp.close()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return "login_required"
+        if not result:
+            return error or "login_required"
+        if stop.is_set() or self._closing:
+            return "stopped"
+        _timing(token_id, "signed-in tab read", started)
+        await self._write(token_id, status="syncing", error_code="")
+        # Closing the browser commits its profile, which later headless syncs reuse.
+        await self._close_manual_browser(token_id)
+        _timing(token_id, "browser closed", started)
+        await self._save(token_id, result, interactive=True)
+        _timing(token_id, "cookies saved", started)
+        return "done"
+
     async def _manual_login(self, token_id, token, stop):
-        # No browser automation is connected while the user enters credentials
-        # or completes Google's verification. Closing the dedicated browser
-        # commits its profile and is the hand-off to cookie synchronization.
+        # No automation touches the sign-in pages: the browser is an ordinary one and is only
+        # watched over plain HTTP until a tab reaches Flow. Then the signed-in account is read
+        # and the browser closed. If that cannot happen (no debug port, or the user closes the
+        # window first), closing the window is the hand-off to cookie synchronization.
         await self._close_context(token_id)
         try:
-            browser = await self.manual_browser_factory(self._profile(token_id), proxy=await self._proxy(token))
+            browser = await self.manual_browser_factory(
+                self._profile(token_id),
+                proxy=await self._proxy(token),
+                login_hint=token.login_account or token.email,
+            )
         except ValueError as exc:
             if str(exc) == "proxy_invalid":
                 await self._write(token_id, status="error", error_code="proxy_invalid")
@@ -325,12 +367,25 @@ class ManagedBrowserService:
             raise
         self._manual_browsers[token_id] = browser
         await self._write(token_id, status="awaiting_login", error_code="")
-        deadline = asyncio.get_running_loop().time() + self.LOGIN_TIMEOUT_SECONDS
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.LOGIN_TIMEOUT_SECONDS
+        last_probe = 0.0
+        last_error = ""
         while browser.is_running and not stop.is_set() and not self._closing:
-            if asyncio.get_running_loop().time() >= deadline:
+            if loop.time() >= deadline:
                 await self._close_manual_browser(token_id)
                 await self._write(token_id, status="needs_login", error_code="login_timeout")
                 return
+            if getattr(browser, "debug_port", None) and loop.time() - last_probe >= self.ATTACH_POLL_SECONDS:
+                last_probe = loop.time()
+                if await browser.has_flow_tab():
+                    outcome = await self._finish_manual_login(token_id, browser, stop)
+                    if outcome == "done" or stop.is_set() or self._closing:
+                        return
+                    if outcome == "identity_mismatch" and outcome != last_error:
+                        await self._write(token_id, status="awaiting_login", error_code=outcome)
+                    last_error = outcome
+                    last_probe = loop.time()
             try:
                 await asyncio.wait_for(stop.wait(), timeout=self.LOGIN_POLL_SECONDS)
             except asyncio.TimeoutError:

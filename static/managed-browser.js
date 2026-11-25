@@ -4,7 +4,7 @@
     const STATUS_KEYS = {
         not_configured: '尚未设置浏览器登录',
         opening: '正在打开登录浏览器…',
-        awaiting_login: '请登录 Google/Flow，然后关闭窗口以同步',
+        awaiting_login: '请登录 Google/Flow，登录成功后将自动同步并关闭窗口',
         syncing: '正在验证并同步 Cookie…',
         ready: 'Cookie 已同步',
         needs_login: '需要重新登录',

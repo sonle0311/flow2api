@@ -1,4 +1,10 @@
-"""Open an ordinary, user-operated browser without an automation connection."""
+"""Open an ordinary, user-operated browser; no automation touches the sign-in pages.
+
+The browser listens for DevTools on a random loopback port only so that the service can see,
+without attaching, when a tab has reached Flow. It attaches once, after sign-in, to read the
+cookies, then closes the browser. FLOW2API_MANUAL_LOGIN_AUTODETECT=0 turns the port off, and
+the hand-off then waits for the user to close the window.
+"""
 
 from __future__ import annotations
 
@@ -6,10 +12,12 @@ import asyncio
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 FLOW_URL = "https://flow.google.com/projects"
@@ -153,9 +161,10 @@ def _mac_windows(pid):
 
 
 class ManualBrowser:
-    def __init__(self, process, channel, window_lister=None):
+    def __init__(self, process, channel, window_lister=None, debug_port=None):
         self.process = process
         self.channel = channel
+        self.debug_port = debug_port
         # macOS keeps Chrome alive after its last window closes, so process exit
         # alone never signals the hand-off there; watch the browser windows too.
         if window_lister is None and sys.platform == "darwin":
@@ -193,6 +202,20 @@ class ManualBrowser:
     def process_running(self):
         return self.process.poll() is None
 
+    async def has_flow_tab(self):
+        """True when a tab sits on a Flow page past the landing page (plain HTTP, no attach)."""
+        if not self.debug_port:
+            return False
+        try:
+            tabs = await asyncio.to_thread(_list_tabs, self.debug_port)
+        except Exception:
+            return False
+        for tab in tabs:
+            url = urlparse(str(tab.get("url") or ""))
+            if tab.get("type") == "page" and url.hostname == "flow.google.com" and url.path.rstrip("/"):
+                return True
+        return False
+
     async def close(self):
         # A window-less Chrome on macOS still holds the profile lock and unsaved
         # cookies; terminating it (SIGTERM) shuts it down cleanly and flushes them.
@@ -217,7 +240,33 @@ class ManualBrowser:
                 await asyncio.to_thread(self.process.wait, timeout=3)
 
 
-async def launch_manual_browser(profile_path, *, proxy=None):
+def _free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def _list_tabs(port):
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=2) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def start_url(login_hint=None):
+    """Flow itself, or Google's sign-in with the account's email filled in.
+
+    A profile that is still signed in goes straight on to Flow; otherwise the user only
+    has to type the password and complete verification.
+    """
+    hint = str(login_hint or "").strip()
+    if "@" not in hint:
+        return FLOW_URL
+    return (
+        "https://accounts.google.com/ServiceLogin?continue="
+        f"{quote(FLOW_URL, safe='')}&Email={quote(hint, safe='@')}"
+    )
+
+
+async def launch_manual_browser(profile_path, *, proxy=None, login_hint=None):
     if proxy:
         server = urlparse(str(proxy.get("server") or ""))
         if proxy.get("username") or proxy.get("password") or server.username is not None or server.password is not None:
@@ -233,10 +282,14 @@ async def launch_manual_browser(profile_path, *, proxy=None):
     # window, so repeated logins do not stack up windows in the profile.
     args = [
         executable, f"--user-data-dir={profile}", "--restore-last-session",
-        "--no-first-run", "--disable-background-mode", FLOW_URL,
+        "--no-first-run", "--disable-background-mode", start_url(login_hint),
     ]
+    debug_port = None
+    if os.environ.get("FLOW2API_MANUAL_LOGIN_AUTODETECT", "1").strip().lower() not in {"0", "false", "no", "off"}:
+        debug_port = _free_port()
+        args[-1:-1] = [f"--remote-debugging-port={debug_port}", "--remote-debugging-address=127.0.0.1"]
     if proxy:
         args.insert(-1, f"--proxy-server={proxy['server']}")
     (profile / _CHANNEL_FILE).write_text(json.dumps({"channel": channel}), encoding="utf-8")
     process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return ManualBrowser(process, channel)
+    return ManualBrowser(process, channel, debug_port=debug_port)

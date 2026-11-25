@@ -154,7 +154,7 @@ def test_browser_dialog_never_launches_until_explicit_click_and_closes_polling(b
     assert dialog.is_visible()
     assert state["requests"] == [("GET", "browser-session")]
     page.locator("#managedBrowserLogin").click()
-    page.locator("#managedBrowserStatus").filter(has_text="Sign in to Google/Flow, then close the window to sync").wait_for()
+    page.locator("#managedBrowserStatus").filter(has_text="Sign in to Google/Flow; it syncs and closes the window by itself once you are in").wait_for()
     assert ("POST", "login") in state["requests"]
     page.keyboard.press("Escape")
     assert not dialog.is_visible()
@@ -164,9 +164,9 @@ def test_browser_dialog_never_launches_until_explicit_click_and_closes_polling(b
 
 
 @pytest.mark.parametrize("locale,expected,description", [
-    ("en", "Sign in to Google/Flow, then close the window to sync", "then close all windows of this account's dedicated browser profile"),
-    ("vi", "Đăng nhập Google/Flow, sau đó đóng cửa sổ để đồng bộ", "sau đó đóng tất cả cửa sổ thuộc profile riêng của tài khoản này"),
-    ("zh-CN", "请登录 Google/Flow，然后关闭窗口以同步", "然后关闭此账号专用配置的所有浏览器窗口"),
+    ("en", "Sign in to Google/Flow; it syncs and closes the window by itself once you are in", "once Flow loads, the system verifies your identity"),
+    ("vi", "Đăng nhập Google/Flow; hệ thống tự đồng bộ và đóng cửa sổ khi bạn đăng nhập xong", "khi Flow mở ra, hệ thống tự xác minh danh tính"),
+    ("zh-CN", "请登录 Google/Flow，登录成功后将自动同步并关闭窗口", "进入 Flow 后系统会自动验证身份"),
 ])
 def test_normal_browser_login_instructions_explain_close_before_sync(browser_page, locale, expected, description):
     page, url = browser_page
@@ -238,7 +238,7 @@ def test_browser_ready_poll_refreshes_account_and_stop_preserves_profile_message
     state = mock_sessions(page, session("awaiting_login", browser_open=True))
     open_page(page, url + "/manage")
     page.locator("[data-managed-browser-open='1']").click()
-    page.locator("#managedBrowserStatus").filter(has_text="Sign in to Google/Flow, then close the window to sync").wait_for()
+    page.locator("#managedBrowserStatus").filter(has_text="Sign in to Google/Flow; it syncs and closes the window by itself once you are in").wait_for()
     state["session"] = session("ready", browser_open=True, last_sync_at="2026-10-27T10:00:00Z")
     with page.expect_response("**/api/tokens"):
         page.locator("#managedBrowserStatus").filter(has_text="Cookies synchronized").wait_for(timeout=6000)

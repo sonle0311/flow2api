@@ -18,10 +18,48 @@ class ManualLoginBrowserTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(f"--user-data-dir={profile}", args)
             self.assertIn("--restore-last-session", args)
             self.assertEqual("https://flow.google.com/projects", args[-1])
-            self.assertFalse(any("automation" in arg or "debugging" in arg or "headless" in arg for arg in args))
+            self.assertFalse(any("automation" in arg or "headless" in arg for arg in args))
+            # DevTools only on loopback, so the service can see a tab reach Flow.
+            self.assertIn("--remote-debugging-address=127.0.0.1", args)
+            self.assertIn(f"--remote-debugging-port={handle.debug_port}", args)
             self.assertNotIn("shell", factory.call_args.kwargs)
             self.assertTrue(handle.is_running)
             self.assertEqual("chrome", read_profile_channel(profile))
+
+    async def test_autodetect_can_be_switched_off(self):
+        from src.services.manual_login_browser import launch_manual_browser
+        with tempfile.TemporaryDirectory() as root, patch.dict("os.environ", {"FLOW2API_MANUAL_LOGIN_AUTODETECT": "0"}):
+            with patch("src.services.manual_login_browser.find_browser", return_value=("C:/Chrome/chrome.exe", "chrome")), patch("src.services.manual_login_browser.subprocess.Popen") as factory:
+                handle = await launch_manual_browser(Path(root))
+            self.assertFalse(any("debugging" in arg for arg in factory.call_args.args[0]))
+            self.assertIsNone(handle.debug_port)
+            self.assertFalse(await handle.has_flow_tab())
+
+    def test_start_url_prefills_the_account_email_and_falls_back_to_flow(self):
+        from urllib.parse import parse_qs, urlparse
+        from src.services.manual_login_browser import FLOW_URL, start_url
+        url = urlparse(start_url("first.last+x@gmail.com"))
+        query = parse_qs(url.query)
+        self.assertEqual(("accounts.google.com", "/ServiceLogin"), (url.hostname, url.path))
+        self.assertEqual(["first.last+x@gmail.com"], query["Email"])
+        self.assertEqual([FLOW_URL], query["continue"])
+        for missing in (None, "", "not-an-email"):
+            self.assertEqual(FLOW_URL, start_url(missing))
+
+    async def test_flow_tab_detection_ignores_the_landing_page_and_other_sites(self):
+        from src.services.manual_login_browser import ManualBrowser
+        browser = ManualBrowser(MagicMock(), "chrome", debug_port=9222)
+        tabs = [
+            {"type": "page", "url": "https://accounts.google.com/v3/signin/identifier"},
+            {"type": "page", "url": "https://flow.google.com/"},
+            {"type": "service_worker", "url": "https://flow.google.com/projects"},
+        ]
+        with patch("src.services.manual_login_browser._list_tabs", side_effect=lambda port: tabs):
+            self.assertFalse(await browser.has_flow_tab())
+            tabs.append({"type": "page", "url": "https://flow.google.com/projects?pli=1"})
+            self.assertTrue(await browser.has_flow_tab())
+        with patch("src.services.manual_login_browser._list_tabs", side_effect=OSError("closed")):
+            self.assertFalse(await browser.has_flow_tab())
 
     async def test_proxy_credentials_are_not_put_on_the_process_command_line(self):
         from src.services.manual_login_browser import launch_manual_browser
