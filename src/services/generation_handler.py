@@ -3569,6 +3569,7 @@ class GenerationHandler:
                         yield self._create_completion_response(
                             local_url,  # 直接传URL,让方法内部格式化
                             media_type="video",
+                            media_id=video_media_id,
                         )
                     return
 
@@ -3658,6 +3659,7 @@ class GenerationHandler:
         content: str,
         media_type: str = "image",
         is_availability_check: bool = False,
+        media_id: Optional[str] = None,
     ) -> str:
         """创建非流式响应
 
@@ -3678,8 +3680,9 @@ class GenerationHandler:
         else:
             # 媒体生成: 根据媒体类型格式化内容为Markdown
             if media_type == "video":
+                media_attr = f" data-media-id='{media_id}'" if media_id else ""
                 formatted_content = (
-                    f"```html\n<video src='{content}' controls></video>\n```"
+                    f"```html\n<video src='{content}'{media_attr} controls></video>\n```"
                 )
             else:  # image
                 formatted_content = f"![Generated Image]({content})"

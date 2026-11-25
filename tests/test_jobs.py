@@ -186,5 +186,24 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await restarted.get("master", job["id"]))
 
 
+class VideoResultTests(unittest.TestCase):
+    """A finished video must name its media id, or a job result can never be extended or edited."""
+
+    def completion(self, **kwargs):
+        from src.services.generation_handler import GenerationHandler
+        handler = GenerationHandler.__new__(GenerationHandler)
+        return json.loads(handler._create_completion_response("https://cdn.example/v.mp4", media_type="video", **kwargs))
+
+    def test_video_result_carries_the_media_id_and_the_url_is_still_found(self):
+        payload = self.completion(media_id="MEDIA-1")
+        content = payload["choices"][0]["message"]["content"]
+        self.assertIn("data-media-id='MEDIA-1'", content)
+        self.assertEqual("https://cdn.example/v.mp4", routes._extract_url_from_openai_payload(payload))
+
+    def test_without_a_media_id_the_result_is_unchanged(self):
+        content = self.completion()["choices"][0]["message"]["content"]
+        self.assertNotIn("data-media-id", content)
+
+
 if __name__ == "__main__":
     unittest.main()

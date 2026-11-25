@@ -1,0 +1,1871 @@
+[
+ {
+  "config_path": "generationConfig.imageConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "imageSize": "1K"
+  },
+  "id": "gemini-3.0-pro-image",
+  "listed": true,
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16",
+     "1:1",
+     "4:3",
+     "3:4"
+    ]
+   },
+   "imageSize": {
+    "type": "string",
+    "values": [
+     "1K",
+     "2K",
+     "4K"
+    ]
+   }
+  },
+  "type": "image",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.0-pro-image-landscape",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.0-pro-image-landscape-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.0-pro-image-landscape-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.0-pro-image-portrait",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.0-pro-image-portrait-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.0-pro-image-portrait-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.0-pro-image-square",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.0-pro-image-square-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.0-pro-image-square-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.0-pro-image-four-three",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.0-pro-image-four-three-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.0-pro-image-four-three-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.0-pro-image-three-four",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.0-pro-image-three-four-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.0-pro-image-three-four-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.imageConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "imageSize": "1K"
+  },
+  "id": "gemini-3.1-flash-image",
+  "listed": true,
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16",
+     "1:1",
+     "4:3",
+     "3:4"
+    ]
+   },
+   "imageSize": {
+    "type": "string",
+    "values": [
+     "1K",
+     "2K",
+     "4K"
+    ]
+   }
+  },
+  "type": "image",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-image-landscape",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-image-landscape-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-image-landscape-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-image-portrait",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-image-portrait-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-image-portrait-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-image-square",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-image-square-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-image-square-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-image-four-three",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-image-four-three-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-image-four-three-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-image-three-four",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-image-three-four-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-image-three-four-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.imageConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "imageSize": "1K"
+  },
+  "id": "gemini-3.1-flash-lite-image",
+  "listed": true,
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16",
+     "1:1",
+     "4:3",
+     "3:4"
+    ]
+   },
+   "imageSize": {
+    "type": "string",
+    "values": [
+     "1K",
+     "2K",
+     "4K"
+    ]
+   }
+  },
+  "type": "image",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-lite-image-landscape",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-lite-image-landscape-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "id": "gemini-3.1-flash-lite-image-landscape-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-lite-image-portrait",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-lite-image-portrait-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "id": "gemini-3.1-flash-lite-image-portrait-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-lite-image-square",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-lite-image-square-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "1:1",
+    "id": "gemini-3.1-flash-lite-image-square-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-lite-image-four-three",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-lite-image-four-three-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "4:3",
+    "id": "gemini-3.1-flash-lite-image-four-three-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-lite-image-three-four",
+    "imageSize": "1K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-lite-image-three-four-2k",
+    "imageSize": "2K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "3:4",
+    "id": "gemini-3.1-flash-lite-image-three-four-4k",
+    "imageSize": "4K",
+    "locally_validated_min_images": 0,
+    "max_images": null,
+    "min_images": 0,
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "auto"
+  },
+  "id": "omni-1.1-flash",
+  "listed": true,
+  "mode_defaults": {
+   "auto": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "auto"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     4,
+     6,
+     8,
+     10
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "auto"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 10,
+    "id": "omni-1.1-flash-10s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 10,
+    "id": "omni-1.1-flash-10s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "omni-1.1-flash-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "omni-1.1-flash-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "omni-1.1-flash-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "omni-1.1-flash-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "omni-1.1-flash-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "omni-1.1-flash-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 7,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "auto"
+  },
+  "id": "omni-1.2-flash",
+  "listed": true,
+  "mode_defaults": {
+   "auto": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "auto"
+   },
+   "edit": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "edit"
+   },
+   "extend": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "extend"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "auto",
+     "edit",
+     "extend"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-10s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-10s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-11s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-11s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-12s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-12s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-13s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-13s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-14s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-14s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-15s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-15s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-3s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-3s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-5s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-5s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-7s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-7s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-9s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-9s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 10,
+    "min_images": 0,
+    "mode": "auto",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-edit-10s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-edit-10s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-edit-11s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 11,
+    "id": "omni-1.2-flash-edit-11s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-edit-12s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 12,
+    "id": "omni-1.2-flash-edit-12s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-edit-13s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 13,
+    "id": "omni-1.2-flash-edit-13s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-edit-14s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 14,
+    "id": "omni-1.2-flash-edit-14s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-edit-15s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 15,
+    "id": "omni-1.2-flash-edit-15s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-edit-3s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-edit-3s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-edit-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-edit-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-edit-5s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-edit-5s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-edit-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-edit-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-edit-7s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-edit-7s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-edit-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-edit-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-edit-9s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-edit-9s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "edit",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-extend-10s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 10,
+    "id": "omni-1.2-flash-extend-10s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-extend-3s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 3,
+    "id": "omni-1.2-flash-extend-3s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-extend-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "omni-1.2-flash-extend-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-extend-5s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 5,
+    "id": "omni-1.2-flash-extend-5s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-extend-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "omni-1.2-flash-extend-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-extend-7s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 7,
+    "id": "omni-1.2-flash-extend-7s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-extend-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "omni-1.2-flash-extend-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-extend-9s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 9,
+    "id": "omni-1.2-flash-extend-9s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "extend",
+    "supports_images": false
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "t2v"
+  },
+  "id": "veo-3.1-fast",
+  "listed": true,
+  "mode_defaults": {
+   "i2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "mode": "i2v"
+   },
+   "r2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "r2v"
+   },
+   "t2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "t2v"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     4,
+     6,
+     8
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "i2v",
+     "r2v",
+     "t2v"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-fast-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-fast-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-fast-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-fast-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-fast-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-fast-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-fast-i2v-4s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-fast-i2v-4s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-fast-i2v-6s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-fast-i2v-6s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-fast-r2v-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-fast-r2v-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "t2v"
+  },
+  "id": "veo-3.1-lite",
+  "listed": true,
+  "mode_defaults": {
+   "i2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "mode": "i2v"
+   },
+   "r2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "r2v"
+   },
+   "t2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "t2v"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     4,
+     6,
+     8
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "i2v",
+     "r2v",
+     "t2v"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-i2v-4s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-i2v-4s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-i2v-6s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-i2v-6s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-r2v-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-r2v-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "t2v"
+  },
+  "id": "veo-3.1-quality",
+  "listed": true,
+  "mode_defaults": {
+   "i2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "mode": "i2v"
+   },
+   "t2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "t2v"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     4,
+     6,
+     8
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "i2v",
+     "t2v"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-quality-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-quality-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-quality-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-quality-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-quality-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-quality-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-quality-i2v-4s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-quality-i2v-4s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-quality-i2v-6s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-quality-i2v-6s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   }
+  ]
+ }
+]
