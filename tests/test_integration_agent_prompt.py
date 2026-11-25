@@ -78,7 +78,7 @@ def test_handoff_is_localized_complete_and_client_focused(prompts):
         assert "generationConfig.videoConfig" in prompt and "generationConfig.imageConfig" in prompt
         assert "durationSeconds" in prompt and "integer" in prompt
         assert "imageSize" in prompt and "aspectRatio" in prompt
-        assert "mediaGenerationId" in prompt and "extend://" in prompt
+        assert "data-media-id" in prompt and "extend://" in prompt
         assert "reasoning_content" in prompt and "[DONE]" in prompt
         assert "max_retries=0" in prompt and 'extra_body={"generationConfig"' in prompt
         assert "3600" in prompt and "innerHTML" in prompt
@@ -267,3 +267,24 @@ def test_capacity_limits_are_copied_as_validated_numbers_only():
 def test_prompt_without_capacity_keeps_guidance_without_numbers(prompts):
     assert "Throughput and concurrency limits" in prompts["en"]
     assert "recommended max parallel requests" not in prompts["en"]
+
+
+def test_prompt_covers_key_restrictions_retirement_and_omni_extend_edit(prompts):
+    from src.core.model_resolver import is_model_retired
+
+    for locale, prompt in prompts.items():
+        # Per-client allow-list: the 403 contract and the filtered discovery lists.
+        assert "model_not_allowed" in prompt and "permission_error" in prompt, locale
+        # Retirement date comes from the registry, not from the prose alone.
+        assert "2026-12-05" in prompt and "(retires" in prompt, locale
+        # Omni reference-image limits and the extend/edit source marker.
+        assert "0–10" in prompt and "0–3 images" not in prompt and "0–3 张" not in prompt, locale
+        assert "extend://ID?project=PROJECT_ID" in prompt, locale
+        assert "mode=extend" in prompt or 'mode "extend"' in prompt, locale
+        assert "Veo extend" not in prompt and "veo-3.1-fast-extend" not in prompt, locale
+    retiring = {
+        model_id for model_id, config in MODEL_CONFIG.items()
+        if config.get("retires_on") == "2026-12-05"
+    }
+    assert retiring and all(model_id.startswith(("omni-1.1", "veo-3.1-fast", "veo-3.1-quality", "veo_3_1")) for model_id in retiring)
+    assert not any(is_model_retired(MODEL_CONFIG[model_id], today=__import__("datetime").date(2026, 12, 4)) for model_id in retiring)
