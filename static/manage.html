@@ -9,6 +9,7 @@
     <script src="/static/integration.js" defer></script>
     <script src="/static/managed-browser.js" defer></script>
     <script src="/static/client-keys.js" defer></script>
+    <script src="/static/operations.js" defer></script>
     <link rel="stylesheet" href="/static/instrument-utilities.css">
     <link rel="stylesheet" href="/static/client-keys.css">
     <style>
@@ -249,6 +250,10 @@
                             <label for="clientKeyConcurrent" data-i18n="并发上限">并发上限</label>
                             <input id="clientKeyConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" value="3" required>
                         </div>
+                        <div>
+                            <label for="clientKeyBudget" data-i18n="每月 credit 额度">每月 credit 额度</label>
+                            <input id="clientKeyBudget" class="client-keys-input" type="number" min="0" max="10000000" step="1" value="0" required>
+                        </div>
                         <button id="clientKeySubmit" type="submit" class="client-keys-primary" data-i18n="创建密钥">创建密钥</button>
                         <details class="client-keys-form-models">
                             <summary data-i18n="允许使用的模型">允许使用的模型</summary>
@@ -283,6 +288,44 @@
                             <tbody id="clientKeysBody"></tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- 运维状态：安全、告警、用量、模型表、验证码 -->
+                <div id="operationsCard" class="client-keys-card rounded-lg border border-border bg-background p-6">
+                    <h3 class="text-lg font-semibold mb-4"><span data-i18n="运维状态">运维状态</span></h3>
+                    <p id="opsError" class="client-keys-error" role="alert" hidden></p>
+                    <section class="ops-section"><h4 data-i18n="安全检查">安全检查</h4><ul id="opsSecurity" class="ops-list"></ul></section>
+                    <section class="ops-section">
+                        <h4 data-i18n="告警">告警</h4>
+                        <form id="opsAlertForm" class="client-keys-form">
+                            <div>
+                                <label for="opsWebhook" data-i18n="Webhook 地址">Webhook 地址</label>
+                                <input id="opsWebhook" class="client-keys-input" type="url" maxlength="2000" autocomplete="off" placeholder="https://…" data-i18n-placeholder="https://…（Slack、Discord、Telegram 等）">
+                            </div>
+                            <div>
+                                <label for="opsLowCredits" data-i18n="低额度阈值（credit，0 关闭）">低额度阈值（credit，0 关闭）</label>
+                                <input id="opsLowCredits" class="client-keys-input" type="number" min="0" max="10000000" step="1" value="500">
+                            </div>
+                            <div>
+                                <label for="opsCooldown" data-i18n="重复提醒间隔（分钟）">重复提醒间隔（分钟）</label>
+                                <input id="opsCooldown" class="client-keys-input" type="number" min="1" max="10080" step="1" value="360">
+                            </div>
+                            <label class="ops-check"><input id="opsEnabled" type="checkbox"> <span data-i18n="启用告警">启用告警</span></label>
+                            <button type="submit" class="client-keys-primary" data-i18n="保存">保存</button>
+                            <button id="opsAlertTest" type="button" class="client-keys-secondary" data-i18n="发送测试">发送测试</button>
+                            <button id="opsAlertCheck" type="button" class="client-keys-secondary" data-i18n="立即检查">立即检查</button>
+                        </form>
+                        <p id="opsWebhookNote" class="client-keys-hint"></p>
+                        <h5 data-i18n="当前问题">当前问题</h5><ul id="opsConditions" class="ops-list"></ul>
+                        <h5 data-i18n="最近事件">最近事件</h5><ul id="opsEvents" class="ops-list"></ul>
+                    </section>
+                    <section class="ops-section"><h4 data-i18n="Credit 用量">Credit 用量</h4><p id="opsUsageSummary" class="client-keys-hint"></p><div id="opsUsage" class="ops-tables"></div></section>
+                    <section class="ops-section">
+                        <h4 data-i18n="Flow 模型表">Flow 模型表</h4>
+                        <p id="opsCatalog" class="client-keys-hint"></p>
+                        <button id="opsCatalogCheck" type="button" class="client-keys-secondary" data-i18n="立即检查">立即检查</button>
+                    </section>
+                    <section class="ops-section"><h4 data-i18n="验证码诊断">验证码诊断</h4><p id="opsCaptchaMethod" class="client-keys-hint"></p><div id="opsCaptcha" class="ops-tables"></div></section>
                 </div>
 
                 <!-- 代理配置 -->
@@ -1227,6 +1270,12 @@
             <div class="client-keys-dialog-field">
                 <label for="clientKeyEditConcurrent" data-i18n="并发上限">并发上限</label>
                 <input id="clientKeyEditConcurrent" class="client-keys-input" type="number" min="0" max="1000" step="1" required>
+            </div>
+            <div class="client-keys-dialog-field">
+                <label for="clientKeyEditBudget" data-i18n="每月 credit 额度">每月 credit 额度</label>
+                <input id="clientKeyEditBudget" class="client-keys-input" type="number" min="0" max="10000000" step="1" required>
+                <p class="client-keys-hint" data-i18n="0 表示不限。用完后请求返回 429（credit_budget_exceeded），每月 1 日（UTC）自动重置。">0 表示不限。用完后请求返回 429（credit_budget_exceeded），每月 1 日（UTC）自动重置。</p>
+                <label class="ops-check"><input id="clientKeyEditReset" type="checkbox"> <span data-i18n="重置本月已用额度">重置本月已用额度</span></label>
             </div>
             <div id="clientKeyEditModels" class="client-keys-dialog-field" data-client-key-picker>
                 <label for="clientKeyEditModelInput" data-i18n="允许使用的模型">允许使用的模型</label>

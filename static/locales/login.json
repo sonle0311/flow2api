@@ -17,7 +17,16 @@
     "图片、视频与参考图生成": "图片、视频与参考图生成",
     "使用管理员账户继续": "使用管理员账户继续",
     "显示或隐藏密码": "显示或隐藏密码",
-    "登录后可管理账号、系统配置与请求日志。": "登录后可管理账号、系统配置与请求日志。"
+    "登录后可管理账号、系统配置与请求日志。": "登录后可管理账号、系统配置与请求日志。",
+    "新密码": "新密码",
+    "确认新密码": "确认新密码",
+    "至少 8 位": "至少 8 位",
+    "再次输入新密码": "再次输入新密码",
+    "修改密码": "修改密码",
+    "请先修改默认密码": "请先修改默认密码",
+    "当前仍是默认密码，设置新密码后才能使用控制台": "当前仍是默认密码，设置新密码后才能使用控制台",
+    "两次输入的密码不一致": "两次输入的密码不一致",
+    "密码已修改，请使用新密码登录": "密码已修改，请使用新密码登录"
   },
   "en": {
     "登录 - Flow2API": "Sign in - Flow2API",
@@ -37,7 +46,16 @@
     "图片、视频与参考图生成": "Image, video and reference-based generation",
     "使用管理员账户继续": "Continue with your admin account",
     "显示或隐藏密码": "Show or hide password",
-    "登录后可管理账号、系统配置与请求日志。": "After signing in you can manage accounts, settings and request logs."
+    "登录后可管理账号、系统配置与请求日志。": "After signing in you can manage accounts, settings and request logs.",
+    "新密码": "New password",
+    "确认新密码": "Confirm new password",
+    "至少 8 位": "At least 8 characters",
+    "再次输入新密码": "Enter the new password again",
+    "修改密码": "Change password",
+    "请先修改默认密码": "Change the default password first",
+    "当前仍是默认密码，设置新密码后才能使用控制台": "The default password is still in use; set a new one to use the console",
+    "两次输入的密码不一致": "The two passwords do not match",
+    "密码已修改，请使用新密码登录": "Password changed. Sign in with the new password."
   },
   "vi": {
     "登录 - Flow2API": "Đăng nhập - Flow2API",
@@ -57,6 +75,15 @@
     "图片、视频与参考图生成": "Tạo ảnh, video và tạo từ ảnh tham chiếu",
     "使用管理员账户继续": "Tiếp tục bằng tài khoản quản trị",
     "显示或隐藏密码": "Hiện hoặc ẩn mật khẩu",
-    "登录后可管理账号、系统配置与请求日志。": "Sau khi đăng nhập, bạn quản lý được tài khoản, cấu hình và nhật ký yêu cầu."
+    "登录后可管理账号、系统配置与请求日志。": "Sau khi đăng nhập, bạn quản lý được tài khoản, cấu hình và nhật ký yêu cầu.",
+    "新密码": "Mật khẩu mới",
+    "确认新密码": "Xác nhận mật khẩu mới",
+    "至少 8 位": "Ít nhất 8 ký tự",
+    "再次输入新密码": "Nhập lại mật khẩu mới",
+    "修改密码": "Đổi mật khẩu",
+    "请先修改默认密码": "Hãy đổi mật khẩu mặc định trước",
+    "当前仍是默认密码，设置新密码后才能使用控制台": "Vẫn đang dùng mật khẩu mặc định; hãy đặt mật khẩu mới để dùng bảng điều khiển",
+    "两次输入的密码不一致": "Hai mật khẩu không khớp",
+    "密码已修改，请使用新密码登录": "Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới."
   }
 }

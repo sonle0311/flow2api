@@ -30,6 +30,12 @@ class RecaptchaFallbackTests(unittest.IsolatedAsyncioTestCase):
         await self.page.evaluate(setup)
         return await self.page.evaluate(build_recaptcha_execute_script("site-key", "IMAGE_GENERATION", 40))
 
+    @staticmethod
+    def outcome(result):
+        """The token result without the diagnostics block every successful run now carries."""
+        assert result["debug"]["hookInstalled"] is True  # run_script installs the trusted hook
+        return {key: value for key, value in result.items() if key != "debug"}
+
     async def test_no_bound_capture_uses_direct_execute_without_render(self):
         result = await self.run_script("""() => {
             window.grecaptcha = {enterprise: {
@@ -40,7 +46,7 @@ class RecaptchaFallbackTests(unittest.IsolatedAsyncioTestCase):
                 render() { throw Error('render should not be needed'); }
             }};
         }""")
-        self.assertEqual(result, {"ok": True, "token": "site-key:IMAGE_GENERATION"})
+        self.assertEqual(self.outcome(result), {"ok": True, "token": "site-key:IMAGE_GENERATION"})
 
     async def test_widget_fallback_uses_empty_container_and_cleans_it(self):
         result = await self.run_script("""() => {
@@ -60,13 +66,14 @@ class RecaptchaFallbackTests(unittest.IsolatedAsyncioTestCase):
                 reset(id) { window.resetId = id; }
             }};
         }""")
-        self.assertEqual(result, {"ok": True, "token": "widget-token:IMAGE_GENERATION"})
+        self.assertEqual(self.outcome(result), {"ok": True, "token": "widget-token:IMAGE_GENERATION"})
         self.assertEqual(await self.page.evaluate("calls"), [
             {"key": "site-key", "action": "IMAGE_GENERATION"},
             {"key": 7, "action": "IMAGE_GENERATION"},
         ])
+        # The hidden placeholder is removed with its widget, so nothing is left behind.
         self.assertEqual(await self.page.locator("iframe").count(), 0)
-        self.assertEqual(await self.page.evaluate("window.resetId"), 7)
+        self.assertEqual(await self.page.locator("[data-flow2api-recaptcha]").count(), 0)
 
     async def test_widget_timeout_cleans_container_and_reports_failure(self):
         result = await self.run_script("""() => {
@@ -79,13 +86,13 @@ class RecaptchaFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["ok"])
         self.assertIn("execute timeout", result["error"])
         self.assertEqual(await self.page.locator("iframe").count(), 0)
-        self.assertEqual(await self.page.evaluate("window.resetId"), 8)
+        self.assertEqual(await self.page.locator("[data-flow2api-recaptcha]").count(), 0)
 
     async def test_v3_execute_without_render_remains_supported(self):
         result = await self.run_script("""() => {
             window.grecaptcha = {enterprise: {execute(key, options) { return Promise.resolve(options.action); }}};
         }""")
-        self.assertEqual(result, {"ok": True, "token": "IMAGE_GENERATION"})
+        self.assertEqual(self.outcome(result), {"ok": True, "token": "IMAGE_GENERATION"})
 
     async def test_no_capture_public_wrapper_keeps_requested_action_with_guard(self):
         result = await self.run_script("""() => {
@@ -94,7 +101,7 @@ class RecaptchaFallbackTests(unittest.IsolatedAsyncioTestCase):
                 return original(key, Object.assign({}, options, {action: 'extension_hijack_detected'}));
             }}};
         }""")
-        self.assertEqual(result, {"ok": True, "token": "IMAGE_GENERATION"})
+        self.assertEqual(self.outcome(result), {"ok": True, "token": "IMAGE_GENERATION"})
 
     async def test_unprotected_hijack_wrapper_still_fails_closed(self):
         result = await self.run_script("""() => {

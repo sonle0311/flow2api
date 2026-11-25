@@ -174,6 +174,55 @@ class ManagedCaptchaServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(pages_of(self.browser)), 2)
         self.assertTrue(all(page.closed for page in pages_of(self.browser)))
 
+    async def test_diagnostics_count_mints_failures_and_flow_rejections_per_account(self):
+        self.assertEqual("token-IMAGE_GENERATION", await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))
+        original = FakePage.evaluate
+
+        async def always_fail(page, script, arg=None):
+            if script != _RECAPTCHA_READY_SCRIPT:
+                raise RuntimeError("boom")
+            return await original(page, script, arg)
+
+        with patch.object(FakePage, "evaluate", always_fail):
+            self.assertIsNone(await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))
+        await self.service.report_flow_error(token_id=1, error_reason="PUBLIC_ERROR_UNUSUAL_ACTIVITY")
+        await self.service.report_flow_error(token_id=1, error_reason="content filtered")  # not a captcha problem
+        (row,) = self.service.stats.snapshot()
+        self.assertEqual(1, row["token_id"])
+        self.assertEqual({"ok": 1, "failed": 1, "rejected": 1}, row["last_hour"])
+        self.assertEqual("rejected", row["last_failure"]["outcome"])
+        self.assertIn("UNUSUAL_ACTIVITY", row["last_failure"]["reason"])
+        self.assertEqual(len("token-IMAGE_GENERATION"), row["token_length_last"])
+        self.assertIsNotNone(row["mint_seconds_avg"])
+
+    async def test_repeated_failures_raise_an_alert_and_a_good_mint_clears_it(self):
+        calls = []
+
+        class Alerts:
+            conditions = {}
+
+            async def raise_condition(self, key, message, **kwargs):
+                self.conditions[key] = message
+                calls.append(("raise", key))
+
+            async def clear_condition(self, key, message=""):
+                self.conditions.pop(key, None)
+                calls.append(("clear", key))
+
+        self.service.alerts = Alerts()
+        for _ in range(2):
+            await self.service.report_flow_error(token_id=1, error_reason="recaptcha evaluation failed")
+        await asyncio.sleep(0)
+        self.assertEqual([], calls)  # below the threshold
+        await self.service.report_flow_error(token_id=1, error_reason="recaptcha evaluation failed")
+        await asyncio.sleep(0)
+        self.assertEqual([("raise", "captcha_failing:1")], calls)
+        self.service.stats.ALERT_WINDOW_SECONDS = 0.001  # the failures age out of the window
+        await asyncio.sleep(0.01)
+        self.assertEqual("token-IMAGE_GENERATION", await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))
+        await asyncio.sleep(0)
+        self.assertEqual(("clear", "captcha_failing:1"), calls[-1])
+
     async def test_busy_profile_fails_fast_without_retry(self):
         self.browser.busy = True
         self.assertIsNone(await self.service.get_token(PROJECT, "IMAGE_GENERATION", token_id=1))

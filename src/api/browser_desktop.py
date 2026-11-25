@@ -149,7 +149,11 @@ async def desktop_websocket(socket: WebSocket):
             if not task.done():
                 task.cancel()
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            # asyncio.wait never re-raises what the finished tasks raised; only our own cancellation.
+            await asyncio.wait(tasks)
+            for task in tasks:
+                if not task.cancelled():
+                    task.exception()  # mark as retrieved
         writer.close()
         try:
             await writer.wait_closed()

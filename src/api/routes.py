@@ -182,6 +182,13 @@ def _authorize_model(api_key: str, requested: str, resolved: str) -> None:
         raise ModelNotAllowed(requested)
 
 
+
+def _client_key_id(api_key: str) -> int:
+    """Id of the client key behind ``api_key`` (0 for the master key), for credit accounting."""
+    service = get_client_key_service()
+    record = service.authenticate(api_key) if service is not None else None
+    return record.id if record is not None else 0
+
 def _model_denied_response(exc: ModelNotAllowed, *, gemini: bool = False) -> JSONResponse:
     if gemini:
         return JSONResponse(status_code=403, content=_build_gemini_error_payload(403, exc.message))
@@ -227,6 +234,7 @@ class NormalizedGenerationRequest:
     images: List[bytes]
     messages: Optional[List[ChatMessage]] = None
     video_media_id: Optional[str] = None
+    client_key_id: int = 0  # 0 = master key; otherwise the client key that pays for the request
 
 
 def set_generation_handler(handler: GenerationHandler):
@@ -741,9 +749,11 @@ async def _collect_non_stream_result(
     images: List[bytes],
     base_url_override: Optional[str] = None,
     video_media_id: Optional[str] = None,
+    client_key_id: int = 0,
 ) -> str:
     handler = _ensure_generation_handler()
     result = None
+    extra = {"client_key_id": client_key_id} if client_key_id else {}
     async for chunk in handler.handle_generation(
         model=model,
         prompt=prompt,
@@ -751,6 +761,7 @@ async def _collect_non_stream_result(
         stream=False,
         base_url_override=base_url_override,
         video_media_id=video_media_id,
+        **extra,
     ):
         result = chunk
 
@@ -1010,6 +1021,7 @@ async def _owned_generation_stream(
         stream=True,
         base_url_override=base_url_override,
         video_media_id=normalized.video_media_id,
+        **({"client_key_id": normalized.client_key_id} if normalized.client_key_id else {}),
     )
     try:
         yield stream
@@ -1157,6 +1169,7 @@ async def create_chat_completion(
             request, request_base_url=request_base_url
         )
         _authorize_model(api_key, request.model, normalized.model)
+        normalized.client_key_id = _client_key_id(api_key)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
@@ -1186,6 +1199,7 @@ async def create_chat_completion(
                 normalized.images,
                 base_url_override=request_base_url,
                 video_media_id=normalized.video_media_id,
+                client_key_id=normalized.client_key_id,
             )
         )
         return _build_openai_json_response(payload)
@@ -1220,6 +1234,7 @@ async def generate_content(
             model, request, request_base_url=request_base_url
         )
         _authorize_model(api_key, model, normalized.model)
+        normalized.client_key_id = _client_key_id(api_key)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
 
@@ -1231,6 +1246,7 @@ async def generate_content(
                     normalized.images,
                     base_url_override=request_base_url,
                     video_media_id=normalized.video_media_id,
+                    client_key_id=normalized.client_key_id,
                 )
             )
         )
@@ -1278,6 +1294,7 @@ async def stream_generate_content(
             model, request, request_base_url=request_base_url
         )
         _authorize_model(api_key, model, normalized.model)
+        normalized.client_key_id = _client_key_id(api_key)
         if not normalized.prompt:
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
         rejected = await _ensure_generation_handler().admission_preflight(

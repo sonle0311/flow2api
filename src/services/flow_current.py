@@ -738,6 +738,14 @@ class CurrentFlowClientMixin:
                 if "MODEL_ACCESS_DENIED" in str(error):
                     raise
                 error_text = str(error).lower()
+                if mode in {"extend", "edit"} and "public_error_unusual_activity" in error_text:
+                    method = str(getattr(self._get_runtime_config(), "captcha_method", "") or "")
+                    if method and method != "managed":
+                        # Flow scores extend/edit tokens strictly; only the managed browser is verified for them.
+                        error.args = (
+                            f"{error} [extend/edit were only verified with captcha_method=managed; this server uses {method}]",
+                        )
+                        error_text = str(error).lower()
                 is_missing_model = bool(
                     re.search(r"code\s*=\s*\[?5\]?", error_text)
                     or "not_found" in error_text
@@ -1000,6 +1008,10 @@ class CurrentFlowClientMixin:
             google_cookies=google_cookies,
         )
 
+    # Consecutive "not found" answers for an operation being polled; see check_video_status.
+    POLL_NOT_FOUND_LIMIT = 5
+    _poll_not_found: Dict[str, int] = {}
+
     async def check_video_status(
         self,
         at: str,
@@ -1050,10 +1062,10 @@ class CurrentFlowClientMixin:
             ).strip()
             if not media_name:
                 continue
+            operation_id = str(
+                operation.get("name") or operation_body.get("name") or ""
+            ).strip()
             try:
-                operation_id = str(
-                    operation.get("name") or operation_body.get("name") or ""
-                ).strip()
                 media = await self.get_media(
                     at,
                     media_name,
@@ -1062,10 +1074,29 @@ class CurrentFlowClientMixin:
                     project_id=project_id or None,
                     operation_id=operation_id or None,
                 )
+                self._poll_not_found.pop(operation_id, None)
             except Exception as media_error:
                 debug_logger.log_warning(
                     f"[VIDEO POLL] media fallback failed for {media_name}: {media_error}"
                 )
+                if "code=[5]" in str(media_error) and operation_id:
+                    # A running operation is always found; a long run of "not found" means this
+                    # ID will never complete, so stop holding the generation slot for it.
+                    misses = self._poll_not_found.get(operation_id, 0) + 1
+                    self._poll_not_found[operation_id] = misses
+                    if len(self._poll_not_found) > 500:  # bookkeeping only; never grow without bound
+                        self._poll_not_found.clear()
+                        self._poll_not_found[operation_id] = misses
+                    if misses >= self.POLL_NOT_FOUND_LIMIT:
+                        self._poll_not_found.pop(operation_id, None)
+                        operation["status"] = "MEDIA_GENERATION_STATUS_FAILED"
+                        operation["operation"] = {
+                            **operation_body,
+                            "error": {
+                                "code": "OPERATION_NOT_FOUND",
+                                "message": f"Flow does not know operation {operation_id} ({misses} lookups in a row)",
+                            },
+                        }
                 continue
             video_url = str((media.get("video") or {}).get("fifeUrl") or "").strip()
             if "/video/" not in video_url:

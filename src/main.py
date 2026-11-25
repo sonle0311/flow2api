@@ -25,9 +25,13 @@ from .services.managed_captcha import ManagedCaptchaService
 from .core.model_resolver import get_known_model_names
 from .services.client_keys import ClientKeyService
 from .services.load_balancer import LoadBalancer
+from .services.jobs import JobManager
+from .services.alerts import AlertService
+from .services.catalog_monitor import CatalogMonitor
+from .services.credit_ledger import CreditLedger
 from .services.concurrency_manager import ConcurrencyManager
 from .services.generation_handler import GenerationHandler, MODEL_CONFIG
-from .api import routes, admin, browser_sessions, browser_desktop
+from .api import routes, admin, browser_sessions, browser_desktop, jobs as jobs_api
 
 
 _LOCAL_NO_PROXY_HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -95,6 +99,22 @@ def _configure_process_runtime() -> None:
 _configure_process_runtime()
 
 
+def _warn_about_exposure() -> None:
+    from .api.admin import DEFAULT_API_KEYS
+    from .core.auth import AuthManager
+
+    if AuthManager.default_password_active:
+        print("[security] The admin password is still the default; the console asks for a new one at the next sign-in.", flush=True)
+    if str(config.api_key or "") in DEFAULT_API_KEYS:
+        print("[security] The master API key is still the default; change it in the console.", flush=True)
+    if str(config.server_host or "").strip() in {"", "0.0.0.0", "::"}:
+        print(
+            f"[security] Listening on every network interface (port {config.server_port}). "
+            "Set server.host to 127.0.0.1 if only this machine needs access.",
+            flush=True,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -126,9 +146,13 @@ async def lifespan(app: FastAPI):
 
     # 启动时统一把数据库配置同步到内存，避免 personal/brower 相关运行时配置遗漏。
     await db.reload_config_to_memory()
+    _warn_about_exposure()
     await managed_browser.initialize()
     await client_keys.initialize()
     client_keys.start()
+    await job_manager.start()
+    await alert_service.start()
+    catalog_monitor.start()
     generation_handler.file_cache.set_timeout(config.cache_timeout)
     cache_cleanup_enabled = await generation_handler.file_cache.refresh_cleanup_task()
     captcha_config = await db.get_captcha_config()
@@ -251,6 +275,9 @@ async def lifespan(app: FastAPI):
         pass
     await token_manager.stop_protocol_refresher()
     await managed_captcha.close()
+    await job_manager.close()
+    await catalog_monitor.close()
+    await alert_service.close()
     await client_keys.close()
     await managed_browser.shutdown()
     # Close browser if initialized
@@ -272,6 +299,7 @@ token_manager.managed_browser = managed_browser
 managed_captcha = ManagedCaptchaService(managed_browser)
 flow_client.managed_captcha = managed_captcha
 client_keys = ClientKeyService(db)
+job_manager = JobManager(db)
 set_client_key_service(client_keys)
 client_keys.known_models = lambda: get_known_model_names(MODEL_CONFIG)
 concurrency_manager = ConcurrencyManager()
@@ -284,11 +312,38 @@ generation_handler = GenerationHandler(
     concurrency_manager,
     proxy_manager,  # 添加 proxy_manager 参数
 )
+credit_ledger = CreditLedger(db, token_manager, client_keys)
+generation_handler.credit_ledger = credit_ledger
+alert_service = AlertService(db, token_manager.get_all_tokens)
+managed_captcha.alerts = alert_service
+
+
+async def _fetch_flow_model_table() -> list:
+    """Flow's model table (RPC HTrJv): read-only, answered to any signed-in account."""
+    tokens = [token for token in await token_manager.get_active_tokens() if token.google_cookies]
+    if not tokens:
+        raise RuntimeError("no active account with a Google session")
+    token = tokens[0]
+    return await flow_client._current_rpc(
+        rpc_id="HTrJv", argument=[], google_cookies=token.google_cookies,
+        token_id=token.id, project_id=token.current_project_id,
+    )
+
+
+catalog_monitor = CatalogMonitor(
+    db, _fetch_flow_model_table, lambda: MODEL_CONFIG, alert_service,
+    interval_hours=float(os.environ.get("FLOW2API_CATALOG_CHECK_HOURS", "24") or 24),
+)
 
 # Set dependencies
 routes.set_generation_handler(generation_handler)
 admin.set_dependencies(token_manager, proxy_manager, db, concurrency_manager)
 admin.set_client_key_service(client_keys)
+admin.set_monitoring_services(
+    credit_ledger=credit_ledger, alert_service=alert_service,
+    catalog_monitor=catalog_monitor, managed_captcha=managed_captcha,
+)
+jobs_api.set_job_manager(job_manager)
 
 # Create FastAPI app
 app = FastAPI(
@@ -314,6 +369,7 @@ app.include_router(routes.router)
 app.include_router(admin.router)
 app.include_router(browser_sessions.router)
 app.include_router(browser_desktop.router)
+app.include_router(jobs_api.router)
 
 # Static files - serve tmp directory for cached files
 tmp_dir = Path(__file__).parent.parent / "tmp"
@@ -388,6 +444,7 @@ _INSTRUMENT_ASSETS = {
     "instrument-utilities.css": "text/css",
     "client-keys.css": "text/css",
     "client-keys.js": "application/javascript",
+    "operations.js": "application/javascript",
     "instrument-shell.js": "application/javascript",
     "instrument-access.css": "text/css",
     "instrument-studio.css": "text/css",

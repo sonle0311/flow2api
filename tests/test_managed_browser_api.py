@@ -29,7 +29,7 @@ def test_browser_actions_require_admin(method, suffix):
 @pytest.mark.parametrize("method,suffix,action", [("GET", "", "get_status"), ("POST", "/login", "start_login"), ("POST", "/sync", "sync"), ("POST", "/stop", "stop")])
 def test_browser_actions_use_service_and_never_expose_credentials(monkeypatch, method, suffix, action):
     service = SimpleNamespace(**{name: AsyncMock(return_value={**STATUS, "google_cookies": "secret", "profile_path": "private"}) for name in ("get_status", "start_login", "sync", "stop")})
-    monkeypatch.setattr(app.state, "managed_browser", service, raising=False)
+    monkeypatch.setitem(app.state._state, "managed_browser", service)  # State keeps attributes in a dict
     monkeypatch.setattr(admin, "db", SimpleNamespace(get_token=AsyncMock(return_value=object())))
     admin.active_admin_tokens.add("managed-api-test")
     async def check():
@@ -50,7 +50,7 @@ def test_browser_actions_use_service_and_never_expose_credentials(monkeypatch, m
 
 def test_missing_account_returns_404_without_opening_browser(monkeypatch):
     service = SimpleNamespace(start_login=AsyncMock())
-    monkeypatch.setattr(app.state, "managed_browser", service, raising=False)
+    monkeypatch.setitem(app.state._state, "managed_browser", service)
     monkeypatch.setattr(admin, "db", SimpleNamespace(get_token=AsyncMock(return_value=None)))
     admin.active_admin_tokens.add("managed-api-test")
     async def check():
@@ -77,7 +77,7 @@ def test_managed_browser_script_is_served_without_caching():
 
 def test_cross_origin_post_cannot_open_a_browser(monkeypatch):
     service = SimpleNamespace(start_login=AsyncMock())
-    monkeypatch.setattr(app.state, "managed_browser", service, raising=False)
+    monkeypatch.setitem(app.state._state, "managed_browser", service)
     admin.active_admin_tokens.add("managed-api-test")
     async def check():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://localhost", cookies={"admin_session": "managed-api-test"}) as client:

@@ -1467,6 +1467,7 @@ class GenerationHandler:
         self.db = db
         self.concurrency_manager = concurrency_manager
         self.proxy_manager = proxy_manager
+        self.credit_ledger = None  # set by the application; None disables credit accounting
         self.file_cache = FileCache(
             cache_dir=str(cache_dir),
             default_timeout=config.cache_timeout,
@@ -1477,6 +1478,22 @@ class GenerationHandler:
     def _create_generation_result(self) -> Dict[str, Any]:
         """????????????????"""
         return dict(success=False, error_message=None, error_emitted=False)
+
+    def _observe_submission_credits(self, token, result, request_log_state, kind: str) -> None:
+        """Charge the credits a video submission just used to the client key behind the request."""
+        ledger = getattr(self, "credit_ledger", None)
+        if ledger is None or not isinstance(result, dict):
+            return
+        try:
+            ledger.observe(
+                token.id,
+                result.get("creditsRemaining"),
+                client_key_id=int(request_log_state.get("client_key_id") or 0),
+                model=str(request_log_state.get("model") or ""),
+                kind=kind,
+            )
+        except Exception as exc:  # noqa: BLE001 - accounting must never fail a generation
+            debug_logger.log_warning(f"[CREDITS] could not record submission: {exc}")
 
     def _create_response_state(self) -> Dict[str, Any]:
         """为单次请求创建独立的响应状态，避免并发请求互相污染。"""
@@ -1642,6 +1659,7 @@ class GenerationHandler:
         stream: bool = False,
         base_url_override: Optional[str] = None,
         video_media_id: Optional[str] = None,
+        client_key_id: int = 0,
     ) -> AsyncGenerator:
         """统一生成入口
 
@@ -1666,7 +1684,7 @@ class GenerationHandler:
         response_state["base_url"] = (base_url_override or "").strip().rstrip(
             "/"
         ) or None
-        request_log_state: Dict[str, Any] = {"id": None, "progress": 0}
+        request_log_state: Dict[str, Any] = {"id": None, "progress": 0, "client_key_id": int(client_key_id or 0), "model": model}
 
         # 防止并发链路复用到上一次请求的指纹上下文
         if hasattr(self.flow_client, "clear_request_fingerprint"):
@@ -1880,6 +1898,9 @@ class GenerationHandler:
                         yield self._create_stream_chunk(f"错误: {error_msg}\n")
                     yield self._create_error_response(error_msg, status_code=503)
                     return
+                ledger = getattr(self, "credit_ledger", None)
+                if ledger is not None:
+                    await ledger.ensure_baseline(token)
 
                 # 4. 确保Project存在
                 debug_logger.log_info(f"[GENERATION] 检查/创建Project...")
@@ -1941,6 +1962,11 @@ class GenerationHandler:
                         pending_token_state=pending_token_state,
                     ):
                         yield chunk
+                    ledger = getattr(self, "credit_ledger", None)
+                    if generation_result.get("success") and ledger is not None:
+                        ledger._spawn(ledger.observe_after_completion(
+                            token, client_key_id=int(client_key_id or 0), model=model, kind="image",
+                        ))
                 else:  # video
                     debug_logger.log_info(f"[GENERATION] 开始视频生成流程...")
                     async for chunk in self._handle_video_generation(
@@ -3102,6 +3128,7 @@ class GenerationHandler:
                 video_trace["submit_generation_ms"] = int(
                     (time.time() - submit_started_at) * 1000
                 )
+            self._observe_submission_credits(token, result, request_log_state, "video")
 
             direct_video_url = str(result.get("video_url") or "").strip()
             if result.get("direct_media") and direct_video_url:

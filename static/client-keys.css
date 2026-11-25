@@ -42,3 +42,14 @@
 .client-keys-chip button:hover{background:rgb(220 38 38 / .15);color:#dc2626}
 .client-keys-chip button:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
 @media(max-width:768px){.client-keys-form{grid-template-columns:1fr}}
+.ops-section{margin-top:1.25rem}
+.ops-section h4{font-size:.9375rem;font-weight:600;margin:0 0 .5rem}
+.ops-section h5{font-size:.8125rem;font-weight:600;margin:.75rem 0 .25rem;opacity:.8}
+.ops-list{list-style:none;margin:0;padding:0;font-size:.875rem;line-height:1.6}
+.ops-list li{padding-left:1.25rem;position:relative;overflow-wrap:anywhere}
+.ops-list li::before{content:"•";position:absolute;left:.25rem}
+.ops-list li[data-state=ok]::before{content:"✓";color:#16a34a}
+.ops-list li[data-state=warn]::before{content:"!";color:#d97706;font-weight:700}
+.ops-list li[data-state=bad]::before{content:"✕";color:#dc2626;font-weight:700}
+.ops-check{display:inline-flex;align-items:center;gap:.5rem;font-size:.875rem}
+.ops-tables{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));overflow-x:auto}

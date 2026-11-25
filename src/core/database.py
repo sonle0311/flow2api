@@ -2106,14 +2106,21 @@ class Database:
         - Generation config (image_timeout, video_timeout)
         - Proxy config will be handled by ProxyManager
         """
+        from .auth import AuthManager
         from .config import config
 
         # Reload admin config
         admin_config = await self.get_admin_config()
         if admin_config:
+            stored_password = admin_config.password
+            if stored_password and not AuthManager.is_hashed(stored_password):
+                # Older databases keep the admin password in plain text; store a bcrypt hash instead.
+                stored_password = AuthManager.hash_password(stored_password)
+                await self.update_admin_config(password=stored_password)
             config.set_admin_username_from_db(admin_config.username)
-            config.set_admin_password_from_db(admin_config.password)
+            config.set_admin_password_from_db(stored_password)
             config.api_key = admin_config.api_key
+        AuthManager.refresh_password_state()
 
         # Reload cache config
         cache_config = await self.get_cache_config()

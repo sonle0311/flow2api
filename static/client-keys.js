@@ -57,6 +57,11 @@
         return models.length <= 2 ? models.join(', ') : `${models.slice(0, 2).join(', ')} +${models.length - 2}`;
     }
 
+    function creditsText(row) {
+        if (row.credit_budget > 0) return ' · ' + t('本月 {0} / {1} credit', { 0: row.credits_used, 1: row.credit_budget });
+        return row.credits_used > 0 ? ' · ' + t('本月 {0} credit', { 0: row.credits_used }) : '';
+    }
+
     function lastUsedText(value) {
         if (!value) return t('从未');
         const date = new Date(value);
@@ -109,7 +114,7 @@
                 cell(identity), cell(badge),
                 cell(t('{0} / 分钟 · {1} 并发', { 0: limitText(row.rate_limit_per_minute), 1: limitText(row.max_concurrent) })),
                 models,
-                cell(t('{0} 进行中 · {1} 近 1 分钟 · {2} 累计', { 0: row.in_flight, 1: row.requests_last_minute, 2: row.total_requests })),
+                cell(t('{0} 进行中 · {1} 近 1 分钟 · {2} 累计', { 0: row.in_flight, 1: row.requests_last_minute, 2: row.total_requests }) + creditsText(row)),
                 cell(lastUsedText(row.last_used_at)), cell(actions),
             );
             body.appendChild(tr);
@@ -180,6 +185,7 @@
                     name: element('clientKeyName').value.trim(),
                     rate_limit_per_minute: Number.parseInt(element('clientKeyRate').value, 10),
                     max_concurrent: Number.parseInt(element('clientKeyConcurrent').value, 10),
+                    credit_budget: Number.parseInt(element('clientKeyBudget').value || '0', 10),
                     allowed_models: createPicker.collect(),
                 }),
             });
@@ -287,6 +293,8 @@
         element('clientKeyEditName').value = row.name;
         element('clientKeyEditRate').value = row.rate_limit_per_minute;
         element('clientKeyEditConcurrent').value = row.max_concurrent;
+        element('clientKeyEditBudget').value = row.credit_budget || 0;
+        element('clientKeyEditReset').checked = false;
         editPicker.set(row.allowed_models || []);
         element('clientKeyEditError').hidden = true;
         editDialog.showModal();
@@ -303,6 +311,8 @@
                     name: element('clientKeyEditName').value.trim(),
                     rate_limit_per_minute: Number.parseInt(element('clientKeyEditRate').value, 10),
                     max_concurrent: Number.parseInt(element('clientKeyEditConcurrent').value, 10),
+                    credit_budget: Number.parseInt(element('clientKeyEditBudget').value || '0', 10),
+                    reset_credits_used: element('clientKeyEditReset').checked,
                     allowed_models: editPicker.collect(),
                 }),
             });

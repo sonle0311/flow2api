@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -42,6 +43,61 @@ def _report(token_id: int, action: str, begun: float, reason: str) -> None:
     print(f"[managed-captcha] token={token_id} {action} gave up after {time.monotonic() - begun:.1f}s: {reason}", flush=True)
 
 
+class CaptchaStats:
+    """What each account's token minting has been doing lately (kept in memory)."""
+
+    WINDOW_SECONDS = 3600
+    ALERT_WINDOW_SECONDS = 900
+    ALERT_THRESHOLD = 3
+    MAX_EVENTS = 200
+
+    def __init__(self, clock=time.time):
+        self._clock = clock
+        self._events: dict[int, deque] = {}
+        self._totals: dict[int, dict[str, int]] = {}
+
+    def record(self, token_id: int, action: str, outcome: str, *, seconds: float = 0.0, length: int = 0, reason: str = "") -> None:
+        """outcome: ok (token minted), failed (could not mint) or rejected (Flow refused a token)."""
+        events = self._events.setdefault(token_id, deque(maxlen=self.MAX_EVENTS))
+        events.append((self._clock(), action, outcome, round(seconds, 2), length, reason[:200]))
+        totals = self._totals.setdefault(token_id, {"ok": 0, "failed": 0, "rejected": 0})
+        totals[outcome] = totals.get(outcome, 0) + 1
+
+    def recent_failures(self, token_id: int, window: Optional[float] = None) -> int:
+        cutoff = self._clock() - (window or self.ALERT_WINDOW_SECONDS)
+        return sum(1 for event in self._events.get(token_id, ()) if event[0] >= cutoff and event[2] != "ok")
+
+    def last_outcome(self, token_id: int) -> Optional[str]:
+        events = self._events.get(token_id)
+        return events[-1][2] if events else None
+
+    def snapshot(self) -> list[dict]:
+        cutoff = self._clock() - self.WINDOW_SECONDS
+        rows = []
+        for token_id, events in sorted(self._events.items()):
+            recent = [event for event in events if event[0] >= cutoff]
+            durations = [event[3] for event in recent if event[2] == "ok"]
+            lengths = [event[4] for event in recent if event[2] == "ok" and event[4]]
+            failures = [event for event in events if event[2] != "ok"]
+            rows.append({
+                "token_id": token_id,
+                "last_hour": {
+                    "ok": sum(1 for event in recent if event[2] == "ok"),
+                    "failed": sum(1 for event in recent if event[2] == "failed"),
+                    "rejected": sum(1 for event in recent if event[2] == "rejected"),
+                },
+                "total": dict(self._totals.get(token_id, {})),
+                "mint_seconds_avg": round(sum(durations) / len(durations), 1) if durations else None,
+                "mint_seconds_max": max(durations) if durations else None,
+                "token_length_last": lengths[-1] if lengths else None,
+                "last_failure": (
+                    {"at": failures[-1][0], "action": failures[-1][1], "outcome": failures[-1][2], "reason": failures[-1][5]}
+                    if failures else None
+                ),
+            })
+        return rows
+
+
 class ManagedCaptchaService:
     """One headless Flow project tab per account, serialized per account."""
 
@@ -60,6 +116,26 @@ class ManagedCaptchaService:
         self._last_used: dict[int, float] = {}
         self._reaper: Optional[asyncio.Task] = None
         self._closed = False
+        self.stats = CaptchaStats()
+        self.alerts = None  # AlertService, set by the application
+
+    def _note(self, token_id: int, action: str, outcome: str, **fields) -> None:
+        """Record an outcome and raise or clear the per-account alert."""
+        self.stats.record(token_id, action, outcome, **fields)
+        alerts = self.alerts
+        if alerts is None:
+            return
+        key = f"captcha_failing:{token_id}"
+        failures = self.stats.recent_failures(token_id)
+        if failures >= self.stats.ALERT_THRESHOLD:
+            asyncio.ensure_future(alerts.raise_condition(
+                key,
+                f"Account {token_id}: {failures} captcha failures in the last "
+                f"{int(self.stats.ALERT_WINDOW_SECONDS // 60)} minutes (last: {fields.get('reason') or outcome}).",
+                severity="warning", details={"token_id": token_id, "failures": failures},
+            ))
+        elif outcome == "ok" and failures == 0 and key in alerts.conditions:
+            asyncio.ensure_future(alerts.clear_condition(key))
 
     def _lock(self, token_id: int) -> asyncio.Lock:
         return self._locks.setdefault(token_id, asyncio.Lock())
@@ -90,6 +166,7 @@ class ManagedCaptchaService:
                             f"[ManagedCaptcha] Token-{token_id} {action} ok "
                             f"(len={len(token)}, {time.monotonic() - started:.1f}s)"
                         )
+                        self._note(token_id, action, "ok", seconds=time.monotonic() - begun, length=len(token))
                         return token
                     reason = "empty token"
                 except asyncio.CancelledError:
@@ -99,6 +176,7 @@ class ManagedCaptchaService:
                         f"[ManagedCaptcha] Token-{token_id} profile is busy (sync or sign-in)"
                     )
                     _report(token_id, action, begun, "profile busy (sync or sign-in)")
+                    self._note(token_id, action, "failed", reason="profile busy (sync or sign-in)")
                     return None
                 except Exception as exc:
                     reason = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -107,6 +185,7 @@ class ManagedCaptchaService:
                 )
                 await self._drop_page(token_id)
             _report(token_id, action, begun, f"2 attempts failed, last: {reason}")
+            self._note(token_id, action, "failed", seconds=time.monotonic() - begun, reason=reason)
             return None
 
     async def report_flow_error(
@@ -120,6 +199,7 @@ class ManagedCaptchaService:
         text = f"{error_reason} {error_message}".lower()
         if token_id is None or not any(marker in text for marker in _RECAPTCHA_ERROR_MARKERS):
             return
+        self._note(token_id, "FLOW", "rejected", reason=(error_reason or error_message)[:200])
         async with self._lock(token_id):
             await self._drop_page(token_id)
 

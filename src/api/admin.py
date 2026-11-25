@@ -21,6 +21,7 @@ from ..core.auth import AuthManager
 from ..core.model_resolver import get_model_catalog
 from ..services.client_keys import (
     MAX_ALLOWED_MODELS,
+    MAX_CREDIT_BUDGET,
     DEFAULT_MAX_CONCURRENT,
     DEFAULT_RATE_LIMIT_PER_MINUTE,
     MAX_CONCURRENT,
@@ -712,6 +713,20 @@ def set_client_key_service(service: ClientKeyService):
     client_key_service = service
 
 
+credit_ledger = None
+alert_service = None
+catalog_monitor = None
+managed_captcha_service = None
+
+
+def set_monitoring_services(*, credit_ledger=None, alert_service=None, catalog_monitor=None, managed_captcha=None):
+    """Set the services behind the usage, alert, catalog and captcha diagnostics endpoints."""
+    globals().update(
+        credit_ledger=credit_ledger, alert_service=alert_service,
+        catalog_monitor=catalog_monitor, managed_captcha_service=managed_captcha,
+    )
+
+
 # ========== Request Models ==========
 
 
@@ -922,6 +937,22 @@ class PluginTokenUpdateRequest(BaseModel):
 # ========== Auth Middleware ==========
 
 
+# While the factory-default password is in use only these may be called, so the console can
+# insist on a new password before anything else works.
+_PASSWORD_CHANGE_EXEMPT_PATHS = {
+    "/api/admin/change-password",
+    "/api/admin/password",
+    "/api/admin/logout",
+    "/api/logout",
+}
+DEFAULT_API_KEYS = {"han1234"}
+
+
+def _require_changed_password(request: Request) -> None:
+    if AuthManager.default_password_active and request.url.path not in _PASSWORD_CHANGE_EXEMPT_PATHS:
+        raise HTTPException(status_code=401, detail="password_change_required")
+
+
 async def verify_admin_token(request: Request, authorization: str = Header(None)):
     """Verify admin session token (NOT API key)"""
     header_token = ""
@@ -931,9 +962,11 @@ async def verify_admin_token(request: Request, authorization: str = Header(None)
     cookie_token = get_admin_token_from_cookie(request) or ""
 
     if header_token and header_token in active_admin_tokens:
+        _require_changed_password(request)
         return header_token
 
     if cookie_token and cookie_token in active_admin_tokens:
+        _require_changed_password(request)
         return cookie_token
 
     if header_token or cookie_token:
@@ -982,6 +1015,7 @@ async def admin_login(request: LoginRequest, response: Response):
         "success": True,
         "token": session_token,  # Session token (NOT API key)
         "username": admin_config.username,
+        "must_change_password": AuthManager.default_password_active,
     }
 
 
@@ -1004,8 +1038,12 @@ async def change_password(
     if not AuthManager.verify_admin(admin_config.username, request.old_password):
         raise HTTPException(status_code=400, detail="旧密码错误")
 
+    problem = AuthManager.validate_new_password(request.new_password, request.old_password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+
     # Update password and username in database
-    update_params = {"password": request.new_password}
+    update_params = {"password": AuthManager.hash_password(request.new_password)}
     if request.username:
         update_params["username"] = request.username
 
@@ -1019,6 +1057,92 @@ async def change_password(
 
     return {"success": True, "message": "密码修改成功,请重新登录"}
 
+
+@router.get("/api/admin/security-status")
+async def security_status(token: str = Depends(verify_admin_token)):
+    """Facts an operator should fix: default credentials and exposure on every interface."""
+    host = str(config.server_host or "").strip()
+    return {
+        "default_admin_password": AuthManager.default_password_active,
+        "default_api_key": str(config.api_key or "") in DEFAULT_API_KEYS,
+        "listening_on_all_interfaces": host in {"", "0.0.0.0", "::"},
+        "host": host,
+        "port": config.server_port,
+    }
+
+
+
+# ========== Operations: usage, alerts, catalog, captcha diagnostics ==========
+
+
+class AlertSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    webhook_url: Optional[str] = Field(default=None, max_length=2000)
+    enabled: Optional[bool] = None
+    low_credits: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    cooldown_minutes: Optional[int] = Field(default=None, ge=1, le=10_080)
+
+
+def _service(service, name: str):
+    if service is None:
+        raise HTTPException(status_code=503, detail=f"{name} is not ready")
+    return service
+
+
+@router.get("/api/admin/usage")
+async def credit_usage(days: int = 7, token: str = Depends(verify_admin_token)):
+    """Credits spent per day, client key and model (measured from each account's balance)."""
+    return {"success": True, **await _service(credit_ledger, "credit ledger").report(days)}
+
+
+@router.get("/api/admin/alerts")
+async def get_alerts(token: str = Depends(verify_admin_token)):
+    return {"success": True, **_service(alert_service, "alert service").status()}
+
+
+@router.put("/api/admin/alerts")
+async def update_alerts(request: AlertSettingsRequest, token: str = Depends(verify_admin_token)):
+    try:
+        await _service(alert_service, "alert service").update_settings(**request.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"success": True, **alert_service.status()}
+
+
+@router.post("/api/admin/alerts/test")
+async def test_alert(token: str = Depends(verify_admin_token)):
+    """Send one test message to the configured webhook."""
+    try:
+        return {"success": True, **await _service(alert_service, "alert service").send_test()}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - tell the operator why the webhook failed
+        raise HTTPException(status_code=502, detail=f"webhook delivery failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
+
+
+@router.post("/api/admin/alerts/check")
+async def check_alerts_now(token: str = Depends(verify_admin_token)):
+    await _service(alert_service, "alert service").check_accounts()
+    return {"success": True, **alert_service.status()}
+
+
+@router.get("/api/admin/catalog-status")
+async def catalog_status(token: str = Depends(verify_admin_token)):
+    return {"success": True, **_service(catalog_monitor, "catalog monitor").state}
+
+
+@router.post("/api/admin/catalog-check")
+async def catalog_check_now(token: str = Depends(verify_admin_token)):
+    """Read Flow's model table now and compare it with the registry."""
+    return {"success": True, **await _service(catalog_monitor, "catalog monitor").check_once()}
+
+
+@router.get("/api/admin/captcha-diagnostics")
+async def captcha_diagnostics(token: str = Depends(verify_admin_token)):
+    """Token minting per account over the last hour: successes, failures, Flow rejections, mint time."""
+    service = _service(managed_captcha_service, "captcha service")
+    return {"success": True, "method": str(config.captcha_method), "accounts": service.stats.snapshot()}
 
 # ========== Token Management ==========
 
@@ -1525,6 +1649,7 @@ class CreateClientKeyRequest(BaseModel):
     )
     max_concurrent: int = Field(default=DEFAULT_MAX_CONCURRENT, ge=0, le=MAX_CONCURRENT)
     allowed_models: List[str] = Field(default_factory=list, max_length=MAX_ALLOWED_MODELS)
+    credit_budget: int = Field(default=0, ge=0, le=MAX_CREDIT_BUDGET)
 
 
 class UpdateClientKeyRequest(BaseModel):
@@ -1537,6 +1662,8 @@ class UpdateClientKeyRequest(BaseModel):
     )
     max_concurrent: Optional[int] = Field(default=None, ge=0, le=MAX_CONCURRENT)
     allowed_models: Optional[List[str]] = Field(default=None, max_length=MAX_ALLOWED_MODELS)
+    credit_budget: Optional[int] = Field(default=None, ge=0, le=MAX_CREDIT_BUDGET)
+    reset_credits_used: bool = False
 
 
 def _client_keys() -> ClientKeyService:
@@ -1567,7 +1694,7 @@ async def create_client_key(
     try:
         client_key, api_key = await _client_keys().create(
             request.name, request.rate_limit_per_minute, request.max_concurrent,
-            request.allowed_models,
+            request.allowed_models, request.credit_budget,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

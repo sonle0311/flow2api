@@ -241,7 +241,10 @@ def test_browser_ready_poll_refreshes_account_and_stop_preserves_profile_message
     page.locator("#managedBrowserStatus").filter(has_text="Sign in to Google/Flow; it syncs and closes the window by itself once you are in").wait_for()
     state["session"] = session("ready", browser_open=True, last_sync_at="2026-10-27T10:00:00Z")
     with page.expect_response("**/api/tokens"):
-        page.locator("#managedBrowserStatus").filter(has_text="Cookies synchronized").wait_for(timeout=6000)
+        # Finishing the hand-off dismisses the "open browser" dialog by itself.
+        page.wait_for_function("!document.getElementById('managedBrowserDialog').open", timeout=6000)
+    page.locator("[data-managed-browser-open='1']").click()
+    page.locator("#managedBrowserStatus").filter(has_text="Cookies synchronized").wait_for()
     assert page.locator("#managedBrowserLastSync").inner_text() not in {"", "Never"}
     page.locator("#managedBrowserStop").click()
     page.locator("#managedBrowserStatus").filter(has_text="Automatic sync stopped").wait_for()

@@ -35,6 +35,7 @@ FLUSH_INTERVAL_SECONDS = 30
 MAX_ALLOWED_MODELS = 200
 MAX_MODEL_PATTERN_LENGTH = 100
 TYPE_PATTERN_PREFIX = "type:"
+MAX_CREDIT_BUDGET = 10_000_000
 MODEL_TYPES = ("image", "video")
 _MODEL_PATTERN_RE = re.compile(r"type:(?:image|video)|[A-Za-z0-9._*-]+")
 
@@ -51,6 +52,16 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _current_month() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def _seconds_until_next_month() -> int:
+    now = datetime.now(timezone.utc)
+    first = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
+    return max(1, int((first - now).total_seconds()))
+
+
 @dataclass
 class ClientKey:
     id: int
@@ -63,25 +74,35 @@ class ClientKey:
     created_at: str
     last_used_at: Optional[str]
     allowed_models: list[str] = field(default_factory=list)
+    # Credits this key may spend per calendar month (UTC); 0 means unlimited. ``credits_used`` is
+    # what it has spent in ``budget_month`` and starts again from 0 when the month changes.
+    credit_budget: int = 0
+    credits_used: int = 0
+    budget_month: str = ""
 
 
 class ClientLimitExceeded(Exception):
-    """A client key is over its rate or concurrency limit; answer HTTP 429."""
+    """A client key is over its rate, concurrency or credit limit; answer HTTP 429."""
 
     def __init__(self, reason: str, limit: int, retry_after: int):
         super().__init__(reason)
-        self.reason = reason  # "rate_limit" or "concurrency"
+        self.reason = reason  # "rate_limit", "concurrency" or "credits"
         self.limit = limit
         self.retry_after = retry_after
 
     @property
     def code(self) -> str:
-        return "rate_limit_exceeded" if self.reason == "rate_limit" else "concurrency_limit_exceeded"
+        return {
+            "rate_limit": "rate_limit_exceeded",
+            "credits": "credit_budget_exceeded",
+        }.get(self.reason, "concurrency_limit_exceeded")
 
     @property
     def message(self) -> str:
         if self.reason == "rate_limit":
             return f"已超过该 API Key 的速率限制（每分钟 {self.limit} 次），请 {self.retry_after} 秒后重试"
+        if self.reason == "credits":
+            return f"已用完该 API Key 本月的 credit 额度（{self.limit}），额度将在 {self.retry_after} 秒后重置"
         return f"已超过该 API Key 的并发上限（{self.limit} 个进行中的请求），请 {self.retry_after} 秒后重试"
 
 
@@ -202,6 +223,13 @@ class ClientKeyService:
             columns = {row[1] for row in await (await conn.execute("PRAGMA table_info(client_keys)")).fetchall()}
             if "allowed_models" not in columns:
                 await conn.execute("ALTER TABLE client_keys ADD COLUMN allowed_models TEXT NOT NULL DEFAULT '[]'")
+            for column, ddl in (
+                ("credit_budget", "INTEGER NOT NULL DEFAULT 0"),
+                ("credits_used", "INTEGER NOT NULL DEFAULT 0"),
+                ("budget_month", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if column not in columns:
+                    await conn.execute(f"ALTER TABLE client_keys ADD COLUMN {column} {ddl}")
             await conn.commit()
         async with self.db._connect() as conn:
             conn.row_factory = aiosqlite.Row
@@ -223,6 +251,7 @@ class ClientKeyService:
             total_requests=row["total_requests"],
             created_at=row["created_at"], last_used_at=row["last_used_at"],
             allowed_models=_decode_models(row["allowed_models"]),
+            credit_budget=row["credit_budget"], credits_used=row["credits_used"], budget_month=row["budget_month"],
         )
 
     # ----- authentication and limits (synchronous: no await, so no races) -----
@@ -257,6 +286,9 @@ class ClientKeyService:
         while hits and now - hits[0] >= RATE_WINDOW_SECONDS:
             hits.popleft()
         inflight = self._inflight.get(key.id, 0)
+        self._roll_budget(key)
+        if key.credit_budget > 0 and key.credits_used >= key.credit_budget:
+            raise ClientLimitExceeded("credits", key.credit_budget, _seconds_until_next_month())
         if key.max_concurrent > 0 and inflight >= key.max_concurrent:
             raise ClientLimitExceeded("concurrency", key.max_concurrent, CONCURRENCY_RETRY_AFTER_SECONDS)
         if key.rate_limit_per_minute > 0 and len(hits) >= key.rate_limit_per_minute:
@@ -276,6 +308,26 @@ class ClientKeyService:
         else:
             self._inflight.pop(key_id, None)
 
+    @staticmethod
+    def _roll_budget(key: ClientKey) -> None:
+        month = _current_month()
+        if key.budget_month != month:
+            key.budget_month, key.credits_used = month, 0
+
+    async def add_spend(self, key_id: int, credits: int) -> None:
+        """Charge credits against the key's monthly budget (a soft limit: checked at admission)."""
+        record = self._by_id.get(key_id)
+        if record is None or credits <= 0:
+            return
+        self._roll_budget(record)
+        record.credits_used += int(credits)
+        async with self.db._connect(write=True) as conn:
+            await conn.execute(
+                "UPDATE client_keys SET credits_used = ?, budget_month = ? WHERE id = ?",
+                (record.credits_used, record.budget_month, key_id),
+            )
+            await conn.commit()
+
     # ----- administration -----
 
     def describe(self, key: ClientKey) -> dict:
@@ -293,6 +345,12 @@ class ClientKeyService:
             "created_at": key.created_at,
             "last_used_at": key.last_used_at,
             "in_flight": self._inflight.get(key.id, 0),
+            "credit_budget": key.credit_budget,
+            "credits_used": key.credits_used if key.budget_month == _current_month() else 0,
+            "credits_remaining": (
+                max(0, key.credit_budget - (key.credits_used if key.budget_month == _current_month() else 0))
+                if key.credit_budget > 0 else None
+            ),
             "requests_last_minute": recent,
         }
 
@@ -311,20 +369,22 @@ class ClientKeyService:
         rate_limit_per_minute: int = DEFAULT_RATE_LIMIT_PER_MINUTE,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
         allowed_models: Optional[list[str]] = None,
+        credit_budget: int = 0,
     ) -> tuple[dict, str]:
         """Create a key and return (description, plaintext key shown only now)."""
         name = _validated_name(name)
         rate = _validated_int(rate_limit_per_minute, "rate_limit_per_minute", MAX_RATE_LIMIT_PER_MINUTE)
         concurrent = _validated_int(max_concurrent, "max_concurrent", MAX_CONCURRENT)
         models = self._validate_models(allowed_models)
+        budget = _validated_int(credit_budget, "credit_budget", MAX_CREDIT_BUDGET)
         api_key = generate_key()
         created_at = _now_iso()
         async with self.db._connect(write=True) as conn:
             cursor = await conn.execute(
                 "INSERT INTO client_keys (name, key_hash, key_prefix, is_active, rate_limit_per_minute,"
-                " max_concurrent, created_at, allowed_models) VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
+                " max_concurrent, created_at, allowed_models, credit_budget, budget_month) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)",
                 (name, hash_key(api_key), api_key[:DISPLAY_PREFIX_LENGTH], rate, concurrent, created_at,
-                 json.dumps(models)),
+                 json.dumps(models), budget, _current_month()),
             )
             key_id = cursor.lastrowid
             await conn.commit()
@@ -332,6 +392,7 @@ class ClientKeyService:
             id=key_id, name=name, key_prefix=api_key[:DISPLAY_PREFIX_LENGTH], is_active=True,
             rate_limit_per_minute=rate, max_concurrent=concurrent, total_requests=0,
             created_at=created_at, last_used_at=None, allowed_models=models,
+            credit_budget=budget, credits_used=0, budget_month=_current_month(),
         )
         self._by_id[key_id] = record
         self._by_hash[hash_key(api_key)] = record
@@ -346,6 +407,8 @@ class ClientKeyService:
         rate_limit_per_minute: Optional[int] = None,
         max_concurrent: Optional[int] = None,
         allowed_models: Optional[list[str]] = None,
+        credit_budget: Optional[int] = None,
+        reset_credits_used: bool = False,
     ) -> Optional[dict]:
         record = self._by_id.get(key_id)
         if record is None:
@@ -363,6 +426,11 @@ class ClientKeyService:
             changes["max_concurrent"] = _validated_int(max_concurrent, "max_concurrent", MAX_CONCURRENT)
         if allowed_models is not None:
             changes["allowed_models"] = self._validate_models(allowed_models)
+        if credit_budget is not None:
+            changes["credit_budget"] = _validated_int(credit_budget, "credit_budget", MAX_CREDIT_BUDGET)
+        if reset_credits_used:
+            changes["credits_used"] = 0
+            changes["budget_month"] = _current_month()
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
             stored = [

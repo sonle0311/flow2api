@@ -124,7 +124,7 @@ def test_bootstrap_launches_for_returned_id_and_returns_only_public_status(monke
     concurrency = MagicMock(reset_token=AsyncMock())
     monkeypatch.setattr(admin, "token_manager", manager)
     monkeypatch.setattr(admin, "concurrency_manager", concurrency)
-    monkeypatch.setattr(app.state, "managed_browser", service)
+    monkeypatch.setitem(app.state._state, "managed_browser", service)  # setattr would delete the real service on undo
     admin.active_admin_tokens.add("bootstrap-test")
     async def check():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://localhost", cookies={"admin_session": "bootstrap-test"}) as client:

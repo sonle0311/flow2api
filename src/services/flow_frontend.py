@@ -551,12 +551,19 @@ class FlowFrontendMixin:
                 }
             )
         video_url = cls._find_flow_content_url(payload, "video")
+        # The second element of a submit response is the account's balance after the deduction.
+        credits_remaining = (
+            payload[1]
+            if isinstance(payload, list) and len(payload) > 1 and type(payload[1]) is int and payload[1] >= 0
+            else None
+        )
         if video_url:
             return {
                 "direct_media": True,
                 "video_url": video_url,
                 "projectId": project_id,
                 "frontendRpc": rpc_id,
+                "creditsRemaining": credits_remaining,
             }
         if not operations:
             raise RuntimeError(
@@ -566,6 +573,7 @@ class FlowFrontendMixin:
             "operations": operations,
             "projectId": project_id,
             "frontendRpc": rpc_id,
+            "creditsRemaining": credits_remaining,
         }
 
     @classmethod
