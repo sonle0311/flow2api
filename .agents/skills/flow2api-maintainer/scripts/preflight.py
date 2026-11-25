@@ -11,6 +11,7 @@ Never prints secrets (no tokens, cookies, keys). Exit status 0 = idle (safe to r
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ def _when(value) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", default=str(ROOT / "data" / "flow.db"))
+    parser.add_argument("--json", action="store_true", help="print one JSON object instead of text")
     args = parser.parse_args()
 
     try:
@@ -53,6 +55,17 @@ def main() -> int:
         print(f"cannot read {args.db}: {exc}", file=sys.stderr)
         return 2
 
+    idle = not in_flight and not jobs
+    if args.json:
+        print(json.dumps({
+            "idle": idle,
+            "in_flight": [dict(row) for row in in_flight],
+            "active_jobs": [{**dict(row), "created_at": _when(row["created_at"])} for row in jobs],
+            "latest_requests": [dict(row) for row in recent],
+            "accounts": [dict(row) for row in accounts],
+        }))
+        return 0 if idle else 1
+
     print(f"in-flight requests: {len(in_flight)}")
     for row in in_flight:
         print(f"  #{row['id']} token={row['token_id']} {row['operation']} progress={row['progress']} since {row['created_at']}")
@@ -70,7 +83,6 @@ def main() -> int:
             f"tier={row['user_paygate_tier']} session={row['session']} {row['error']}".rstrip()
         )
 
-    idle = not in_flight and not jobs
     print("RESULT:", "idle, safe to restart" if idle else "BUSY, do not restart")
     return 0 if idle else 1
 

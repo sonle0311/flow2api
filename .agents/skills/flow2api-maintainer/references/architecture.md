@@ -37,9 +37,7 @@ client -> src/api/routes.py (/v1/chat/completions, /v1beta/..., /v1/models)
 
 `tokens` (accounts; secrets inside), `managed_browser_sessions` (status `ready|needs_login|opening|awaiting_login|syncing`, `error_code`), `request_logs` (progress < 100 and no status = in flight), `jobs` (times are epoch seconds), `video_sources`, `credit_usage`, `client_keys`, `catalog_snapshot`, `alert_settings`, `admin_config`. Browser profiles live in `data/managed_browser_profiles/token-<token id>/`.
 
-## Conventions
+## Project conventions
 
-- Reuse the existing pattern; one convention per concern. Migrate every caller, remove obsolete code, no compatibility shims.
-- User-facing strings go through `static/i18n.js` and `static/locales/`; update all locale files.
-- Tests are in `tests/` (about 75 files); fakes for browsers and clients already exist in `tests/test_managed_*.py`.
-- `docs/flow-omni-edit-extend-protocol.md` is the single protocol reference; extend it (with a capture date) when you learn a new RPC fact.
+- User-facing strings go through `static/i18n.js` and `static/locales/`; add a key to every locale file.
+- `docs/flow-omni-edit-extend-protocol.md` is the single protocol reference; when you learn a new RPC fact, add it there with the capture date.
