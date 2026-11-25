@@ -319,15 +319,23 @@ managed_captcha.alerts = alert_service
 
 
 async def _fetch_flow_model_table() -> list:
-    """Flow's model table (RPC HTrJv): read-only, answered to any signed-in account."""
+    """Flow's model table (RPC HTrJv): read-only, answered to any signed-in account.
+
+    An account whose Google session has lapsed answers 401, so try each active account in turn.
+    """
     tokens = [token for token in await token_manager.get_active_tokens() if token.google_cookies]
     if not tokens:
         raise RuntimeError("no active account with a Google session")
-    token = tokens[0]
-    return await flow_client._current_rpc(
-        rpc_id="HTrJv", argument=[], google_cookies=token.google_cookies,
-        token_id=token.id, project_id=token.current_project_id,
-    )
+    failure: Exception = RuntimeError("no account could read the model table")
+    for token in tokens:
+        try:
+            return await flow_client._current_rpc(
+                rpc_id="HTrJv", argument=[], google_cookies=token.google_cookies,
+                token_id=token.id, project_id=token.current_project_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - try the next account
+            failure = exc
+    raise failure
 
 
 catalog_monitor = CatalogMonitor(

@@ -223,7 +223,9 @@ class AlertService:
                 row[0]: (row[1], row[2])
                 for row in await (await conn.execute("SELECT token_id, enabled, status FROM managed_browser_sessions")).fetchall()
             }
-        usable = [token for token in tokens if token.is_active]
+        signed_out = {token_id for token_id, (enabled, status) in sessions.items() if enabled and status in {"needs_login", "error"}}
+        # An account flagged active whose browser session needs a new sign-in cannot generate.
+        usable = [token for token in tokens if token.is_active and token.id not in signed_out]
         wanted: Dict[str, tuple] = {}
         if tokens and not usable:
             wanted["no_usable_account"] = ("critical", f"No account can generate: all {len(tokens)} are disabled or signed out.", {})

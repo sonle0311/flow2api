@@ -94,6 +94,18 @@ class AlertTests(unittest.IsolatedAsyncioTestCase):
         await self.alerts.check_accounts()
         self.assertIn("captcha_failing:4", self.alerts.conditions)
 
+    async def test_an_active_account_that_needs_to_sign_in_again_does_not_count_as_usable(self):
+        self.tokens = [token(2), token(3), token(4)]  # all flagged active, like a real deployment with lapsed sessions
+        await self.set_session(2, "needs_login")
+        await self.set_session(3, "needs_login")
+        await self.set_session(4, "ready")
+        await self.alerts.check_accounts()
+        self.assertEqual({"single_usable_account", "account_needs_login:2", "account_needs_login:3"}, set(self.alerts.conditions))
+        self.assertIn("user4@example.com", self.alerts.conditions["single_usable_account"]["message"])
+        await self.set_session(4, "needs_login")
+        await self.alerts.check_accounts()
+        self.assertIn("no_usable_account", self.alerts.conditions)
+
     async def test_a_broken_webhook_is_recorded_and_never_raises(self):
         self.fail_delivery = True
         await self.alerts.check_accounts()
