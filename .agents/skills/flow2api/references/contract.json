@@ -1726,6 +1726,181 @@
    "durationSeconds": 8,
    "mode": "t2v"
   },
+  "id": "veo-3.1-lite-lower-priority",
+  "listed": true,
+  "mode_defaults": {
+   "i2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "mode": "i2v"
+   },
+   "r2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "r2v"
+   },
+   "t2v": {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "mode": "t2v"
+   }
+  },
+  "parameters": {
+   "aspectRatio": {
+    "type": "string",
+    "values": [
+     "16:9",
+     "9:16"
+    ]
+   },
+   "durationSeconds": {
+    "type": "integer",
+    "values": [
+     4,
+     6,
+     8
+    ]
+   },
+   "mode": {
+    "type": "string",
+    "values": [
+     "i2v",
+     "r2v",
+     "t2v"
+    ]
+   }
+  },
+  "type": "video",
+  "variants": [
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-lower-priority-4s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-lower-priority-4s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-lower-priority-6s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-lower-priority-6s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-lower-priority-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-lower-priority-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 0,
+    "min_images": 0,
+    "mode": "t2v",
+    "supports_images": false
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-lower-priority-i2v-4s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "id": "veo-3.1-lite-lower-priority-i2v-4s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-lower-priority-i2v-6s-landscape",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 6,
+    "id": "veo-3.1-lite-lower-priority-i2v-6s-portrait",
+    "locally_validated_min_images": 1,
+    "max_images": 2,
+    "min_images": 1,
+    "mode": "i2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "16:9",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-lower-priority-r2v-8s-landscape",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   },
+   {
+    "aspectRatio": "9:16",
+    "durationSeconds": 8,
+    "id": "veo-3.1-lite-lower-priority-r2v-8s-portrait",
+    "locally_validated_min_images": 0,
+    "max_images": 3,
+    "min_images": 1,
+    "mode": "r2v",
+    "supports_images": true
+   }
+  ]
+ },
+ {
+  "config_path": "generationConfig.videoConfig",
+  "defaults": {
+   "aspectRatio": "16:9",
+   "durationSeconds": 8,
+   "mode": "t2v"
+  },
   "id": "veo-3.1-quality",
   "listed": true,
   "mode_defaults": {

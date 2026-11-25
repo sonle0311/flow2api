@@ -215,6 +215,7 @@ Nano Banana 2 Lite 使用 `gemini-3.1-flash-lite-image-*`，比例及分辨率�
 |---|---|---|
 | `veo-3.1-lite` / `veo-3.1-fast` / `veo-3.1-quality` / `omni-1.2-flash` | 当前默认模型 | 8 秒横屏文生视频 |
 | `veo-3.1-lite-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Lite | 文生视频 |
+| `veo-3.1-lite-lower-priority[-i2v|-r2v]-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Lite [Lower Priority]（`*_low_priority`，Flow 模型表中无积分定价；实测 4 次生成余额不变，耗时 49–149 秒） | 文生/图生/参考图视频 |
 | `veo-3.1-fast-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Fast | 文生视频 |
 | `veo-3.1-quality-{4,6,8}s-{landscape,portrait}` | Veo 3.1 - Quality | 文生视频 |
 | `omni-1.2-flash-{3..15}s-{landscape,portrait}` | Omni 1.2 Flash (`macaron_cookie`) | 文生/参考图视频 |

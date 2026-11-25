@@ -1377,6 +1377,42 @@ def _apply_current_flow_model_catalog():
         t2v("veo_3_1_t2v", landscape),
         "Veo 3.1 - Quality · 8s · landscape",
     )
+
+    # Veo 3.1 Lite [Lower Priority]: Flow's own model table lists these keys with no
+    # credit price (they queue behind paid work). Same shapes as Lite, key + "_low_priority".
+    low_priority = "veo-3.1-lite-lower-priority"
+    for seconds, key in (
+        (4, "veo_3_1_t2v_lite_4s_low_priority"),
+        (6, "veo_3_1_t2v_lite_6s_low_priority"),
+        (8, "veo_3_1_t2v_lite_low_priority"),
+    ):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"{low_priority}-{seconds}s-{orientation}",
+                t2v(key, ratio),
+                f"Veo 3.1 - Lite [Lower Priority] · {seconds}s · {orientation}",
+            )
+    for seconds, key in (
+        (4, "veo_3_1_i2v_s_lite_4s_fl_low_priority"),
+        (6, "veo_3_1_i2v_s_lite_6s_fl_low_priority"),
+    ):
+        for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+            register(
+                f"{low_priority}-i2v-{seconds}s-{orientation}",
+                i2v(key, ratio),
+                f"Veo 3.1 - Lite [Lower Priority] I2V · {seconds}s · {orientation}",
+            )
+    for orientation, ratio in (("landscape", landscape), ("portrait", portrait)):
+        register(
+            f"{low_priority}-r2v-8s-{orientation}",
+            r2v("veo_3_1_r2v_lite_low_priority", ratio),
+            f"Veo 3.1 - Lite [Lower Priority] R2V · 8s · {orientation}",
+        )
+    register(
+        low_priority,
+        t2v("veo_3_1_t2v_lite_low_priority", landscape),
+        "Veo 3.1 - Lite [Lower Priority] · 8s · landscape",
+    )
     register(
         "omni-1.1-flash",
         {

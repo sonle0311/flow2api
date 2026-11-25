@@ -327,7 +327,7 @@ print(result["choices"][0]["message"]["content"])
 
     const cleanFamilies = [
         'gemini-3.0-pro-image', 'gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image',
-        'veo-3.1-fast', 'veo-3.1-lite', 'veo-3.1-quality', 'omni-1.1-flash', 'omni-1.2-flash'
+        'veo-3.1-fast', 'veo-3.1-lite', 'veo-3.1-lite-lower-priority', 'veo-3.1-quality', 'omni-1.1-flash', 'omni-1.2-flash'
     ];
     const contractRatios = ['16:9', '9:16', '1:1', '4:3', '3:4'];
     const contractModes = ['t2v', 'i2v', 'r2v', 'auto', 'extend', 'edit'];

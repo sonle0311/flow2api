@@ -118,8 +118,11 @@ def test_public_catalog_preserves_previous_models_and_lists_all_omni_12_variants
     }
     assert {model for model in listed if model.startswith("omni-1.2-")} == standard | draft_360p | editing
     assert len(standard) == 27 and len(draft_360p) == 26 and len(editing) == 42
-    # The 76 IDs that predate Nano Banana Pro (15 variants), 360p drafts and Omni extend/edit are unchanged
+    # The 76 IDs that predate Nano Banana Pro (15 variants), 360p drafts, Omni extend/edit and
+    # Veo 3.1 Lite [Lower Priority] (13 variants) are unchanged
     # (82 before Flow retired Veo Extend and its 6 variants were removed).
     nano_banana_pro = {model for model in listed if model.startswith("gemini-3.0-pro-image-")}
     assert len(nano_banana_pro) == 15
-    assert len(listed - standard - draft_360p - editing - nano_banana_pro) == 76
+    lower_priority = {model for model in listed if model.startswith("veo-3.1-lite-lower-priority")}
+    assert len(lower_priority) == 13
+    assert len(listed - standard - draft_360p - editing - nano_banana_pro - lower_priority) == 76
