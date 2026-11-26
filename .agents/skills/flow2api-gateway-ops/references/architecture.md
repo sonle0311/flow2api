@@ -29,13 +29,14 @@ client -> src/api/routes.py (/v1/chat/completions, /v1beta/..., /v1/models)
 | Captcha minted in the profile | `src/services/managed_captcha.py` (`SignedOutError`, stats, diagnostics) |
 | Cookie-only login validation | `src/services/protocol_login.py`, `flow_cookies.py` |
 | Which account owns a video | `src/services/video_sources.py` (table `video_sources`) |
+| Input images already uploaded to Flow | `src/services/upload_cache.py` (table `upload_cache`; `FLOW2API_UPLOAD_CACHE_HOURS`, default 24, 0 = off). Each project in an account's pool of 4 needs its own upload, so a new image misses up to 4 times per account. Request logs show `performance.upload_cache` (hits, misses, `stale_evicted`); a media id Flow rejects (`code=[5]`) is dropped and uploaded again once |
 | Alerts (webhook, edge-triggered) | `src/services/alerts.py` |
 | Credits per client/model | `src/services/credit_ledger.py` (table `credit_usage`) |
 | Admin API, console | `src/api/admin.py`, `static/manage.html`, `static/*.js`, `static/locales/*` |
 
 ## Data (SQLite `data/flow.db`)
 
-`tokens` (accounts; secrets inside), `managed_browser_sessions` (status `ready|needs_login|opening|awaiting_login|syncing`, `error_code`), `request_logs` (progress < 100 and no status = in flight), `jobs` (times are epoch seconds), `video_sources`, `credit_usage`, `client_keys`, `catalog_snapshot`, `alert_settings`, `admin_config`. Browser profiles live in `data/managed_browser_profiles/token-<token id>/`.
+`tokens` (accounts; secrets inside), `managed_browser_sessions` (status `ready|needs_login|opening|awaiting_login|syncing`, `error_code`), `request_logs` (progress < 100 and no status = in flight), `jobs` (times are epoch seconds), `video_sources`, `upload_cache` (media id of an input image per account, project and SHA-256), `credit_usage`, `client_keys`, `catalog_snapshot`, `alert_settings`, `admin_config`. Browser profiles live in `data/managed_browser_profiles/token-<token id>/`.
 
 ## Project conventions
 

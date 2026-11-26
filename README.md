@@ -152,6 +152,10 @@ python main.py
 
 Prometheus 可直接抓 `/metrics`。如果部署到 Kubernetes，建议只在集群内抓取，并在 Ingress/Gateway 层单独限制 `/metrics` 的外部访问。
 
+### 输入图片上传缓存
+
+参考图、首帧/尾帧、Veo/Omni 参考图在生成前都要上传到 Flow（每张约 16 秒：账号浏览器的 reCAPTCHA 加上传输）。同一账号、同一项目内内容相同（SHA-256）的图片只上传一次，之后复用 Flow 返回的 media id；每个账号有 4 个项目轮换，所以新图片在每个账号最多未命中 4 次。仅保存哈希和 media id，不保存图片。Flow 拒绝缓存的 media id（`code=[5]`）时会删除该条并重新上传一次。请求日志的 `performance.upload_cache` 显示命中数、未命中数和 `stale_evicted`。设置 `FLOW2API_UPLOAD_CACHE_HOURS=0` 可关闭，默认保留 24 小时。
+
 ### 模型测试页面
 
 访问 **http://localhost:8000/test** 可打开内置的模型测试页面，支持：

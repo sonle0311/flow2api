@@ -22,6 +22,7 @@ from ..core.account_tiers import (
 from .file_cache import FileCache
 from .admission_queue import AdmissionQueue, AdmissionRejected
 from .video_sources import VideoSourceStore, parse_source
+from .upload_cache import UploadCache, looks_like_stale_media
 
 
 def _video_poll_attempt_budget(
@@ -1822,6 +1823,7 @@ class GenerationHandler:
         last_failover_error: Optional[str] = None
         failover_summary: List[str] = []
         risk_failures = 0
+        stale_media_retried = False
         for token_attempt in range(MAX_TOKEN_FAILOVER_ATTEMPTS):
             token = None
             generation_result = self._create_generation_result()
@@ -2172,6 +2174,21 @@ class GenerationHandler:
                 debug_logger.log_error(f"[GENERATION] 生成失败: {error_msg}")
                 is_quota_error = self._is_quota_exhausted_error(e)
                 is_access_denied = self._is_model_access_denied_error(e)
+                stale_uploads = (
+                    token
+                    and not stale_media_retried
+                    and not getattr(e, "submission_uncertain", False)
+                    and not getattr(e, "outcome_unknown", False)
+                    and await self._evict_stale_uploads(perf_trace, e)
+                )
+                if stale_uploads:
+                    # A cached media id that Flow no longer has: upload the images again, once.
+                    stale_media_retried = True
+                    if token_attempt < MAX_TOKEN_FAILOVER_ATTEMPTS - 1:
+                        debug_logger.log_warning("[GENERATION] cached input image rejected by Flow, uploading again")
+                        if stream:
+                            yield self._create_stream_chunk("缓存的参考图已失效，正在重新上传...\n")
+                        continue
                 if (
                     token
                     and (
@@ -2303,6 +2320,28 @@ class GenerationHandler:
             store = self._video_sources = VideoSourceStore(self.db)
         return store
 
+    async def _evict_stale_uploads(self, perf_trace: Optional[Dict[str, Any]], error: BaseException) -> bool:
+        """True when `error` means Flow rejected an input image this request took from the cache.
+
+        The entries are dropped and the next attempt uploads fresh (perf_trace["upload_cache"]["bypass"]).
+        """
+        trace = perf_trace.get("upload_cache") if isinstance(perf_trace, dict) else None
+        if not trace or trace.get("bypass") or not looks_like_stale_media(error):
+            return False
+        reused = [item for item in trace.get("used", []) if item.get("reused")]
+        if not reused:
+            return False
+        groups: Dict[Any, List[str]] = {}
+        for item in reused:
+            groups.setdefault((item.get("token_id"), item.get("project_id")), []).append(item["media_id"])
+        removed = 0
+        for (token_id, project_id), media_ids in groups.items():
+            removed += await self.upload_cache.forget_media(token_id, project_id, media_ids)
+        trace["bypass"] = True
+        trace["stale_evicted"] = removed
+        trace["used"] = []
+        return True
+
     @staticmethod
     def _select_kwargs(generation_type: str, model: str, excluded) -> Dict[str, Any]:
         return {
@@ -2349,6 +2388,47 @@ class GenerationHandler:
             return "没有可用的Token进行图片生成。所有Token都处于禁用、冷却、锁定或已过期状态。"
         else:
             return "没有可用的Token进行视频生成。所有Token都处于禁用、冷却、配额耗尽或已过期状态。"
+
+    @property
+    def upload_cache(self) -> UploadCache:
+        cache = self.__dict__.get("_upload_cache")
+        if cache is None:
+            cache = self._upload_cache = UploadCache(self.__dict__.get("db"))
+        return cache
+
+    async def _upload_input_image(
+        self,
+        token,
+        image_bytes: bytes,
+        aspect_ratio: str,
+        project_id: str,
+        perf_trace: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Media id for an input image, reusing an earlier upload of the same bytes to this project."""
+        trace = perf_trace.setdefault("upload_cache", {"hits": 0, "misses": 0, "used": []}) if isinstance(perf_trace, dict) else None
+
+        async def upload() -> str:
+            return await self.flow_client.upload_image(
+                token.at,
+                image_bytes,
+                aspect_ratio,
+                project_id=project_id,
+                token_id=token.id,
+                google_cookies=getattr(token, "google_cookies", None),
+            )
+
+        started = time.time()
+        media_id, reused = await self.upload_cache.get_or_upload(
+            token.id, project_id, image_bytes, upload,
+            use_cache=not (trace and trace.get("bypass")),
+        )
+        if trace is not None:
+            trace["hits" if reused else "misses"] += 1
+            trace["used"].append({
+                "media_id": media_id, "reused": reused, "ms": int((time.time() - started) * 1000),
+                "token_id": token.id, "project_id": project_id,
+            })
+        return media_id
 
     @staticmethod
     def _is_quota_exhausted_error(error: Exception) -> bool:
@@ -2481,13 +2561,8 @@ class GenerationHandler:
 
                 # 支持多图输入
                 for idx, image_bytes in enumerate(images):
-                    media_id = await self.flow_client.upload_image(
-                        token.at,
-                        image_bytes,
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    media_id = await self._upload_input_image(
+                        token, image_bytes, model_config["aspect_ratio"], project_id, perf_trace
                     )
                     image_inputs.append(
                         {
@@ -2976,13 +3051,8 @@ class GenerationHandler:
                     # 只有1张图: 仅作为首帧
                     if stream:
                         yield self._create_stream_chunk("上传首帧图片...\n")
-                    start_media_id = await self.flow_client.upload_image(
-                        token.at,
-                        images[0],
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    start_media_id = await self._upload_input_image(
+                        token, images[0], model_config["aspect_ratio"], project_id, perf_trace
                     )
                     debug_logger.log_info(f"[I2V] 仅上传首帧: {start_media_id}")
 
@@ -2990,21 +3060,11 @@ class GenerationHandler:
                     # 2张图: 首帧+尾帧
                     if stream:
                         yield self._create_stream_chunk("上传首帧和尾帧图片...\n")
-                    start_media_id = await self.flow_client.upload_image(
-                        token.at,
-                        images[0],
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    start_media_id = await self._upload_input_image(
+                        token, images[0], model_config["aspect_ratio"], project_id, perf_trace
                     )
-                    end_media_id = await self.flow_client.upload_image(
-                        token.at,
-                        images[1],
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    end_media_id = await self._upload_input_image(
+                        token, images[1], model_config["aspect_ratio"], project_id, perf_trace
                     )
                     debug_logger.log_info(
                         f"[I2V] 上传首尾帧: {start_media_id}, {end_media_id}"
@@ -3018,13 +3078,8 @@ class GenerationHandler:
                     )
 
                 for img in images:
-                    media_id = await self.flow_client.upload_image(
-                        token.at,
-                        img,
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    media_id = await self._upload_input_image(
+                        token, img, model_config["aspect_ratio"], project_id, perf_trace
                     )
                     reference_images.append(
                         {
@@ -3044,13 +3099,8 @@ class GenerationHandler:
                     )
 
                 for img in images:
-                    media_id = await self.flow_client.upload_image(
-                        token.at,
-                        img,
-                        model_config["aspect_ratio"],
-                        project_id=project_id,
-                        token_id=token.id,
-                        google_cookies=getattr(token, "google_cookies", None),
+                    media_id = await self._upload_input_image(
+                        token, img, model_config["aspect_ratio"], project_id, perf_trace
                     )
                     reference_images.append(
                         {
