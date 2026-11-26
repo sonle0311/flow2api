@@ -28,6 +28,7 @@ from .services.load_balancer import LoadBalancer
 from .services.jobs import JobManager
 from .services.alerts import AlertService
 from .services.catalog_monitor import CatalogMonitor
+from .services.log_retention import LogRetention
 from .services.credit_ledger import CreditLedger
 from .services.concurrency_manager import ConcurrencyManager
 from .services.generation_handler import GenerationHandler, MODEL_CONFIG
@@ -153,6 +154,7 @@ async def lifespan(app: FastAPI):
     await job_manager.start()
     await alert_service.start()
     catalog_monitor.start()
+    log_retention.start()
     generation_handler.file_cache.set_timeout(config.cache_timeout)
     cache_cleanup_enabled = await generation_handler.file_cache.refresh_cleanup_task()
     captcha_config = await db.get_captcha_config()
@@ -277,6 +279,7 @@ async def lifespan(app: FastAPI):
     await managed_captcha.close()
     await job_manager.close()
     await catalog_monitor.close()
+    await log_retention.close()
     await alert_service.close()
     await client_keys.close()
     await managed_browser.shutdown()
@@ -315,6 +318,7 @@ generation_handler = GenerationHandler(
 credit_ledger = CreditLedger(db, token_manager, client_keys)
 generation_handler.credit_ledger = credit_ledger
 alert_service = AlertService(db, token_manager.get_all_tokens)
+log_retention = LogRetention(db)
 managed_captcha.alerts = alert_service
 
 
@@ -350,6 +354,7 @@ admin.set_client_key_service(client_keys)
 admin.set_monitoring_services(
     credit_ledger=credit_ledger, alert_service=alert_service,
     catalog_monitor=catalog_monitor, managed_captcha=managed_captcha,
+    log_retention=log_retention,
 )
 jobs_api.set_job_manager(job_manager)
 
@@ -454,6 +459,7 @@ _INSTRUMENT_ASSETS = {
     "client-keys.js": "application/javascript",
     "operations.js": "application/javascript",
     "skills.js": "application/javascript",
+    "logs.js": "application/javascript",
     "instrument-shell.js": "application/javascript",
     "instrument-access.css": "text/css",
     "instrument-studio.css": "text/css",

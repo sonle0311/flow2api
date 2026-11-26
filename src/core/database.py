@@ -25,6 +25,9 @@ from .models import (
     TokenRefreshConfig,
 )
 
+# The saved prompt text that the log list shows and searches by (the full prompt stays in request_body).
+PROMPT_EXCERPT_CHARS = 200
+
 
 class Database:
     """SQLite database manager"""
@@ -852,6 +855,10 @@ class Database:
                     duration FLOAT NOT NULL,
                     status_text TEXT DEFAULT '',
                     progress INTEGER DEFAULT 0,
+                    model TEXT,
+                    prompt_excerpt TEXT,
+                    client_key_id INTEGER,
+                    job_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (token_id) REFERENCES tokens(id)
@@ -1084,9 +1091,44 @@ class Database:
             await db.execute(
                 "UPDATE request_logs SET updated_at = created_at WHERE updated_at IS NULL"
             )
+            await self._ensure_request_log_columns(db)
         except Exception as e:
             print(f"?? request_logs?????: {e}")
             # Continue even if migration fails
+
+    async def _ensure_request_log_columns(self, db):
+        """Add the model, prompt, client key and job columns that the log list filters on.
+
+        Rows written before the columns existed get their model and prompt from the saved request body.
+        """
+        added_model = False
+        for name, ddl in (
+            ("model", "TEXT"),
+            ("prompt_excerpt", "TEXT"),
+            ("client_key_id", "INTEGER"),
+            ("job_id", "TEXT"),
+        ):
+            if not await self._column_exists(db, "request_logs", name):
+                await db.execute(f"ALTER TABLE request_logs ADD COLUMN {name} {ddl}")
+                added_model = added_model or name == "model"
+        if added_model:
+            try:
+                await db.execute(
+                    """
+                    UPDATE request_logs
+                    SET model = json_extract(request_body, '$.model'),
+                        prompt_excerpt = substr(
+                            replace(replace(json_extract(request_body, '$.prompt'), char(10), ' '), char(13), ' '),
+                            1, ?)
+                    WHERE request_body IS NOT NULL AND json_valid(request_body)
+                    """,
+                    (PROMPT_EXCERPT_CHARS,),
+                )
+            except Exception as exc:  # noqa: BLE001 - old rows keep an empty model; new rows are unaffected
+                print(f"request_logs backfill skipped: {exc}")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_job_id ON request_logs(job_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_client_key_id ON request_logs(client_key_id)")
 
     async def _ensure_token_identity_available(
         self,
@@ -1894,18 +1936,23 @@ class Database:
         async with self._connect(write=True) as db:
             cursor = await db.execute(
                 """
-                INSERT INTO request_logs (token_id, operation, request_body, response_body, status_code, duration, status_text, progress)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO request_logs (token_id, operation, request_body, response_body, status_code, duration,
+                                          status_text, progress, model, prompt_excerpt, client_key_id, job_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
-                log.token_id,
-                log.operation,
-                log.request_body,
-                log.response_body,
-                log.status_code,
-                log.duration,
-                log.status_text or "",
-                log.progress,
+                    log.token_id,
+                    log.operation,
+                    log.request_body,
+                    log.response_body,
+                    log.status_code,
+                    log.duration,
+                    log.status_text or "",
+                    log.progress,
+                    log.model,
+                    log.prompt_excerpt,
+                    log.client_key_id,
+                    log.job_id,
                 ),
             )
             await db.commit()
@@ -1925,6 +1972,10 @@ class Database:
             "duration",
             "status_text",
             "progress",
+            "model",
+            "prompt_excerpt",
+            "client_key_id",
+            "job_id",
         }
         update_fields = {
             key: value for key, value in kwargs.items() if key in allowed_fields
@@ -1947,115 +1998,136 @@ class Database:
             )
             await db.commit()
 
-    async def get_logs(
-        self,
-        limit: int = 100,
+    REQUEST_LOG_STATUSES = {
+        "success": "rl.status_code = 200",
+        "failed": "rl.status_code >= 400",
+        "running": "(rl.status_code IS NULL OR rl.status_code IN (0, 102))",
+    }
+
+    @classmethod
+    def _request_log_filter(
+        cls,
+        *,
+        status: Optional[str] = None,
+        model: Optional[str] = None,
         token_id: Optional[int] = None,
-        include_payload: bool = False,
+        operation: Optional[str] = None,
+        client_key_id: Optional[int] = None,
+        job_id: Optional[str] = None,
+        query: Optional[str] = None,
+        since: Optional[str] = None,
     ):
-        """Get request logs with token info, optionally including payload fields"""
+        """A WHERE clause (with its parameters) for the request log list. ``since`` is a UTC timestamp."""
+        clauses: List[str] = []
+        params: List[Any] = []
+        if status:
+            if status not in cls.REQUEST_LOG_STATUSES:
+                raise ValueError(f"unknown status: {status}")
+            clauses.append(cls.REQUEST_LOG_STATUSES[status])
+        for column, value in (
+            ("rl.model", model),
+            ("rl.token_id", token_id),
+            ("rl.operation", operation),
+            ("rl.client_key_id", client_key_id),
+            ("rl.job_id", job_id),
+        ):
+            if value not in (None, ""):
+                clauses.append(f"{column} = ?")
+                params.append(value)
+        if since:
+            clauses.append("rl.created_at >= ?")
+            params.append(since)
+        if query:
+            like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            columns = ("rl.model", "rl.job_id", "t.email", "rl.request_body", "rl.response_body")
+            clauses.append("(" + " OR ".join(f"{column} LIKE ? ESCAPE '\\'" for column in columns) + ")")
+            params.extend([like] * len(columns))
+        return ("WHERE " + " AND ".join(clauses) if clauses else ""), params
+
+    async def query_request_logs(self, *, limit: int = 50, offset: int = 0, **filters):
+        """One page of request logs, newest first, and the number of rows that match the filters."""
+        where, params = self._request_log_filter(**filters)
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
-            payload_columns = (
-                "rl.request_body, rl.response_body," if include_payload else ""
+            cursor = await db.execute(
+                f"SELECT COUNT(*) FROM request_logs rl LEFT JOIN tokens t ON rl.token_id = t.id {where}", params
             )
-            response_excerpt_column = "substr(COALESCE(rl.response_body, ''), 1, 2048) as response_body_excerpt,"
-            has_status_text = await self._column_exists(
-                db, "request_logs", "status_text"
-            )
-            has_progress = await self._column_exists(db, "request_logs", "progress")
-            has_updated_at = await self._column_exists(db, "request_logs", "updated_at")
-            status_text_column = (
-                "rl.status_text," if has_status_text else "'' as status_text,"
-            )
-            progress_column = "rl.progress," if has_progress else "0 as progress,"
-            updated_at_column = (
-                "rl.updated_at," if has_updated_at else "rl.created_at as updated_at,"
-            )
-
-            if token_id:
-                cursor = await db.execute(
-                    f"""
-                    SELECT
-                        rl.id,
-                        rl.token_id,
-                        rl.operation,
-                        {payload_columns}
-                        {response_excerpt_column}
-                        rl.status_code,
-                        rl.duration,
-                        {status_text_column}
-                        {progress_column}
-                        rl.created_at,
-                        {updated_at_column}
-                        t.email as token_email,
-                        t.name as token_username
-                    FROM request_logs rl
-                    LEFT JOIN tokens t ON rl.token_id = t.id
-                    WHERE rl.token_id = ?
-                    ORDER BY rl.created_at DESC
-                    LIMIT ?
-                """,
-                    (token_id, limit),
-                )
-            else:
-                cursor = await db.execute(
-                    f"""
-                    SELECT
-                        rl.id,
-                        rl.token_id,
-                        rl.operation,
-                        {payload_columns}
-                        {response_excerpt_column}
-                        rl.status_code,
-                        rl.duration,
-                        {status_text_column}
-                        {progress_column}
-                        rl.created_at,
-                        {updated_at_column}
-                        t.email as token_email,
-                        t.name as token_username
-                    FROM request_logs rl
-                    LEFT JOIN tokens t ON rl.token_id = t.id
-                    ORDER BY rl.created_at DESC
-                    LIMIT ?
-                """,
-                    (limit,),
-                )
-
-            rows = await cursor.fetchall()
-            return [dict(row) for row in rows]
-
-    async def get_log_detail(self, log_id: int) -> Optional[Dict[str, Any]]:
-        """Get single request log detail including payload fields"""
-        async with self._connect() as db:
-            db.row_factory = aiosqlite.Row
-            has_status_text = await self._column_exists(
-                db, "request_logs", "status_text"
-            )
-            has_progress = await self._column_exists(db, "request_logs", "progress")
-            has_updated_at = await self._column_exists(db, "request_logs", "updated_at")
-            status_text_column = (
-                "rl.status_text," if has_status_text else "'' as status_text,"
-            )
-            progress_column = "rl.progress," if has_progress else "0 as progress,"
-            updated_at_column = (
-                "rl.updated_at," if has_updated_at else "rl.created_at as updated_at,"
-            )
+            total = (await cursor.fetchone())[0]
             cursor = await db.execute(
                 f"""
                 SELECT
                     rl.id,
                     rl.token_id,
                     rl.operation,
+                    rl.model,
+                    rl.prompt_excerpt,
+                    rl.client_key_id,
+                    rl.job_id,
+                    substr(COALESCE(rl.response_body, ''), 1, 2048) as response_body_excerpt,
+                    rl.status_code,
+                    rl.duration,
+                    rl.status_text,
+                    rl.progress,
+                    rl.created_at,
+                    rl.updated_at,
+                    t.email as token_email,
+                    t.name as token_username
+                FROM request_logs rl
+                LEFT JOIN tokens t ON rl.token_id = t.id
+                {where}
+                ORDER BY rl.id DESC
+                LIMIT ? OFFSET ?
+            """,
+                [*params, limit, offset],
+            )
+            return [dict(row) for row in await cursor.fetchall()], total
+
+    async def request_log_summary_rows(self, *, since: Optional[str], limit: int):
+        """The few columns the summary needs for every request since ``since`` (newest first, at most ``limit``)."""
+        where, params = self._request_log_filter(since=since)
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"""
+                SELECT
+                    rl.id, rl.token_id, rl.model, rl.operation, rl.status_code, rl.duration,
+                    rl.client_key_id, rl.created_at, t.email as token_email,
+                    CASE WHEN json_valid(rl.response_body)
+                         THEN json_extract(rl.response_body, '$.performance.upload_cache.hits') END as cache_hits,
+                    CASE WHEN json_valid(rl.response_body)
+                         THEN json_extract(rl.response_body, '$.performance.upload_cache.misses') END as cache_misses
+                FROM request_logs rl
+                LEFT JOIN tokens t ON rl.token_id = t.id
+                {where}
+                ORDER BY rl.id DESC
+                LIMIT ?
+            """,
+                [*params, limit],
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_log_detail(self, log_id: int) -> Optional[Dict[str, Any]]:
+        """Get single request log detail including payload fields"""
+        async with self._connect() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT
+                    rl.id,
+                    rl.token_id,
+                    rl.operation,
+                    rl.model,
+                    rl.prompt_excerpt,
+                    rl.client_key_id,
+                    rl.job_id,
                     rl.request_body,
                     rl.response_body,
                     rl.status_code,
                     rl.duration,
-                    {status_text_column}
-                    {progress_column}
+                    rl.status_text,
+                    rl.progress,
                     rl.created_at,
-                    {updated_at_column}
+                    rl.updated_at,
                     t.email as token_email,
                     t.name as token_username
                 FROM request_logs rl
@@ -2067,6 +2139,13 @@ class Database:
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+    async def purge_request_logs(self, older_than: str) -> int:
+        """Delete request logs created before ``older_than`` (a UTC timestamp). Returns how many were deleted."""
+        async with self._connect(write=True) as db:
+            cursor = await db.execute("DELETE FROM request_logs WHERE created_at < ?", (older_than,))
+            await db.commit()
+            return cursor.rowcount or 0
 
     async def clear_all_logs(self):
         """Clear all request logs"""

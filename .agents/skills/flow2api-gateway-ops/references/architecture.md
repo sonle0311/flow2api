@@ -30,6 +30,7 @@ client -> src/api/routes.py (/v1/chat/completions, /v1beta/..., /v1/models)
 | Cookie-only login validation | `src/services/protocol_login.py`, `flow_cookies.py` |
 | Which account owns a video | `src/services/video_sources.py` (table `video_sources`) |
 | Input images already uploaded to Flow | `src/services/upload_cache.py` (table `upload_cache`; `FLOW2API_UPLOAD_CACHE_HOURS`, default 24, 0 = off). Each project in an account's pool of 4 needs its own upload, so a new image misses up to 4 times per account. Request logs show `performance.upload_cache` (hits, misses, `stale_evicted`); a media id Flow rejects (`code=[5]`) is dropped and uploaded again once |
+| Request log view (filters, summary, retention) | `src/core/database.py` (`query_request_logs`, `request_log_summary_rows`), `src/services/log_insights.py` (summary, time breakdown), `src/services/log_retention.py` (table `log_retention`, hourly purge), `static/logs.js`. `request_logs` carries `model`, `prompt_excerpt`, `client_key_id`, `job_id` (set from `src/core/request_context.py`); timestamps are UTC |
 | Alerts (webhook, edge-triggered) | `src/services/alerts.py` |
 | Credits per client/model | `src/services/credit_ledger.py` (table `credit_usage`) |
 | Admin API, console | `src/api/admin.py`, `static/manage.html`, `static/*.js`, `static/locales/*` |

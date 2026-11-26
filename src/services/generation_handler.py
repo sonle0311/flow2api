@@ -12,6 +12,8 @@ from ..core.logger import debug_logger
 from ..core.config import config
 from ..core.monitoring import record_generation_result
 from ..core.models import Task, RequestLog
+from ..core.database import PROMPT_EXCERPT_CHARS
+from ..core.request_context import client_key_id_var, job_id_var
 from ..core.account_tiers import (
     PAYGATE_TIER_NOT_PAID,
     get_paygate_tier_label,
@@ -1739,6 +1741,7 @@ class GenerationHandler:
             "/"
         ) or None
         request_log_state: Dict[str, Any] = {"id": None, "progress": 0, "client_key_id": int(client_key_id or 0), "model": model}
+        client_key_id_var.set(int(client_key_id or 0))
 
         # 防止并发链路复用到上一次请求的指纹上下文
         if hasattr(self.flow_client, "clear_request_fingerprint"):
@@ -3959,6 +3962,13 @@ class GenerationHandler:
 
             request_body = json.dumps(request_data, ensure_ascii=False)
             response_body = json.dumps(response_data, ensure_ascii=False)
+            prompt = request_data.get("prompt")
+            who = {
+                "model": request_data.get("model"),
+                "prompt_excerpt": " ".join(prompt.split())[:PROMPT_EXCERPT_CHARS] if isinstance(prompt, str) else None,
+                "client_key_id": client_key_id_var.get() or None,
+                "job_id": job_id_var.get(),
+            }
 
             if log_id:
                 await self.db.update_request_log(
@@ -3971,6 +3981,7 @@ class GenerationHandler:
                     duration=duration,
                     status_text=effective_status_text,
                     progress=effective_progress,
+                    **who,
                 )
                 return log_id
 
@@ -3983,6 +3994,7 @@ class GenerationHandler:
                 duration=duration,
                 status_text=effective_status_text,
                 progress=effective_progress,
+                **who,
             )
             return await self.db.add_request_log(log)
         except Exception as e:

@@ -309,7 +309,7 @@ def test_log_status_colors_do_not_depend_on_language(browser_page):
     for language in ["en", "zh-CN", "en"]:
         page.locator("[data-language-select]").select_option(language)
         for index, classes in enumerate(expected):
-            badge = rows.nth(index).locator("td").nth(2).locator("span").first
+            badge = rows.nth(index).locator("td").nth(3).locator("span").first
             for css_class in classes.split():
                 playwright_api.expect(badge).to_have_class(
                     re.compile(r"\b" + css_class + r"\b")
@@ -482,16 +482,16 @@ def test_historical_log_messages_localize_without_changing_raw_payloads(browser_
         + diagnostic
     )
     assert (
-        rows.first.locator("td").nth(5).locator("div").get_attribute("title")
+        rows.first.locator("td").nth(6).locator("div").get_attribute("title")
         == expected
     )
-    assert rows.nth(1).locator("td").nth(5).locator("div").get_attribute("title") == (
+    assert rows.nth(1).locator("td").nth(6).locator("div").get_attribute("title") == (
         "This model requires the Ult tier, but no Ult account is available: " + model
     )
     playwright_api.expect(rows.nth(2).locator("td").first).to_have_text(
         "custom_operation"
     )
-    playwright_api.expect(rows.nth(2).locator("td").nth(5)).to_have_text("保存")
+    playwright_api.expect(rows.nth(2).locator("td").nth(6)).to_have_text("保存")
     assert page.evaluate("window.allLogs[0].error_summary") == nested_error
     assert rows.first.locator("td").first.get_attribute("title") == "generate_video"
     rows.first.locator("button").click()

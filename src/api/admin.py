@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 from curl_cffi.requests import AsyncSession
-from ..services import skill_package
+from ..services import log_insights, skill_package
 from ..core.auth import AuthManager
 from ..core.model_resolver import get_model_catalog
 from ..services.client_keys import (
@@ -718,13 +718,15 @@ credit_ledger = None
 alert_service = None
 catalog_monitor = None
 managed_captcha_service = None
+log_retention = None
 
 
-def set_monitoring_services(*, credit_ledger=None, alert_service=None, catalog_monitor=None, managed_captcha=None):
-    """Set the services behind the usage, alert, catalog and captcha diagnostics endpoints."""
+def set_monitoring_services(*, credit_ledger=None, alert_service=None, catalog_monitor=None, managed_captcha=None, log_retention=None):
+    """Set the services behind the usage, alert, catalog, captcha and log retention endpoints."""
     globals().update(
         credit_ledger=credit_ledger, alert_service=alert_service,
         catalog_monitor=catalog_monitor, managed_captcha_service=managed_captcha,
+        log_retention=log_retention,
     )
 
 
@@ -1993,11 +1995,45 @@ async def get_stats(token: str = Depends(verify_admin_token)):
     return await db.get_dashboard_stats()
 
 
+LOG_PAGE_MAX = 200
+SUMMARY_MAX_HOURS = 24 * 90
+
+
+def _client_key_names() -> Dict[int, str]:
+    if client_key_service is None:
+        return {}
+    return {int(key["id"]): key["name"] for key in client_key_service.list()}
+
+
 @router.get("/api/logs")
-async def get_logs(limit: int = 100, token: str = Depends(verify_admin_token)):
-    """Get lightweight request logs for list view"""
-    limit = max(1, min(limit, 100))
-    logs = await db.get_logs(limit=limit, include_payload=False)
+async def get_logs(
+    limit: int = 100,
+    offset: int = 0,
+    status: Optional[Literal["success", "failed", "running"]] = None,
+    model: Optional[str] = None,
+    token_id: Optional[int] = None,
+    operation: Optional[str] = None,
+    client_key_id: Optional[int] = None,
+    job_id: Optional[str] = None,
+    q: Optional[str] = None,
+    hours: float = 0,
+    token: str = Depends(verify_admin_token),
+):
+    """One page of lightweight request logs, newest first; X-Total-Count carries the number of matches."""
+    limit = max(1, min(limit, LOG_PAGE_MAX))
+    logs, total = await db.query_request_logs(
+        limit=limit,
+        offset=max(0, offset),
+        status=status,
+        model=model,
+        token_id=token_id,
+        operation=operation,
+        client_key_id=client_key_id,
+        job_id=job_id,
+        query=(q or "").strip() or None,
+        since=log_insights.window_start(min(max(hours, 0), SUMMARY_MAX_HOURS)),
+    )
+    key_names = _client_key_names()
 
     result = []
     for log in logs:
@@ -2008,19 +2044,24 @@ async def get_logs(limit: int = 100, token: str = Depends(verify_admin_token)):
             status_code = None
         result.append(
             {
-            "id": log.get("id"),
-            "token_id": log.get("token_id"),
-            "token_email": log.get("token_email"),
-            "token_username": log.get("token_username"),
-            "operation": log.get("operation"),
+                "id": log.get("id"),
+                "token_id": log.get("token_id"),
+                "token_email": log.get("token_email"),
+                "token_username": log.get("token_username"),
+                "operation": log.get("operation"),
+                "model": log.get("model") or "",
+                "prompt_excerpt": log.get("prompt_excerpt") or "",
+                "client_key_id": log.get("client_key_id"),
+                "client_key_name": key_names.get(int(log.get("client_key_id") or 0), ""),
+                "job_id": log.get("job_id") or "",
                 "status_code": status_code
                 if status_code is not None
                 else raw_status_code,
-            "duration": log.get("duration"),
-            "status_text": log.get("status_text") or "",
-            "progress": log.get("progress") or 0,
-            "created_at": log.get("created_at"),
-            "updated_at": log.get("updated_at"),
+                "duration": log.get("duration"),
+                "status_text": log.get("status_text") or "",
+                "progress": log.get("progress") or 0,
+                "created_at": log.get("created_at"),
+                "updated_at": log.get("updated_at"),
                 "error_summary": _extract_error_summary(
                     log.get("response_body_excerpt")
                 )
@@ -2028,7 +2069,35 @@ async def get_logs(limit: int = 100, token: str = Depends(verify_admin_token)):
                 else "",
             }
         )
-    return result
+    return JSONResponse(result, headers={"X-Total-Count": str(total)})
+
+
+@router.get("/api/logs/summary")
+async def get_logs_summary(hours: float = 24, token: str = Depends(verify_admin_token)):
+    """Counts, success rate, durations, upload cache hit rate and breakdowns for the last ``hours`` (0 = all)."""
+    hours = min(max(hours, 0), SUMMARY_MAX_HOURS)
+    since = log_insights.window_start(hours)
+    rows = await db.request_log_summary_rows(since=since, limit=log_insights.SUMMARY_ROW_LIMIT)
+    return {"hours": hours, **log_insights.summarize(rows, since=since, client_key_names=_client_key_names())}
+
+
+class LogRetentionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    retention_days: int = Field(ge=0, le=3650)
+
+
+@router.get("/api/logs/retention")
+async def get_log_retention(token: str = Depends(verify_admin_token)):
+    """How many days request logs are kept (0 = forever) and what the last cleanup did."""
+    return {"success": True, **await _service(log_retention, "log retention service").status()}
+
+
+@router.put("/api/logs/retention")
+async def set_log_retention(request: LogRetentionRequest, token: str = Depends(verify_admin_token)):
+    """Set how many days request logs are kept (0 = forever); logs older than that are deleted now."""
+    service = _service(log_retention, "log retention service")
+    purged = await service.set_days(request.retention_days)
+    return {"success": True, "purged": purged, **await service.status()}
 
 
 @router.get("/api/logs/{log_id}")
@@ -2046,6 +2115,11 @@ async def get_log_detail(log_id: int, token: str = Depends(verify_admin_token)):
         "token_email": log.get("token_email"),
         "token_username": log.get("token_username"),
         "operation": log.get("operation"),
+        "model": log.get("model") or "",
+        "prompt_excerpt": log.get("prompt_excerpt") or "",
+        "client_key_id": log.get("client_key_id"),
+        "client_key_name": _client_key_names().get(int(log.get("client_key_id") or 0), ""),
+        "job_id": log.get("job_id") or "",
         "status_code": log.get("status_code"),
         "duration": log.get("duration"),
         "status_text": log.get("status_text") or "",
@@ -2053,6 +2127,7 @@ async def get_log_detail(log_id: int, token: str = Depends(verify_admin_token)):
         "created_at": log.get("created_at"),
         "updated_at": log.get("updated_at"),
         "error_summary": error_summary,
+        "timings": log_insights.extract_timings(log.get("response_body")),
         "request_body": log.get("request_body"),
         "response_body": log.get("response_body"),
     }

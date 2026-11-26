@@ -120,6 +120,10 @@ class RequestLog(BaseModel):
     duration: float
     status_text: Optional[str] = None
     progress: int = 0
+    model: Optional[str] = None
+    prompt_excerpt: Optional[str] = None
+    client_key_id: Optional[int] = None
+    job_id: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

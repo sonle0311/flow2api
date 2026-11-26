@@ -118,17 +118,6 @@
             buildFilter(toolbar.querySelector('h3'), tokenBody, 'shell.search.accounts', ['all', 'enabled', 'disabled'],
                 (row) => row.children[1] && row.children[1].querySelector('.bg-green-50') ? 'enabled' : 'disabled');
         }
-        const logBody = document.getElementById('logsTableBody');
-        const logTitle = document.querySelector('.instrument-log-sheet h3');
-        if (logBody && logTitle) {
-            buildFilter(logTitle, logBody, 'shell.search.logs', ['all', 'success', 'failed', 'running'], (row) => {
-                const code = row.children[4];
-                if (!code) return 'all';
-                if (code.querySelector('.bg-green-50')) return 'success';
-                if (code.querySelector('.bg-amber-50')) return 'running';
-                return 'failed';
-            });
-        }
         // Settings: one column of sections with a sticky table of contents.
         const settings = document.getElementById('panelSettings');
         const cards = settings ? [...settings.querySelectorAll(':scope > .grid > div')] : [];

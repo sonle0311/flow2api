@@ -223,6 +223,7 @@
     if (['login', 'manage', 'test', 'desktop'].includes(page)) catalogs.push('shell');
     if (page === 'test') catalogs.push('studio-instrument');
     if (page === 'manage') catalogs.push('integration');
+    if (page === 'manage') catalogs.push('logs');
 
     const catalogReady = Promise.all(catalogs.map(async name => {
         try {

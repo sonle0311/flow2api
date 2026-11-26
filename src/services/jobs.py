@@ -14,6 +14,8 @@ import time
 import uuid
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from ..core.request_context import job_id_var
+
 JOB_RETENTION_SECONDS = 7 * 24 * 3600
 CLEANUP_INTERVAL_SECONDS = 3600
 MAX_ACTIVE_JOBS = 100
@@ -217,6 +219,7 @@ class JobManager:
         return await self.get(owner, job_id), False  # type: ignore[return-value]
 
     async def _run(self, job_id: str, work: Callable[[], Awaitable[str]], release: Callable[[], None]) -> None:
+        job_id_var.set(job_id)
         try:
             await self._update(job_id, status="running", started_at=_now())
             raw = await work()
