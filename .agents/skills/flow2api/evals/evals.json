@@ -1,0 +1,33 @@
+{
+ "skill_name": "flow2api",
+ "note": "Decision evals: a model gets the skill text (with) or a one-line description of the gateway (without), the scenario, and an LLM judge grades each assertion; 3 samples per condition, single-shot completions without tools. Run 2026-11-26: with the skill 38/38 assertions passed; without it 24/42. The baseline already suggests parallel work when asked directly (S1 batch_parallel passed without the skill), yet the real agent ran 38 images one at a time, so the skill's value is making batch, names, background runs and unchanged reference files the explicit default. S5 had only one graded sample with the skill (two judge calls failed). Trigger queries: 15/15 with an LLM classifier choosing among this skill, flow2api-gateway-ops and four unrelated skills. Not run: real agents with tools.",
+ "evals": [
+  {"id": "s1-many-images", "prompt": "Gen cho mình 38 ảnh storyboard 16:9, 2K, mỗi cảnh dùng chung ảnh nhân vật nhan_vat.png làm tham chiếu. Prompt từng cảnh nằm trong scenes.txt.",
+   "assertions": ["runs the images with batch or parallel jobs instead of a sequential loop", "gives each job a unique name so a rerun does not pay twice", "passes the same unmodified nhan_vat.png as the reference for every job", "validates cheaply (dry-run or check) and tells the user the plan before spending, then waits for approval", "runs the long batch in the background or reports progress"]},
+  {"id": "s2-timed-out-job", "prompt": "A single video generation started 12 minutes ago timed out with no output file.",
+   "assertions": ["does not generate again straight away", "recovers the earlier result through the job lookup (jobs, job <id>, or the saved .job file)"]},
+  {"id": "s3-budget-exceeded-mid-batch", "prompt": "A batch of 20 named image jobs prints credit_budget_exceeded after 6 jobs.",
+   "assertions": ["the remaining jobs are not sent", "does not retry; tells the user the monthly budget is spent", "re-running the same batch later only does the missing jobs"]},
+  {"id": "s4-start-end-frames", "prompt": "Làm clip 5 giây: bắt đầu từ dau.png, kết thúc đúng ở cuoi.png.",
+   "assertions": ["Omni 1.2 mode i2v with both images", "suggests a draft or dry-run and/or asks to confirm before spending"]},
+  {"id": "s5-keep-reference-bytes", "prompt": "30 more scenes with the same character; nhan_vat.png is 4000 px and the script would normally downscale it.",
+   "assertions": ["keeps nhan_vat.png byte-identical", "explains that the server reuses uploads by file content"]}
+ ],
+ "trigger_queries": [
+  {"query": "gen cho mình 38 ảnh storyboard 2K dùng chung ảnh nhân vật này", "should_trigger": true},
+  {"query": "tạo video 5 giây từ ảnh đầu và ảnh cuối, mượt thôi", "should_trigger": true},
+  {"query": "make a 360p draft clip of a fox in snow with veo", "should_trigger": true},
+  {"query": "nối dài video này thêm 4 giây", "should_trigger": true},
+  {"query": "agent gen ảnh chậm quá, 10 phút mới được 4 ảnh, làm sao chạy song song", "should_trigger": true},
+  {"query": "job tạo ảnh hôm qua bị mất kết nối, lấy lại kết quả giúp mình", "should_trigger": true},
+  {"query": "kiểm tra xem key của mình được dùng model nào", "should_trigger": true},
+  {"query": "tại sao server báo Failed to obtain reCAPTCHA token for image upload", "should_trigger": false, "use_instead": "flow2api-gateway-ops"},
+  {"query": "restart server flow2api giúp mình", "should_trigger": false, "use_instead": "flow2api-gateway-ops"},
+  {"query": "tài khoản số 5 bị needs_login", "should_trigger": false, "use_instead": "flow2api-gateway-ops"},
+  {"query": "thêm model mới vào MODEL_CONFIG của gateway", "should_trigger": false, "use_instead": "flow2api-gateway-ops"},
+  {"query": "vẽ sơ đồ sequence cho luồng đăng nhập", "should_trigger": false},
+  {"query": "trang web load chậm, tối ưu giúp", "should_trigger": false},
+  {"query": "so sánh giá Veo 3 với Sora 2 cho quảng cáo", "should_trigger": false},
+  {"query": "viết script Python đọc CSV và vẽ biểu đồ", "should_trigger": false}
+ ]
+}

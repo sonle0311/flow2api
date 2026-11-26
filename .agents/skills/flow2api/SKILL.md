@@ -1,6 +1,6 @@
 ---
 name: flow2api
-description: Generates images and videos through the user's own Flow2API gateway (Nano Banana / Gemini image, Omni 1.2, Veo 3.1) from any project, including cheap 360p drafts, video extend and video edit. Use when the user asks to "gen ảnh", "tạo ảnh AI", "tạo video AI", make character art, keyframes, thumbnails, image edits, image-to-video, reference-to-video, or to extend or edit a Flow video, or mentions Flow2API, Veo, Omni or nano banana. Also use to check the gateway connection, see which models a key may use, or recover a job after a dropped connection. Every generation is paid, so never run one the user did not ask for. Not for operating or debugging the gateway server itself (use flow2api-gateway-ops).
+description: Generates images and videos through the user's own Flow2API gateway (Nano Banana / Gemini image, Omni 1.2, Veo 3.1) from any project, one at a time or in large parallel batches, including cheap 360p drafts, start and end frames, video extend and edit. Use when the user asks to "gen ảnh", "tạo ảnh AI", "tạo video AI", make character art, keyframes, storyboards, thumbnails, image edits, image-to-video or reference-to-video, produce dozens of images, or extend or edit a Flow video, or mentions Flow2API, Veo, Omni or nano banana. Also use to check the gateway connection, see which models a key may use, or recover a job after a dropped connection. Every generation is paid, so never run one the user did not ask for. Not for operating or debugging the gateway server itself (use flow2api-gateway-ops).
 license: Proprietary
 metadata:
   project: flow2api
@@ -20,57 +20,71 @@ Script đọc `FLOW2API_BASE_URL` (mặc định `http://localhost:8000`, không
 mkdir -p ~/.config/flow2api && printf 'Flow2API key: ' && IFS= read -rs K && printf 'FLOW2API_BASE_URL=http://localhost:8000\nFLOW2API_API_KEY=%s\n' "$K" > ~/.config/flow2api/env && chmod 600 ~/.config/flow2api/env && unset K && echo
 ```
 
+## Quy trình chuẩn
+
+1. `python3 $S check` (miễn phí): key có dùng được không, model key này được dùng, model sắp bị gỡ, có job API không.
+2. **Lập kế hoạch rồi hỏi**: số sản phẩm, model, cỡ, ước tính thời gian và credit (xem [references/models-and-costs.md](references/models-and-costs.md)). Với lô lớn, video hoặc model đắt, chờ người dùng đồng ý trước khi gửi. Dùng `--dry-run` để kiểm tra miễn phí.
+3. **Một sản phẩm** thì dùng lệnh đơn. **Hai sản phẩm trở lên thì dùng `batch`** (mục dưới), không viết vòng lặp gọi từng lệnh.
+4. Soi kết quả (tay, mặt, chữ lạ) trước khi đưa người dùng; làm lại đúng phần hỏng.
+
 ## Lệnh
 
 ```bash
 S=~/.claude/skills/flow2api/scripts/flow2api.py
-python3 $S check      # miễn phí, chạy đầu tiên: key, model key này được dùng, model sắp bị gỡ, có job API không
-python3 $S models     # bảng model/mode/aspect/giây/số ảnh
+python3 $S check                 # miễn phí, chạy đầu tiên
+python3 $S models                # bảng model/mode/aspect/giây/số ảnh
 python3 $S image "prompt" --aspect 9:16 --size 2K --out <thư-mục> --name <tên>
 python3 $S image "giữ nhân vật, đổi bối cảnh" --ref nhanvat.png --out ...        # ảnh thành ảnh
 python3 $S video "prompt" --aspect 9:16 --duration 8 --out ...                   # Omni 1.2, mặc định
 python3 $S video "prompt" --draft --duration 3 --out ...                         # nháp 360p, 1/3 credit
 python3 $S video "camera chậm" --ref a.png --ref b.png --out ...                 # Omni: 0–10 ảnh tham chiếu
-python3 $S video "ngày chuyển thành đêm" --mode i2v --ref dau.png [--ref cuoi.png] --duration 5 --out ...   # Omni Frames: hình đầu, hoặc đầu + cuối
-python3 $S video "..." --draft --mode i2v --ref dau.png --ref cuoi.png --duration 3 --out ...             # Frames nháp 360p
-python3 $S video "..." --model veo-3.1-lite --mode i2v --ref dau.png [--ref cuoi.png]
+python3 $S video "ngày thành đêm" --mode i2v --ref dau.png [--ref cuoi.png] --duration 5 --out ...   # hình đầu, hoặc đầu + cuối
 python3 $S video "đi tiếp" --mode extend --source <media_id> --duration 5 --out ...   # nối thêm 3–10 s
 python3 $S video "đổi màu áo" --mode edit --source <media_id> --duration <độ dài video nguồn>
 python3 $S jobs                  # job gần đây của key này
 python3 $S job <job_id> --out .. # lấy kết quả job đã gửi (sau khi mất kết nối)
-python3 $S batch jobs.jsonl --parallel 3   # mỗi dòng: {"kind":"image","prompt":"...","aspect":"9:16","ref":["a.png"],"out":"...","name":"..."}
+python3 $S batch jobs.jsonl      # nhiều sản phẩm song song (mục dưới)
 ```
 
-- Thêm `--dry-run` vào `image`, `video`, `batch`: kiểm tra và in request, không gửi gì, miễn phí.
-- Prompt dài: `--prompt-file file.txt`.
-- Mỗi kết quả lưu `<name>.png|.mp4` và `<name>.json` (model, cấu hình, prompt, `job_id`, `media_id`). **Giữ `media_id`** để extend/edit sau này.
-- Tiến trình in ra stderr; `<name>.job` ghi job id ngay khi server nhận.
+- `--dry-run` (cho `image`, `video`, `batch`): kiểm tra và in request, không gửi gì. `--prompt-file file.txt` cho prompt dài.
+- Mỗi kết quả lưu `<name>.png|.mp4` và `<name>.json` (model, cấu hình, prompt, `job_id`, `media_id`). **Giữ `media_id`** để extend/edit. `<name>.job` ghi job id ngay khi server nhận.
+- Model, thời lượng, chi phí: [references/models-and-costs.md](references/models-and-costs.md). Mặc định: video `omni-1.2-flash`, ảnh `gemini-3.1-flash-image` 1K.
 
-## Chọn model
+## Làm nhiều ảnh hoặc video: dùng `batch`, đừng chạy tuần tự
 
-Chạy `models` thay vì nhớ bảng. Điều cần biết để chọn:
+Mỗi lệnh `image`/`video` đơn chờ xong rồi mới trả về, nên gọi liên tiếp là chạy **từng cái một**. Gateway có nhiều tài khoản và xử lý song song được. Đo ngày 26/11/2026 với `gemini-3.1-flash-image` 1K và một ảnh tham chiếu: 3 ảnh tuần tự mất 140 s (47 s mỗi ảnh); `batch` 12 ảnh, 6 cùng lúc, mất 114 s (9,5 s mỗi ảnh, 0 lỗi). Một phiên 38 ảnh 2K có 1–3 ảnh tham chiếu chạy tuần tự mất khoảng 1 giờ (87–125 s mỗi ảnh) trong khi server gần như rảnh.
 
-- **Video mặc định `omni-1.2-flash`** (`--mode auto`): 3–15 s ở cả 16:9 và 9:16, tự chọn tạo từ chữ hay từ 0–10 ảnh tham chiếu. 11–15 s cần tài khoản có gói Google AI Plus, Pro hoặc Ultra.
-- **Frames to Video của Omni 1.2** (`--mode i2v`): 1 ảnh là hình đầu, 2 ảnh là hình đầu và hình cuối (video bắt đầu đúng ảnh đầu và kết thúc đúng ảnh cuối; đã kiểm bằng cách trích khung). Hình cuối chỉ có ở 3–10 s; 11–15 s chỉ nhận hình đầu. Không có `--mode i2v` thì ảnh được hiểu là ảnh tham chiếu (`auto`), không phải khung hình. Đo ngày 25/11/2026: 720p 3 s 9 credit, 4 s 12; 360p 3 s 3.
-- **`--draft`** (Omni 1.2 360p) tốn 1/3 credit: dùng để thử prompt và bố cục trước khi gen bản chuẩn.
-- **Veo 3.1** (`veo-3.1-lite`, `veo-3.1-fast`, `veo-3.1-quality`): chọn `--mode` rõ ràng. `t2v` 4/6/8 s, `i2v` 4/6 s với 1–2 ảnh (đầu, cuối), `r2v` 8 s với 1–3 ảnh (không có ở quality). Script không đoán `i2v` hay `r2v` khi có `--ref`, vì đoán sai là mất tiền. Chi phí đo ngày 25/11/2026 trên tài khoản Ultra: lite 4 s khoảng 5 credit, fast 4 s 10, fast r2v 8 s 20, **quality 4 s 100**; hỏi người dùng trước khi dùng quality. Quyền truy cập theo từng tài khoản và từng model; nếu một tài khoản bị từ chối, gateway tự chuyển sang tài khoản khác.
-- **`veo-3.1-lite-lower-priority`** (Veo 3.1 Lite [Lower Priority]): **0 credit**, cùng tổ hợp với Lite (`t2v` 4/6/8 s, `i2v` 4/6 s, `r2v` 8 s). Đo ngày 25/11/2026: 4 job (t2v 4 s, t2v 8 s, i2v, r2v) thành công, số dư mọi tài khoản không đổi, thời gian 49–149 s (Lite thường trong lịch sử: 47–152 s). Flow xếp loại này sau job trả phí nên lúc đông có thể chờ lâu hơn; mẫu đo hiện chưa cho thấy chậm hơn. Dùng khi cần thử nhiều lần.
-- **Model Flow sắp gỡ**: `check` liệt kê kèm ngày. Đừng chọn chúng cho việc mới.
-- **extend/edit** (chỉ Omni 1.2, 720p): chạy trên đúng tài khoản và project đã tạo video nguồn. Video làm ngoài server này thì thêm `--source-project <project id>`. `extend` không nhận ảnh. `edit` cần `--duration` đúng độ dài video nguồn.
-- **Ảnh**: `gemini-3.1-flash-image` (mặc định, 1K), `gemini-3.1-flash-lite-image` (nhanh, rẻ), `gemini-3.0-pro-image` (đẹp nhất). Cỡ 2K/4K và model pro tuỳ gói của tài khoản; nếu thiếu quyền, lỗi đến ngay lúc bắt đầu, chưa tạo gì.
+```bash
+# jobs.jsonl: mỗi dòng một sản phẩm, luôn đặt "name" duy nhất
+{"kind":"image","prompt":"scene 01 ...","ref":["nhanvat.png"],"model":"gemini-3.1-flash-image","aspect":"16:9","size":"2K","out":"out","name":"scene-01"}
+{"kind":"video","prompt":"...","mode":"i2v","ref":["dau.png","cuoi.png"],"duration":5,"out":"out","name":"clip-01"}
+python3 $S batch jobs.jsonl --dry-run   # kiểm tra toàn bộ, đếm job sẽ chạy / đã có, chưa gửi gì
+python3 $S batch jobs.jsonl             # mặc định 6 cùng lúc (--parallel N, tối đa 9)
+```
+
+- **Chạy nền** (công cụ chạy lệnh nền của agent, hoặc `... > batch.log 2>&1 &`) và báo tiến độ cho người dùng; mỗi job xong in một dòng, kết quả cũng ghi vào `jobs.jsonl.results.jsonl`. Đừng chặn cả phiên chờ và đừng poll dày: xem log mỗi vài phút.
+- **Chạy lại không tốn thêm**: job có `name` đã có file kết quả thì bị bỏ qua. Bị ngắt hay có job lỗi thì chạy lại đúng lệnh cũ; chỉ phần thiếu được gửi. `--force` mới tạo lại tất cả. Job không có `name` sẽ bị tạo lại mỗi lần.
+- **Dừng sớm**: `credit_budget_exceeded`, `model_not_allowed` hoặc 401 làm cả lô dừng gửi tiếp (mọi job còn lại sẽ lỗi y hệt); script in lý do và số job chưa chạy.
+- Số 6 đã đo; lên 9 là giới hạn của script. Nếu thấy nhiều lỗi `UNUSUAL_ACTIVITY` hay 429 thì hạ `--parallel` xuống 3–4.
+- Một job video có thể gửi cùng lô với ảnh; video giới hạn song song riêng (mặc định 6).
+
+## Ảnh tham chiếu: gửi đúng file cũ để server dùng lại
+
+Mỗi ảnh tham chiếu (cả hình đầu/cuối của Frames) phải được tải lên Flow trước khi gen, 15–17 s mỗi ảnh. Server nhớ ảnh đã tải theo **nội dung file** (SHA-256), từng tài khoản và project (mỗi tài khoản xoay 4 project, nên một ảnh mới tải tối đa 4 lần cho mỗi tài khoản rồi từ đó gần như 0 s; đo thật: 50–78 s tải ảnh giảm còn 7 ms).
+
+- Dùng **cùng một file, không đổi byte** cho mọi lần: không đổi kích thước, không lưu lại, không xoá metadata giữa các lần gọi. Chỉ cần đổi 1 byte là bị coi ảnh mới.
+- Đặt ảnh tham chiếu cố định (một bảng nhân vật, một ảnh phong cách) rồi truyền cùng file ở mọi job của lô, thay vì mỗi cảnh một biến thể.
+- Nhiều job cùng ảnh mới chạy song song chỉ tải một lần (server gộp lại).
 
 ## Quy tắc
 
-1. **Tính phí.** Chỉ chạy `image`/`video` khi người dùng đã yêu cầu đúng sản phẩm đó. Với lô lớn hoặc video, nói trước số lần tạo và chờ đồng ý; thử bằng `--draft` hoặc `--dry-run` trước khi gen bản chuẩn. `check`, `models`, `jobs`, `--dry-run` chạy thoải mái.
-2. **Không gửi lại mù quáng.** Script gửi qua job API kèm `Idempotency-Key`, nên mất kết nối hay thử lại không trả phí hai lần. Mất kết nối hoặc hết giờ chờ không có nghĩa là server đã dừng: chạy `jobs`, rồi `job <id>` để lấy kết quả. Không tự gen lại.
-3. **429 và quyền.** Script tự chờ `Retry-After` của server (tối đa 4 lần). Hai lỗi không retry, báo người dùng:
-   - `credit_budget_exceeded`: key hết hạn mức credit của tháng, tới đầu tháng sau mới dùng lại.
-   - `model_not_allowed` (403): key không được dùng model đó; `check` cho biết model nào được phép.
-4. **Lỗi khác:** 401 sai key; 400/422 sai tổ hợp, thiếu prompt hoặc model đã bị Flow gỡ (giữ lựa chọn của người dùng, sửa đúng chỗ sai); 503 không tài khoản nào phục vụ model; 502/504 lỗi upstream. Job báo "server khởi động lại": credit có thể đã trừ, xem `jobs` hoặc trang quản trị trước khi gửi lại.
-5. **Giữ nhân vật giống nhau qua nhiều ảnh:** tạo một ảnh gốc nhân vật (toàn thân, nền trơn), cho người dùng duyệt, rồi truyền nó bằng `--ref` ở mọi ảnh sau; prompt ghi rõ "giữ nguyên khuôn mặt, kiểu tóc, trang phục của nhân vật trong ảnh".
+1. **Tính phí.** Chỉ chạy `image`/`video`/`batch` khi người dùng đã yêu cầu đúng sản phẩm đó và đồng ý kế hoạch. `check`, `models`, `jobs`, `--dry-run` chạy thoải mái. Thử bằng `--draft` hoặc `flash-lite` trước khi gen bản chuẩn.
+2. **Không gửi lại mù quáng.** Script gửi qua job API kèm `Idempotency-Key`, nên mất kết nối hay thử lại không trả phí hai lần. Mất kết nối hoặc hết giờ chờ không có nghĩa là server đã dừng: chạy `jobs`, rồi `job <id>` để lấy kết quả. Không tự gen lại; với lô thì chạy lại lệnh `batch` cũ.
+3. **429 và quyền.** Script tự chờ `Retry-After` của server (tối đa 4 lần). Hai lỗi không retry, báo người dùng: `credit_budget_exceeded` (key hết hạn mức credit tháng, tới đầu tháng sau mới dùng lại) và `model_not_allowed` (403, `check` cho biết model nào được phép).
+4. **Lỗi khác:** 401 sai key; 400/422 sai tổ hợp, thiếu prompt hoặc model đã bị Flow gỡ (giữ lựa chọn của người dùng, sửa đúng chỗ sai); 503 không tài khoản nào phục vụ model; 502/504 lỗi upstream. Job báo "server khởi động lại": credit có thể đã trừ, xem `jobs` hoặc trang quản trị trước khi gửi lại. `UNUSUAL_ACTIVITY` thỉnh thoảng xuất hiện ở lần thử đầu và server tự thử lại; chỉ đáng lo khi lặp lại liên tục.
+5. **Giữ nhân vật giống nhau:** tạo một ảnh gốc nhân vật (toàn thân, nền trơn), cho người dùng duyệt, rồi truyền nó bằng `--ref` ở mọi ảnh sau; prompt ghi rõ "giữ nguyên khuôn mặt, kiểu tóc, trang phục của nhân vật trong ảnh".
 6. **Prompt:** viết bằng tiếng Anh cho ổn định; nêu phong cách, khung hình, ánh sáng và những thứ không muốn có (chữ, logo, watermark). Không tạo người thật dễ nhận diện, nội dung giả mạo hay thương hiệu của người khác.
-7. **Soi kết quả** bằng công cụ đọc ảnh (tay, mặt, chữ lạ) trước khi đưa người dùng. Ảnh Gemini có dấu ✦ nhỏ ở góc dưới phải: cắt hoặc che trước khi dùng.
-8. Video không có độ phân giải tuỳ chọn ngoài `--draft`, và không phóng to video có sẵn được.
+7. **Chọn đúng việc tốn thời gian:** cỡ 2K thêm ~20 s mỗi ảnh; `flash-lite` nhanh gấp ~3 lần `flash`. Hỏi người dùng có cần 2K/model đẹp cho cả lô không, hay chỉ cho bản cuối.
 
 ## Khi gateway đổi
 

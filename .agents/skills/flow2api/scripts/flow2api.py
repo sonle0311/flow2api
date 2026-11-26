@@ -33,6 +33,7 @@ DEFAULT_VIDEO_MODEL = "omni-1.2-flash"
 DRAFT_FAMILY = "omni-1.2-flash"           # 360p drafts are explicit ids omni-1.2-flash-360p-{N}s-{landscape|portrait}
 DRAFT_DURATIONS = list(range(3, 16))
 DRAFT_MAX_REFS = 10
+DEFAULT_PARALLEL = 6        # batch: how many generations run at once (the gateway spreads them over its accounts)
 FRAMES_END_MAX_SECONDS = 10   # Omni 1.2 frames: an end frame (2 images) exists for 3-10 s, 11-15 s take a start frame only
 ASPECT_WORDS = {"landscape": "16:9", "portrait": "9:16", "square": "1:1", "four-three": "4:3", "three-four": "3:4"}
 MAX_PAR = {"image": int(os.environ.get("FLOW2API_MAX_PARALLEL_IMAGE", 9)), "video": int(os.environ.get("FLOW2API_MAX_PARALLEL_VIDEO", 6))}
@@ -686,29 +687,81 @@ def cmd_jobs(a):
     return 0
 
 
+def already_done(job):
+    """The metadata of an earlier successful run of this job (same out dir and name), or None."""
+    name = job.get("name")
+    if not name:
+        return None
+    try:
+        meta = json.loads((pathlib.Path(job.get("out") or "flow2api-out").expanduser() / (name + ".json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return meta if meta.get("file") and pathlib.Path(meta["file"]).is_file() else None
+
+
 def cmd_batch(a):
     contract = load_contract()
-    jobs = [json.loads(l) for l in pathlib.Path(a.jobs).read_text(encoding="utf-8").splitlines() if l.strip()]
-    for j in jobs:   # validate everything before sending anything
-        plan_request(j, contract)
+    try:
+        jobs = [json.loads(l) for l in pathlib.Path(a.jobs).read_text(encoding="utf-8").splitlines() if l.strip()]
+    except (OSError, ValueError) as e:
+        print("LỖI: không đọc được %s: %s (mỗi dòng là một JSON)" % (a.jobs, e), file=sys.stderr); return 1
+    for n, j in enumerate(jobs, 1):   # validate everything before sending anything
+        try:
+            plan_request(j, contract)
+        except (Flow2APIError, KeyError) as e:
+            print("LỖI ở job #%d (%s): %s. Chưa gửi gì." % (n, j.get("name") or "không có name", e), file=sys.stderr); return 1
+    todo = [i for i, j in enumerate(jobs) if a.force or not already_done(j)]
+    unnamed = sum(1 for j in jobs if not j.get("name"))
     if a.dry_run:
-        print("%d job hợp lệ; chưa gửi gì." % len(jobs)); return 0
+        print("%d job hợp lệ: %d sẽ chạy, %d đã có kết quả (bỏ qua); chưa gửi gì." % (len(jobs), len(todo), len(jobs) - len(todo)))
+        if unnamed:
+            print("%d job không có \"name\": chạy lại sẽ tạo lại chúng. Đặt name để chạy lại được an toàn." % unnamed)
+        return 0
     root, key = load_config()
     if not key:
         print("Thiếu FLOW2API_API_KEY.", file=sys.stderr); return 2
     results = [None] * len(jobs)
+    log_path = pathlib.Path(a.jobs + ".results.jsonl")
+    lock, stop, why = threading.Lock(), threading.Event(), []
+    started = time.time()
+    workers = max(1, min(a.parallel, MAX_PAR["image"] + MAX_PAR["video"]))
+    FATAL = {"credit_budget_exceeded", "model_not_allowed"}
+
+    def note(i, entry):
+        entry = dict(entry, index=i, name=jobs[i].get("name"))
+        with lock, open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def work(i):
-        time.sleep(0.4 * i)   # stagger submissions
+        tag = "[%d/%d]" % (i + 1, len(jobs))
+        done = None if a.force else already_done(jobs[i])
+        if done:
+            results[i] = dict(done, skipped=True); print("%s đã có, bỏ qua: %s" % (tag, done["file"]), flush=True); return
+        if i in todo[:workers]:
+            _sleep(0.4 * todo.index(i))   # stagger only the first wave
+        if stop.is_set():
+            results[i] = {"error": "chưa chạy: " + why[0], "not_started": True}; print("%s chưa chạy (%s)" % (tag, why[0]), flush=True); return
+        t0 = time.time()
         try:
-            results[i] = run_one(jobs[i], root, key, quiet=True, transport=a.transport, timeout=a.timeout, contract=contract); print("[%d/%d] xong: %s" % (i + 1, len(jobs), results[i]["file"]), flush=True)
+            results[i] = run_one(jobs[i], root, key, quiet=True, transport=a.transport, timeout=a.timeout, contract=contract)
+            print("%s xong sau %ds: %s" % (tag, time.time() - t0, results[i]["file"]), flush=True)
+            note(i, {"ok": True, "file": results[i]["file"], "seconds": round(time.time() - t0), "job_id": results[i].get("job_id")})
         except Exception as e:
-            results[i] = {"error": redact(str(e), key)}; print("[%d/%d] lỗi: %s" % (i + 1, len(jobs), results[i]["error"]), flush=True)
-    with ThreadPoolExecutor(max_workers=max(1, min(a.parallel, MAX_PAR["image"] + MAX_PAR["video"]))) as ex:
+            results[i] = {"error": redact(str(e), key)}; print("%s lỗi: %s" % (tag, results[i]["error"]), flush=True)
+            note(i, {"ok": False, "error": results[i]["error"], "seconds": round(time.time() - t0)})
+            # Every remaining job would fail the same way and cost a request: stop submitting.
+            if getattr(e, "code", None) in FATAL or getattr(e, "status", None) == 401:
+                why.append(results[i]["error"][:120]); stop.set()
+    with ThreadPoolExecutor(max_workers=workers) as ex:
         list(ex.map(work, range(len(jobs))))
-    ok = sum(1 for r in results if r and "error" not in r)
-    print("Hoàn tất %d/%d." % (ok, len(jobs)))
-    return 0 if ok == len(jobs) else 1
+    ok = sum(1 for r in results if r and "error" not in r and not r.get("skipped"))
+    skipped = sum(1 for r in results if r and r.get("skipped"))
+    not_started = sum(1 for r in results if r and r.get("not_started"))
+    failed = [jobs[i].get("name") or "#%d" % (i + 1) for i, r in enumerate(results) if r and "error" in r and not r.get("not_started")]
+    print("Hoàn tất sau %ds: %d xong, %d đã có từ trước, %d lỗi, %d chưa chạy (tổng %d)." % (time.time() - started, ok, skipped, len(failed), not_started, len(jobs)))
+    if failed or not_started:
+        print("Chạy lại đúng lệnh này để làm nốt: job đã xong sẽ được bỏ qua, không tính phí lại. Lỗi: %s" % ", ".join(failed[:12]))
+    return 0 if not failed and not not_started else 1
 
 
 def main(argv=None):
@@ -736,7 +789,8 @@ def main(argv=None):
             p.add_argument("--source-project", help="project Flow chứa video nguồn, nếu video không tạo qua server này")
     p = sub.add_parser("job"); p.add_argument("job_id"); p.add_argument("--out", default="flow2api-out"); p.add_argument("--name"); p.add_argument("--timeout", type=int, default=3600)
     p = sub.add_parser("jobs"); p.add_argument("--limit", type=int, default=20)
-    p = sub.add_parser("batch"); p.add_argument("jobs"); p.add_argument("--parallel", type=int, default=3); common(p)
+    p = sub.add_parser("batch"); p.add_argument("jobs"); p.add_argument("--parallel", type=int, default=DEFAULT_PARALLEL, help="số job chạy cùng lúc (mặc định %d)" % DEFAULT_PARALLEL)
+    p.add_argument("--force", action="store_true", help="tạo lại cả job đã có kết quả (mặc định bỏ qua để không trả phí hai lần)"); common(p)
     a = ap.parse_args(argv)
     if a.cmd == "check":
         return cmd_check(a)

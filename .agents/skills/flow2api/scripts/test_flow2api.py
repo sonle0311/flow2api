@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for flow2api.py. No paid generation: a local fake server answers every request.
 Run: python3 test_flow2api.py   (Python 3.9+, standard library only)"""
-import contextlib, io, json, os, pathlib, sys, tempfile, threading, unittest
+import contextlib, io, json, os, pathlib, sys, tempfile, threading, time, unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
@@ -18,12 +18,13 @@ def completion(content):
 
 class Fake(BaseHTTPRequestHandler):
     """scenario: ok | legacy | busy | budget | denied | restart | captcha_once | drop_once"""
-    scenario = "ok"; calls = []; jobs = {}; idem = {}; busy_left = 0; polls = {}; failed_once = False; dropped = False; kind = "image"
+    scenario = "ok"; calls = []; jobs = {}; idem = {}; busy_left = 0; polls = {}; failed_once = False; dropped = False; kind = "image"; live = 0; peak = 0
 
     @classmethod
     def reset(cls, scenario="ok", kind="image", busy_left=0):
         cls.scenario, cls.kind, cls.busy_left = scenario, kind, busy_left
         cls.calls, cls.jobs, cls.idem, cls.polls, cls.failed_once, cls.dropped = [], {}, {}, {}, False, False
+        cls.live = cls.peak = 0
 
     def log_message(self, *a):
         pass
@@ -57,10 +58,12 @@ class Fake(BaseHTTPRequestHandler):
             jid = path.rsplit("/", 1)[1]
             Fake.polls[jid] = Fake.polls.get(jid, 0) + 1
             if Fake.polls[jid] == 1:
+                time.sleep(0.05)   # long enough for concurrent jobs to overlap
                 return self._send(200, {"id": jid, "status": "running"}, {"Retry-After": "5"})
             if Fake.scenario == "restart" or (Fake.scenario == "captcha_once" and Fake.jobs.get(jid) == 1):
                 msg, code = ("server restarted", "server_restarted") if Fake.scenario == "restart" else ("reCAPTCHA evaluation failed", "upstream_error")
                 return self._send(200, {"id": jid, "status": "failed", "model": "m", "error": {"message": msg, "code": code, "status_code": 500}})
+            Fake.live -= 1
             return self._send(200, {"id": jid, "status": "succeeded", "model": "m", "result": completion(self._media()), "output_url": "x"})
         self._send(404, {"detail": "nope"})
 
@@ -86,6 +89,7 @@ class Fake(BaseHTTPRequestHandler):
                 return self._send(200, {"id": Fake.idem[idem], "status": "running"}, {"Idempotent-Replayed": "true"})
             jid = "job_%d" % (len(Fake.jobs) + 1)
             Fake.jobs[jid] = len(Fake.jobs) + 1
+            Fake.live += 1; Fake.peak = max(Fake.peak, Fake.live)
             Fake.idem[idem] = jid
             return self._send(202, {"id": jid, "status": "queued"}, {"Location": "/v1/jobs/" + jid})
         if self.path == "/v1/chat/completions":
@@ -345,6 +349,80 @@ class WireTests(Base):
         doc = json.loads(out.getvalue())
         self.assertEqual((doc["sent"], Fake.calls), (False, []))
         self.assertEqual(doc["request"]["generationConfig"]["videoConfig"], {"durationSeconds": 3, "aspectRatio": "9:16", "mode": "auto"})
+
+    def batch(self, jobs, *argv, out=None):
+        """Run `flow2api.py batch` against the fake server; returns (exit code, stdout)."""
+        path = pathlib.Path(self.tmp) / ("jobs-%d.jsonl" % len(list(pathlib.Path(self.tmp).glob("jobs-*.jsonl"))))
+        path.write_text("\n".join(json.dumps(dict(j, out=out or self.tmp)) for j in jobs) + "\n", encoding="utf-8")
+        text = io.StringIO()
+        os.environ["FLOW2API_BASE_URL"], os.environ["FLOW2API_API_KEY"] = self.root, KEY
+        try:
+            with contextlib.redirect_stdout(text):
+                code = F.main(["batch", str(path), *argv])
+        finally:
+            del os.environ["FLOW2API_BASE_URL"], os.environ["FLOW2API_API_KEY"]
+        return code, text.getvalue(), path
+
+    def named(self, prefix, count):
+        return [{"kind": "image", "prompt": "p%d" % i, "name": "%s-%d" % (prefix, i)} for i in range(count)]
+
+    def test_batch_runs_jobs_at_the_same_time_but_not_more_than_asked(self):
+        code, text, _ = self.batch(self.named("par", 8), "--parallel", "4")
+        self.assertEqual(code, 0, text)
+        self.assertEqual(len(self.posts()), 8)
+        self.assertGreater(Fake.peak, 1)    # a sequential loop would never overlap
+        self.assertLessEqual(Fake.peak, 4)
+
+    def test_a_rerun_skips_finished_jobs_and_pays_for_none_twice(self):
+        jobs = self.named("rerun", 3)
+        code, _, path = self.batch(jobs)
+        self.assertEqual((code, len(self.posts())), (0, 3))
+        code, text, _ = self.batch(jobs)
+        self.assertEqual((code, len(self.posts())), (0, 3), "nothing was sent the second time")
+        self.assertIn("3 đã có từ trước", text)
+        self.batch(jobs, "--force")
+        self.assertEqual(len(self.posts()), 6)
+
+    def test_a_partial_run_only_does_the_missing_jobs(self):
+        jobs = self.named("part", 4)
+        self.batch(jobs[:2])
+        (pathlib.Path(self.tmp) / "part-1.json").unlink()   # one result was lost
+        before = len(self.posts())
+        code, text, _ = self.batch(jobs)
+        self.assertEqual(len(self.posts()) - before, 3)
+        self.assertIn("1 đã có từ trước", text)
+
+    def test_batch_dry_run_reports_what_would_run_and_sends_nothing(self):
+        self.batch(self.named("dry", 2))
+        before = len(Fake.calls)
+        code, text, _ = self.batch(self.named("dry", 2) + [{"kind": "image", "prompt": "no name"}], "--dry-run")
+        self.assertEqual((code, len(Fake.calls)), (0, before))
+        self.assertIn("1 sẽ chạy, 2 đã có kết quả", text)
+        self.assertIn("không có \"name\"", text)
+
+    def test_a_spent_budget_stops_the_rest_of_the_batch_instead_of_failing_each_job(self):
+        Fake.reset("budget")
+        code, text, path = self.batch(self.named("budget", 10), "--parallel", "2")
+        self.assertEqual(code, 1)
+        self.assertLessEqual(len(self.posts()), 2, "only the first wave was sent")
+        self.assertIn("chưa chạy", text)
+        self.assertIn("hạn mức credit tháng", text)
+
+    def test_every_result_is_logged_next_to_the_jobs_file(self):
+        code, _, path = self.batch(self.named("log", 2))
+        lines = [json.loads(l) for l in pathlib.Path(str(path) + ".results.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(sorted(l["name"] for l in lines), ["log-0", "log-1"])
+        self.assertTrue(all(l["ok"] and l["file"] and l["job_id"] for l in lines))
+
+    def test_an_invalid_job_stops_the_batch_before_anything_is_sent(self):
+        jobs = self.named("bad", 3)
+        jobs[1]["ref"] = ["/nonexistent/reference.png"]
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            code, text, _ = self.batch(jobs)
+        self.assertEqual((code, len(self.posts())), (1, 0))
+        self.assertIn("job #2 (bad-1)", errors.getvalue())
+        self.assertIn("Chưa gửi gì", errors.getvalue())
 
     def test_preflight_warns_about_retiring_and_invisible_models(self):
         msgs = []
