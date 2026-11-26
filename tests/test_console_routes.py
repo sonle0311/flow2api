@@ -75,3 +75,12 @@ def test_every_console_file_is_on_the_allowlist():
 def test_existing_pages_keep_their_guard():
     for path in ("/manage", "/test"):
         assert get(path).status_code == 302
+
+
+def test_the_console_sidebar_links_to_the_agent_skill_tab_in_every_language():
+    import json
+    import re
+    html = (CONSOLE / "index.html").read_text(encoding="utf-8")
+    assert re.search(r'<a href="/manage#skills">.*?data-t="nav\.skills"', html, re.S)
+    catalog = json.loads((CONSOLE / "locales.json").read_text(encoding="utf-8"))
+    assert all(catalog[language].get("nav.skills") for language in ("en", "vi", "zh-CN"))
