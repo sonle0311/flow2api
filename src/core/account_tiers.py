@@ -7,6 +7,36 @@ PAYGATE_TIER_NOT_PAID = "PAYGATE_TIER_NOT_PAID"
 PAYGATE_TIER_ONE = "PAYGATE_TIER_ONE"
 PAYGATE_TIER_TWO = "PAYGATE_TIER_TWO"
 
+# A balance that falls to a tenth or less of a balance of at least this many credits within one
+# reading is a plan change or a reset, not spending: no request costs thousands of credits.
+BALANCE_COLLAPSE_MIN_BEFORE = 2000
+BALANCE_COLLAPSE_RATIO = 0.1
+
+
+def is_balance_collapse(before, after) -> bool:
+    """True when the balance dropped so far at once that the account's plan most likely changed."""
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in (before, after)):
+        return False
+    return before >= BALANCE_COLLAPSE_MIN_BEFORE and 0 <= after <= before * BALANCE_COLLAPSE_RATIO
+
+
+# Text of Flow's plan chip (flow-user-tier-chip) in the languages Flow shows it in, checked as substrings.
+_CHIP_FREE = ("FREE", "MIỄN PHÍ", "MIEN PHI", "免费", "免費", "GRATIS", "GRATUIT")
+_CHIP_PAID = ("PLUS", "PRO")
+_CHIP_ULTRA = ("ULTRA",)
+
+
+def tier_from_chip_text(text: Optional[str]) -> Optional[str]:
+    """The paygate tier that Flow's plan chip names, or None when the text is empty or not recognised."""
+    value = " ".join(str(text or "").upper().split())
+    if not value:
+        return None
+    # Order matters: "Google AI Ultra" and "AI Pro" must not be read as free by a stray substring.
+    for words, tier in ((_CHIP_ULTRA, PAYGATE_TIER_TWO), (_CHIP_PAID, PAYGATE_TIER_ONE), (_CHIP_FREE, PAYGATE_TIER_NOT_PAID)):
+        if any(word in value for word in words):
+            return tier
+    return None
+
 
 def normalize_user_paygate_tier(user_paygate_tier: Optional[str]) -> str:
     """Normalize an account tier, defaulting unknown values to free tier."""

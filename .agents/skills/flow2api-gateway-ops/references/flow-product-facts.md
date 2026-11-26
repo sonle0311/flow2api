@@ -10,6 +10,7 @@ Treat the lists below as a dated lead. The live catalog and `MODEL_CONFIG` decid
 - **Veo 3.1 Lite**: text to video and frames 4/6/8 s; ingredients 8 s only. No video-to-video, no extend.
 - **Image models** named by Flow: Nano Banana Pro (default on Ultra), Nano Banana 2 Lite (free default), Nano Banana 2.1.
 - Credits come from the Google AI plan or a daily free grant. The prompt-box settings in Flow show the current cost; check there before quoting a number.
+- **An account's plan** is not in Flow's `/credits` reply (`userPaygateTier` is null). The gateway reads the plan chip (`flow-user-tier-chip .tier-chip`) from the account's browser profile during each sync: the chip is present for Pro and Ultra and absent on a rendered page for the free plan (checked 2026-11-27 on four accounts). A balance that falls 90% or more at once (from 2000 credits or more) triggers an immediate sync and an alert, and is not booked as spending.
 
 ## Retirements
 

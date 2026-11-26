@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, List
 from ..core.database import Database
 from ..core.config import config
 from ..core.account_tiers import (
-    PAYGATE_TIER_NOT_PAID, PAYGATE_TIER_ONE, PAYGATE_TIER_TWO,
+    PAYGATE_TIER_NOT_PAID, PAYGATE_TIER_ONE, PAYGATE_TIER_TWO, is_balance_collapse,
 )
 from ..core.models import Token, Project
 from ..core.logger import debug_logger
@@ -49,6 +49,9 @@ class TokenManager:
         self._last_at_refresh_error: dict[int, str] = {}
         self._protocol_refresher_task: Optional[asyncio.Task] = None
         self.managed_browser = None
+        self.alerts = None
+        self._plan_check_tasks: dict[int, asyncio.Task] = {}
+        self._plan_check_at: dict[int, float] = {}
 
     async def _get_token_lock(
         self,
@@ -1643,6 +1646,8 @@ class TokenManager:
             )
             credits = result.get("credits", 0)
             # 更新数据库
+            if is_balance_collapse(token.credits, credits):
+                self._on_balance_collapse(token, token.credits, credits)
             await self.db.update_token(
                 token_id,
                 credits=credits,
@@ -1657,3 +1662,47 @@ class TokenManager:
             if raise_on_error:
                 raise
             return 0
+
+    PLAN_CHECK_COOLDOWN_SECONDS = 600
+
+    def _on_balance_collapse(self, token: Token, before: int, after: int) -> None:
+        """The balance fell by 90% or more in one reading: the plan probably changed.
+
+        Flow's /credits does not name the plan, so the stored tier would stay wrong. Read the plan chip
+        from the account's browser profile now, and tell the operator.
+        """
+        debug_logger.log_info(
+            f"[PLAN] token {token.id} balance fell from {before} to {after}; checking its plan "
+            f"(stored tier {token.user_paygate_tier})"
+        )
+        if self.alerts is not None:
+            asyncio.ensure_future(self.alerts.announce(
+                f"plan_change:{token.id}",
+                f"Account {token.email} balance fell from {before} to {after} credits; its plan may have changed "
+                f"(stored tier {token.user_paygate_tier or 'unknown'}). Re-reading the plan from Flow.",
+                severity="warning",
+                details={"token_id": token.id, "email": token.email, "before": before, "after": after},
+            ))
+        self.schedule_plan_check(token.id)
+
+    def schedule_plan_check(self, token_id: int) -> bool:
+        """Re-read the account's plan from its browser profile, at most once per cooldown. True if started."""
+        service = self.managed_browser
+        now = time.monotonic()
+        running = self._plan_check_tasks.get(token_id)
+        if service is None or (running is not None and not running.done()):
+            return False
+        if now - self._plan_check_at.get(token_id, -1e9) < self.PLAN_CHECK_COOLDOWN_SECONDS:
+            return False
+        self._plan_check_at[token_id] = now
+
+        async def check() -> None:
+            try:
+                status = await service.get_status(token_id)
+                if status.get("enabled"):
+                    await service.sync(token_id)
+            except Exception as exc:  # noqa: BLE001 - the periodic sync tries again
+                debug_logger.log_error(f"[PLAN] plan check for token {token_id} failed: {exc}")
+
+        self._plan_check_tasks[token_id] = asyncio.ensure_future(check())
+        return True

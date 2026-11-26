@@ -12,9 +12,11 @@ from src.core.models import Token
 
 
 class FakePage:
-    def __init__(self, email="account@example.com", tier="PRO"):
+    def __init__(self, email="account@example.com", tier="PRO", components=20, ready="complete"):
         self.email = email
-        self.tier = tier
+        self.tier = tier  # the plan chip's text; None = the page has no chip
+        self.components = components
+        self.ready = ready
         self.url = "https://flow.google.com/projects"
         self.closed = False
 
@@ -27,13 +29,9 @@ class FakePage:
         return {
             "host": "flow.google.com",
             "email": self.email,
-            "ready": "complete",
-            "user_paygate_tier": {
-                "FREE": "PAYGATE_TIER_NOT_PAID",
-                "PLUS": "PAYGATE_TIER_ONE",
-                "PRO": "PAYGATE_TIER_ONE",
-                "ULTRA": "PAYGATE_TIER_TWO",
-            }.get(self.tier),
+            "ready": self.ready,
+            "components": self.components,
+            "tier_text": self.tier,
         }
 
 
@@ -324,6 +322,28 @@ class ManagedBrowserTests(unittest.IsolatedAsyncioTestCase):
         await self.wait_login()
         args = self.manager.save_managed_browser_cookies.await_args
         self.assertEqual("PAYGATE_TIER_ONE", args.args[1]["user_paygate_tier"])
+
+    async def capture(self, tier, **page_options):
+        context = FakeContext(self.email, tier)
+        context.pages = [FakePage(self.email, tier, **page_options)]
+        token = SimpleNamespace(id=self.token_id, login_account=self.email, email=self.email)
+        return await self.service._capture(token, context)
+
+    async def test_no_plan_chip_on_a_rendered_page_means_the_free_plan(self):
+        error, result = await self.capture(None)
+        self.assertEqual("", error)
+        self.assertEqual("PAYGATE_TIER_NOT_PAID", result["user_paygate_tier"])
+
+    async def test_no_plan_chip_on_a_page_that_has_not_rendered_changes_nothing(self):
+        for options in ({"components": 2}, {"ready": "loading"}):
+            error, result = await self.capture(None, **options)
+            self.assertEqual("", error)
+            self.assertNotIn("user_paygate_tier", result, options)
+
+    async def test_a_chip_in_another_language_or_unknown_text_is_read_or_left_alone(self):
+        self.assertEqual("PAYGATE_TIER_NOT_PAID", (await self.capture("Miễn phí"))[1]["user_paygate_tier"])
+        self.assertEqual("PAYGATE_TIER_TWO", (await self.capture("Google AI Ultra"))[1]["user_paygate_tier"])
+        self.assertNotIn("user_paygate_tier", (await self.capture("???"))[1])
 
     async def test_wrong_account_never_saves_credentials(self):
         self.email = "wrong@example.com"

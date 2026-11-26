@@ -18,7 +18,11 @@ from urllib.parse import unquote, urlparse
 
 import aiosqlite
 
+from ..core.account_tiers import PAYGATE_TIER_NOT_PAID, tier_from_chip_text
 from .browser_cookie_utils import is_partitioned_cookie, validate_flow_cookie_storage
+
+# A rendered Flow page holds many custom elements; a page still loading holds few.
+RENDERED_COMPONENTS = 8
 
 
 FLOW_URL = "https://flow.google.com/projects"
@@ -482,9 +486,9 @@ class ManagedBrowserService:
         identity = await page.evaluate(
             """(() => {
                 const email = (window.WIZ_global_data || {}).oPEP7c || '';
-                const tier = document.querySelector('flow-user-tier-chip .tier-chip')?.textContent?.trim().toUpperCase() || '';
-                const tierMap = {FREE: 'PAYGATE_TIER_NOT_PAID', PLUS: 'PAYGATE_TIER_ONE', PRO: 'PAYGATE_TIER_ONE', ULTRA: 'PAYGATE_TIER_TWO'};
-                return {host: location.hostname, ready: document.readyState, email, user_paygate_tier: tierMap[tier] || null};
+                const chip = document.querySelector('flow-user-tier-chip .tier-chip');
+                const components = new Set([...document.querySelectorAll('*')].map(e => e.localName).filter(n => n.includes('-'))).size;
+                return {host: location.hostname, ready: document.readyState, email, components, tier_text: chip ? (chip.textContent || '').trim() : null};
             })()"""
         )
         if not isinstance(identity, dict) or identity.get("host") != "flow.google.com" or not identity.get("email"):
@@ -504,9 +508,34 @@ class ManagedBrowserService:
         except ValueError:
             return "login_required", None
         result = {"email": observed, "google_cookies": serialized}
-        if identity.get("user_paygate_tier"):
-            result["user_paygate_tier"] = identity["user_paygate_tier"]
+        tier = tier_from_chip_text(identity.get("tier_text"))
+        rendered = identity.get("ready") == "complete" and int(identity.get("components") or 0) >= RENDERED_COMPONENTS
+        if not tier and identity.get("tier_text") is None and rendered:
+            # Flow shows the plan chip only for paid plans (verified 2026-11-27: the chip is present for Pro and
+            # Ultra accounts and absent on a rendered page for an account on the free plan).
+            tier = PAYGATE_TIER_NOT_PAID
+        if tier:
+            result["user_paygate_tier"] = tier
+        else:
+            # Without the plan the stored tier stays as it was, so say why and what the page shows instead.
+            seen = "absent on an unfinished page" if identity.get("tier_text") is None else repr(str(identity["tier_text"])[:40])
+            print(f"[managed-browser] token={token.id} plan chip not recognised: {seen}; page: {await self._plan_evidence(page)}", flush=True)
         return "", result
+
+    @staticmethod
+    async def _plan_evidence(page) -> str:
+        """Element names and button labels about the plan, to learn how Flow marks a plan the chip does not show."""
+        try:
+            evidence = await page.evaluate(
+                """(() => {
+                    const tags = [...new Set([...document.querySelectorAll('*')].map(e => e.localName).filter(n => n.includes('-') && /tier|plan|upgrade|subscri|credit|paygate/i.test(n)))];
+                    const labels = [...document.querySelectorAll('button,a,[role=button]')].map(e => (e.textContent || '').trim().replace(/\\s+/g, ' ')).filter(t => t && t.length < 40 && /upgrade|plan|credit|free|pro|ultra|nâng cấp|升级/i.test(t));
+                    return {path: location.pathname.split('/').slice(0, 2).join('/'), tags: tags.slice(0, 8), labels: [...new Set(labels)].slice(0, 8)};
+                })()"""
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics only
+            return f"unavailable ({type(exc).__name__})"
+        return json.dumps(evidence, ensure_ascii=False)[:400] if isinstance(evidence, dict) else "unavailable"
 
     async def _save(self, token_id, result, *, interactive):
         await self._write(token_id, status="syncing", error_code="")

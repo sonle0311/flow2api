@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from ..core.account_tiers import is_balance_collapse
 
 MASTER_KEY_ID = 0  # usage by the master API key
 
@@ -71,6 +72,9 @@ class CreditLedger:
             return 0
         before = self.last_known.get(token_id)
         self.last_known[token_id] = credits_after
+        if before is not None and is_balance_collapse(before, credits_after):
+            # A plan change or reset, not spending; TokenManager.refresh_credits reports it.
+            return 0
         spent = before - credits_after if before is not None and credits_after < before else 0
         if spent > 0:
             self._spawn(self.record(client_key_id, model, spent))

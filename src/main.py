@@ -320,6 +320,7 @@ generation_handler.credit_ledger = credit_ledger
 alert_service = AlertService(db, token_manager.get_all_tokens)
 log_retention = LogRetention(db)
 managed_captcha.alerts = alert_service
+token_manager.alerts = alert_service
 
 
 async def _fetch_flow_model_table() -> list:
