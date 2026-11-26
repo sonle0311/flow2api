@@ -85,9 +85,10 @@
     "skills.download": "下载 flow2api 技能 (.zip)",
     "skills.downloadHelp": "由本服务现场打包，因此其中的模型表与本服务提供的模型一致。升级服务后请重新下载。",
     "skills.step1Title": "1. 安装技能",
-    "skills.step1Help": "解压到智能体的技能目录。Claude Code 读取 ~/.claude/skills；Codex、Gemini CLI、omp 等其他智能体读取 ~/.agents/skills。在 Downloads 目录运行其中一条命令。",
-    "skills.cmdClaude": "Claude Code",
-    "skills.cmdAgents": "其他智能体（Codex、Gemini CLI、omp）",
+    "skills.step1Help": "方式 1：用 skills CLI 一条命令安装（需要 Node.js 22.20 及以上），会为本机检测到的各个智能体安装，之后用 npx skills update 更新。方式 2：下载上面的 zip，解压到智能体的技能目录（Claude Code 读取 ~/.claude/skills；Codex、Gemini CLI、omp 等其他智能体读取 ~/.agents/skills），在 Downloads 目录运行。",
+    "skills.cmdNpx": "方式 1：npx（从 GitHub 安装仓库的最新版本）",
+    "skills.cmdClaude": "方式 2：Claude Code 的 zip",
+    "skills.cmdAgents": "方式 2：其他智能体的 zip（Codex、Gemini CLI、omp）",
     "skills.step2Title": "2. 提供 API Key",
     "skills.step2Help": "在设置的客户端 Key 中为智能体单独创建一个 Key：限制可用模型并设置每月积分预算，避免失控的智能体花光余额。然后在你自己的终端运行下面的命令，按提示粘贴 Key。不要把 Key 贴到聊天里。",
     "skills.cmdKey": "保存 Key（写入 ~/.config/flow2api/env，权限 600）",
@@ -101,9 +102,7 @@
     "skills.cmdUse": "直接运行的命令",
     "skills.copy": "复制",
     "skills.copied": "已复制。",
-    "skills.copyFailed": "无法自动复制；内容已选中，请按 Ctrl+C。",
-    "skills.opsTitle": "用智能体运维本服务",
-    "skills.opsHelp": "仓库还附带 flow2api-gateway-ops 技能（位于 .agents/skills）。在仓库内工作的智能体会自动加载它；它说明如何读取故障、安全重启和检查账号。它不用于生成媒体，也无需安装。"
+    "skills.copyFailed": "无法自动复制；内容已选中，请按 Ctrl+C。"
   },
   "en": {
     "integration.parametersTitle": "Choose a model and parameters",
@@ -191,9 +190,10 @@
     "skills.download": "Download flow2api skill (.zip)",
     "skills.downloadHelp": "Built from this server, so the model table inside matches what it serves. Download it again after you upgrade the server.",
     "skills.step1Title": "1. Install the skill",
-    "skills.step1Help": "Unzip it into the skills folder of your agent. Claude Code reads ~/.claude/skills; Codex, Gemini CLI, omp and other agents read ~/.agents/skills. Run one of the commands from your Downloads folder.",
-    "skills.cmdClaude": "Claude Code",
-    "skills.cmdAgents": "Other agents (Codex, Gemini CLI, omp)",
+    "skills.step1Help": "Option 1: one command with the skills CLI (needs Node.js 22.20 or later); it installs for every agent it finds on the machine and updates with npx skills update. Option 2: download the zip above and unzip it into the skills folder of your agent (Claude Code reads ~/.claude/skills; Codex, Gemini CLI, omp and other agents read ~/.agents/skills), from your Downloads folder.",
+    "skills.cmdNpx": "Option 1: npx (installs from GitHub, the repository's latest version)",
+    "skills.cmdClaude": "Option 2: zip for Claude Code",
+    "skills.cmdAgents": "Option 2: zip for other agents (Codex, Gemini CLI, omp)",
     "skills.step2Title": "2. Give it an API key",
     "skills.step2Help": "Create a client key for the agent in Settings, Client keys: limit its models and set a monthly credit budget, so a runaway agent cannot spend the whole balance. Then run this in your own terminal and paste the key when asked. Never paste a key into the chat.",
     "skills.cmdKey": "Save the key (kept in ~/.config/flow2api/env, mode 600)",
@@ -207,9 +207,7 @@
     "skills.cmdUse": "Direct commands",
     "skills.copy": "Copy",
     "skills.copied": "Copied.",
-    "skills.copyFailed": "Could not copy automatically; the text is selected, press Ctrl+C.",
-    "skills.opsTitle": "Operating this server with an agent",
-    "skills.opsHelp": "The repository also ships flow2api-gateway-ops (in .agents/skills). Agents working inside the repository load it automatically; it explains how to read failures, restart safely and check accounts. It is not for generating media, and there is nothing to install for it."
+    "skills.copyFailed": "Could not copy automatically; the text is selected, press Ctrl+C."
   },
   "vi": {
     "integration.parametersTitle": "Chọn model và tham số riêng",
@@ -297,9 +295,10 @@
     "skills.download": "Tải skill flow2api (.zip)",
     "skills.downloadHelp": "Gói được dựng từ máy chủ này nên bảng model bên trong khớp với model máy chủ đang phục vụ. Tải lại sau khi nâng cấp máy chủ.",
     "skills.step1Title": "1. Cài skill",
-    "skills.step1Help": "Giải nén vào thư mục skill của agent. Claude Code đọc ~/.claude/skills; Codex, Gemini CLI, omp và các agent khác đọc ~/.agents/skills. Chạy một trong hai lệnh từ thư mục Downloads.",
-    "skills.cmdClaude": "Claude Code",
-    "skills.cmdAgents": "Agent khác (Codex, Gemini CLI, omp)",
+    "skills.step1Help": "Cách 1: một lệnh bằng skills CLI (cần Node.js 22.20 trở lên), tự cài cho các agent tìm thấy trên máy và cập nhật bằng npx skills update. Cách 2: tải gói zip ở trên rồi giải nén vào thư mục skill của agent (Claude Code đọc ~/.claude/skills; Codex, Gemini CLI, omp và agent khác đọc ~/.agents/skills), chạy từ thư mục Downloads.",
+    "skills.cmdNpx": "Cách 1: npx (cài từ GitHub, lấy bản mới nhất của repo)",
+    "skills.cmdClaude": "Cách 2: zip cho Claude Code",
+    "skills.cmdAgents": "Cách 2: zip cho agent khác (Codex, Gemini CLI, omp)",
     "skills.step2Title": "2. Cấp API key",
     "skills.step2Help": "Tạo một client key riêng cho agent trong Cài đặt, mục Client keys: giới hạn model và đặt hạn mức credit hằng tháng để agent lỗi không tiêu hết số dư. Sau đó chạy lệnh này trong terminal của bạn và dán key khi được hỏi. Không dán key vào khung chat.",
     "skills.cmdKey": "Lưu key (ghi vào ~/.config/flow2api/env, quyền 600)",
@@ -313,8 +312,6 @@
     "skills.cmdUse": "Lệnh chạy trực tiếp",
     "skills.copy": "Sao chép",
     "skills.copied": "Đã sao chép.",
-    "skills.copyFailed": "Không sao chép tự động được; nội dung đã được chọn, nhấn Ctrl+C.",
-    "skills.opsTitle": "Vận hành máy chủ này bằng agent",
-    "skills.opsHelp": "Repo còn có skill flow2api-gateway-ops (trong .agents/skills). Agent làm việc trong repo tự nạp skill này; nó hướng dẫn đọc lỗi, restart an toàn và kiểm tra tài khoản. Skill này không dùng để tạo media và không cần cài."
+    "skills.copyFailed": "Không sao chép tự động được; nội dung đã được chọn, nhấn Ctrl+C."
   }
 }

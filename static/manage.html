@@ -844,6 +844,13 @@
                     <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.step1Help">Unzip it into the skills folder of your agent. Claude Code reads ~/.claude/skills; Codex, Gemini CLI, omp and other agents read ~/.agents/skills. Run one of the commands from your Downloads folder.</p>
                     <div class="space-y-2">
                         <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdNpx">Option 1: npx (installs from GitHub, the repository's latest version)</span>
+                            <button type="button" data-skills-copy="skillsCmdNpx" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdNpx"></code></pre>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
                             <span class="text-sm font-medium" data-i18n="skills.cmdClaude">Claude Code</span>
                             <button type="button" data-skills-copy="skillsCmdClaude" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
                         </div>
@@ -898,10 +905,7 @@
                     </div>
                     <p id="skillsCopyStatus" class="min-h-6 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true"></p>
                 </div>
-                <div class="space-y-2 border-t border-border pt-6">
-                    <h3 class="text-base font-semibold" data-i18n="skills.opsTitle">Operating this server with an agent</h3>
-                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.opsHelp">The repository also ships flow2api-gateway-ops (in .agents/skills). Agents working inside the repository load it automatically; it explains how to read failures, restart safely and check accounts. It is not for generating media, and there is nothing to install for it.</p>
-                </div>
+
             </div>
         </section>
 

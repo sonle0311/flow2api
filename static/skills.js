@@ -8,6 +8,8 @@
     const placeholder = '<SERVER_URL>';
     // Commands are built here, not stored in HTML, so quotes and $ signs stay exact.
     const commands = {
+        // Only the client skill is offered; flow2api-gateway-ops is for agents working inside the repository.
+        skillsCmdNpx: () => 'npx skills add sonle0311/flow2api --skill flow2api -g -y',
         skillsCmdClaude: () => 'mkdir -p ~/.claude/skills && unzip -o ~/Downloads/flow2api-skill.zip -d ~/.claude/skills',
         skillsCmdAgents: () => 'mkdir -p ~/.agents/skills && unzip -o ~/Downloads/flow2api-skill.zip -d ~/.agents/skills',
         skillsCmdKey: (root) => `mkdir -p ~/.config/flow2api && printf 'Flow2API key: ' && IFS= read -rs K && printf 'FLOW2API_BASE_URL=${root}\\nFLOW2API_API_KEY=%s\\n' "$K" > ~/.config/flow2api/env && chmod 600 ~/.config/flow2api/env && unset K && echo`,

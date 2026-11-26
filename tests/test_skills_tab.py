@@ -24,6 +24,15 @@ def test_commands_follow_the_server_url(browser_page):
     assert "FLOW2API_BASE_URL=https://api.example.com/flow\\n" in command(page, "#skillsCmdKey")
 
 
+def test_the_tab_offers_only_the_flow2api_skill_and_installs_it_with_npx(browser_page):
+    page, base = browser_page
+    open_page(page, base + "/manage#skills")
+    assert command(page, "#skillsCmdNpx") == "npx skills add sonle0311/flow2api --skill flow2api -g -y"
+    panel = page.locator("#panelSkills").inner_text()
+    assert "gateway-ops" not in panel
+    assert page.locator("#panelSkills [data-skills-copy]").evaluate_all("els => els.map(e => e.dataset.skillsCopy)").count("skillsCmdNpx") == 1
+
+
 @pytest.mark.parametrize("invalid", [
     "javascript:alert(1)", "https://user:pass@example.com", "https://example.com?key=secret",
     "https://example.com/$(touch pwned)", "https://example.com/a'b", "https://example.com/a b;rm",
