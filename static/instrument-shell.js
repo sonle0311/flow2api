@@ -9,6 +9,7 @@
         studio:'<rect x="3" y="5" width="18" height="15" rx="3"/><path d="m10 9 5 3.5-5 3.5zM7 2v3m10-3v3"/>',
         tokens:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m2 4a6 6 0 0 1 3 5v2"/>',
         integration:'<path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/>',
+        skills:'<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/><path d="M19 3v4m-2-2h4"/>',
         logs:'<path d="M5 3h14v18H5zM8 7h8M8 12h8M8 17h5"/>',
         settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
         menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
@@ -18,7 +19,7 @@
     const groups = [
         ['workspace', [['studio','tabTestPage','/console']]],
         ['manage', [['tokens','tabTokens','/manage#tokens'], ['logs','tabLogs','/manage#logs']]],
-        ['configure', [['settings','tabSettings','/manage#settings'], ['integration','tabIntegration','/manage#integration']]],
+        ['configure', [['settings','tabSettings','/manage#settings'], ['integration','tabIntegration','/manage#integration'], ['skills','tabSkills','/manage#skills']]],
     ];
     const el = (tag, className, text) => {
         const node = document.createElement(tag);
@@ -241,7 +242,7 @@
 
         function render() {
             navigation.setAttribute('aria-label', I18n.t('shell.navigation'));
-            const active = page === 'test' ? 'studio' : ['tokens','settings','logs','integration'].find(name => {
+            const active = page === 'test' ? 'studio' : ['tokens','settings','logs','integration','skills'].find(name => {
                 const panel = document.getElementById('panel' + name[0].toUpperCase() + name.slice(1));
                 return panel && !panel.classList.contains('hidden');
             }) || 'tokens';
@@ -263,7 +264,7 @@
         }
         if (page === 'manage') {
             const observer = new MutationObserver(render);
-            document.querySelectorAll('#panelTokens,#panelSettings,#panelLogs,#panelIntegration').forEach(panel => observer.observe(panel, {attributes: true, attributeFilter: ['class']}));
+            document.querySelectorAll('#panelTokens,#panelSettings,#panelLogs,#panelIntegration,#panelSkills').forEach(panel => observer.observe(panel, {attributes: true, attributeFilter: ['class']}));
         }
         window.addEventListener('languagechange', render);
         window.addEventListener('focus', refreshStatus);

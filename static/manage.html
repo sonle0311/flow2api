@@ -10,6 +10,7 @@
     <script src="/static/managed-browser.js" defer></script>
     <script src="/static/client-keys.js" defer></script>
     <script src="/static/operations.js" defer></script>
+    <script src="/static/skills.js" defer></script>
     <link rel="stylesheet" href="/static/instrument-utilities.css">
     <link rel="stylesheet" href="/static/client-keys.css">
     <style>
@@ -78,6 +79,7 @@
                 <button onclick="switchTab('settings')" id="tabSettings" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="系统配置">系统配置</span></button>
                 <button onclick="switchTab('logs')" id="tabLogs" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="请求日志">请求日志</span></button>
                 <button onclick="switchTab('integration')" id="tabIntegration" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="integration.title">AI integration guide</span></button>
+                <button onclick="switchTab('skills')" id="tabSkills" class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="skills.title">Agent skill</span></button>
                 <a href="/test" id="tabTestPage" class="tab-btn inline-flex items-center border-b-2 border-transparent text-sm font-medium py-3 px-1"><span data-i18n="测试页面">测试页面</span></a>
             </nav>
         </div>
@@ -814,6 +816,95 @@
             </div>
         </div>
 
+        <section id="panelSkills" class="hidden" aria-labelledby="skillsHeading">
+            <div class="sr-only">
+                <h2 id="skillsHeading" data-i18n="skills.title">Agent skill</h2>
+                <p data-i18n="skills.description">Install the Flow2API skill so your coding agent can generate images and videos through this server.</p>
+            </div>
+            <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.intro">A skill is a folder your coding agent loads when you ask for it. The flow2api skill lets the agent check this server, pick a valid model and options, generate images and videos, and recover a job after a dropped connection.</p>
+            <div class="instrument-integration-connection grid gap-5 border-y border-border lg:grid-cols-2 lg:gap-10">
+                <div class="min-w-0 space-y-2">
+                    <label for="skillsServerUrl" class="block text-sm font-medium" data-i18n="skills.urlLabel">Server URL</label>
+                    <input id="skillsServerUrl" type="url" spellcheck="false" autocomplete="off" aria-describedby="skillsUrlHelp skillsUrlError" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                    <p id="skillsUrlHelp" class="text-xs leading-5 text-muted-foreground" data-i18n="skills.urlHelp">The address your agent's machine uses to reach this server, without /v1. The commands below follow it.</p>
+                    <p id="skillsUrlError" class="text-sm text-destructive" role="status"></p>
+                </div>
+                <div class="min-w-0 space-y-2">
+                    <h3 class="text-sm font-medium" data-i18n="skills.downloadTitle">Skill package</h3>
+                    <a id="skillsDownload" href="/api/admin/skills/flow2api/download" download="flow2api-skill.zip" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                        <svg class="h-4 w-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>
+                        <span data-i18n="skills.download">Download flow2api skill (.zip)</span>
+                    </a>
+                    <p class="text-xs leading-5 text-muted-foreground" data-i18n="skills.downloadHelp">Built from this server, so the model table inside matches what it serves. Download it again after you upgrade the server.</p>
+                </div>
+            </div>
+            <div class="mt-7 space-y-6">
+                <div class="space-y-4">
+                    <h3 class="text-base font-semibold" data-i18n="skills.step1Title">1. Install the skill</h3>
+                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.step1Help">Unzip it into the skills folder of your agent. Claude Code reads ~/.claude/skills; Codex, Gemini CLI, omp and other agents read ~/.agents/skills. Run one of the commands from your Downloads folder.</p>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdClaude">Claude Code</span>
+                            <button type="button" data-skills-copy="skillsCmdClaude" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdClaude"></code></pre>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdAgents">Other agents (Codex, Gemini CLI, omp)</span>
+                            <button type="button" data-skills-copy="skillsCmdAgents" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdAgents"></code></pre>
+                    </div>
+                </div>
+                <div class="space-y-4 border-t border-border pt-6">
+                    <h3 class="text-base font-semibold" data-i18n="skills.step2Title">2. Give it an API key</h3>
+                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.step2Help">Create a client key for the agent in Settings, Client keys: limit its models and set a monthly credit budget, so a runaway agent cannot spend the whole balance. Then run this in your own terminal and paste the key when asked. Never paste a key into the chat.</p>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdKey">Save the key (kept in ~/.config/flow2api/env, mode 600)</span>
+                            <button type="button" data-skills-copy="skillsCmdKey" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdKey"></code></pre>
+                    </div>
+                </div>
+                <div class="space-y-4 border-t border-border pt-6">
+                    <h3 class="text-base font-semibold" data-i18n="skills.step3Title">3. Check the connection</h3>
+                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.step3Help">Free and read-only. It shows whether the key works, which models it may use, which models Flow is retiring, and whether the job API is available.</p>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdCheck">Run the check</span>
+                            <button type="button" data-skills-copy="skillsCmdCheck" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdCheck"></code></pre>
+                    </div>
+                </div>
+                <div class="space-y-4 border-t border-border pt-6">
+                    <h3 class="text-base font-semibold" data-i18n="skills.step4Title">4. Use it</h3>
+                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.step4Help">Ask your agent in plain words and it loads the skill by itself, for example with the prompt below. You can also run the script directly. Every image or video is a paid generation; add --dry-run to validate a request for free.</p>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.promptLabel">Prompt for your agent</span>
+                            <button type="button" data-skills-copy="skillsPromptExample" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsPromptExample" data-i18n="skills.promptExample">Use the flow2api skill. Run check first. Then make three 9:16 images of a red fox in snow with gemini-3.1-flash-lite-image, and a 3 second 360p draft video from the first one. Use --dry-run first and tell me what it would cost.</code></pre>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <span class="text-sm font-medium" data-i18n="skills.cmdUse">Direct commands</span>
+                            <button type="button" data-skills-copy="skillsCmdUse" class="rounded-md px-2 py-1.5 text-xs font-medium underline underline-offset-4 hover:bg-accent focus-visible:outline focus-visible:outline-2" data-i18n="skills.copy">Copy</button>
+                        </div>
+                        <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted/30 p-4 font-mono text-xs leading-6"><code id="skillsCmdUse"></code></pre>
+                    </div>
+                    <p id="skillsCopyStatus" class="min-h-6 text-sm text-muted-foreground" aria-live="polite" aria-atomic="true"></p>
+                </div>
+                <div class="space-y-2 border-t border-border pt-6">
+                    <h3 class="text-base font-semibold" data-i18n="skills.opsTitle">Operating this server with an agent</h3>
+                    <p class="max-w-3xl text-sm leading-6 text-muted-foreground" data-i18n="skills.opsHelp">The repository also ships flow2api-gateway-ops (in .agents/skills). Agents working inside the repository load it automatically; it explains how to read failures, restart safely and check accounts. It is not for generating media, and there is nothing to install for it.</p>
+                </div>
+            </div>
+        </section>
+
         <section id="panelIntegration" class="hidden" aria-labelledby="integrationHeading">
             <div class="sr-only">
                 <div class="max-w-2xl">
@@ -1419,7 +1510,7 @@
         resumeCaptchaRuntimeStatusPollingIfNeeded=async(method)=>{if(method!=='browser'&&method!=='personal')return;const status=await pollCaptchaRuntimeStatus(method,{silent:true});if(status&&(status.active||status.task_running||status.state==='running'))startCaptchaRuntimeStatusPolling(method)},
         showToast=(m,t='info',duration=2000)=>{const d=document.createElement('div'),bc={success:'bg-green-600',error:'bg-destructive',info:'bg-primary'};d.className=`fixed bottom-4 right-4 ${bc[t]||bc.info} text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium z-50 animate-slide-up`;I18n.setMessage(d, m);document.body.appendChild(d);setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .3s';setTimeout(()=>d.parentNode&&document.body.removeChild(d),300)},duration)},
         logout=async()=>{if(!confirm(I18n.t("确定要退出登录吗?")))return;try{await fetch('/api/admin/logout',{method:'POST',credentials:'include',headers:{...I18n.headers(),'Content-Type':'application/json'}})}catch(e){console.error(I18n.t("服务端退出登录失败:"),e)}finally{location.href='/login'}},
-        switchTab=t=>{const cap=n=>n.charAt(0).toUpperCase()+n.slice(1);['tokens','settings','logs','integration'].forEach(n=>{const active=n===t;$(`panel${cap(n)}`).classList.toggle('hidden',!active);$(`tab${cap(n)}`).classList.toggle('border-primary',active);$(`tab${cap(n)}`).classList.toggle('text-primary',active);$(`tab${cap(n)}`).classList.toggle('border-transparent',!active);$(`tab${cap(n)}`).classList.toggle('text-muted-foreground',!active)});if(t==='settings'){stopLogsAutoRefresh();loadAdminConfig();loadProxyConfig();loadCacheConfig();loadGenerationTimeout();loadCallLogicConfig();loadCaptchaConfig();loadPluginConfig();loadATAutoRefreshConfig()}else if(t==='logs'){startLogsAutoRefresh();loadLogs()}else{stopLogsAutoRefresh()}};
+        switchTab=t=>{const cap=n=>n.charAt(0).toUpperCase()+n.slice(1);['tokens','settings','logs','integration','skills'].forEach(n=>{const active=n===t;$(`panel${cap(n)}`).classList.toggle('hidden',!active);$(`tab${cap(n)}`).classList.toggle('border-primary',active);$(`tab${cap(n)}`).classList.toggle('text-primary',active);$(`tab${cap(n)}`).classList.toggle('border-transparent',!active);$(`tab${cap(n)}`).classList.toggle('text-muted-foreground',!active)});if(t==='settings'){stopLogsAutoRefresh();loadAdminConfig();loadProxyConfig();loadCacheConfig();loadGenerationTimeout();loadCallLogicConfig();loadCaptchaConfig();loadPluginConfig();loadATAutoRefreshConfig()}else if(t==='logs'){startLogsAutoRefresh();loadLogs()}else{stopLogsAutoRefresh()}};
 
         function renderProxyTestResult(){
             const el=$('proxyTestResult');
@@ -1725,7 +1816,7 @@
         (()=>{refreshTokens();loadATAutoRefreshConfig()})();
         function selectPanelFromLocation() {
             const panel = window.location.hash.slice(1);
-            if (!['tokens', 'settings', 'logs', 'integration'].includes(panel)) return;
+            if (!['tokens', 'settings', 'logs', 'integration', 'skills'].includes(panel)) return;
             const target = document.getElementById('panel' + panel[0].toUpperCase() + panel.slice(1));
             if (target.classList.contains('hidden')) switchTab(panel);
         }

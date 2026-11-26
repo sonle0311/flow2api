@@ -6,7 +6,7 @@ from test_i18n_browser import browser_page, ui_server, open_page, playwright_api
 
 @pytest.mark.parametrize("destination, panel", [
     ("tokens", "Tokens"), ("settings", "Settings"),
-    ("logs", "Logs"), ("integration", "Integration"),
+    ("logs", "Logs"), ("integration", "Integration"), ("skills", "Skills"),
 ])
 def test_studio_rail_opens_the_requested_management_panel(browser_page, destination, panel):
     page, base = browser_page

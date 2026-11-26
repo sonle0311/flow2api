@@ -453,6 +453,7 @@ _INSTRUMENT_ASSETS = {
     "client-keys.css": "text/css",
     "client-keys.js": "application/javascript",
     "operations.js": "application/javascript",
+    "skills.js": "application/javascript",
     "instrument-shell.js": "application/javascript",
     "instrument-access.css": "text/css",
     "instrument-studio.css": "text/css",

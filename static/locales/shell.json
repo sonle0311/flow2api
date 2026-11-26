@@ -30,7 +30,10 @@
     "shell.filter.disabled": "已禁用",
     "shell.filter.success": "成功",
     "shell.filter.failed": "失败",
-    "shell.filter.running": "进行中"
+    "shell.filter.running": "进行中",
+    "shell.skills": "技能",
+    "shell.title.skills": "教智能体使用 Flow2API。",
+    "shell.description.skills": "安装技能，让编程智能体检查服务并用有效参数生成图片和视频。"
   },
   "en": {
     "shell.navigation": "Main navigation",
@@ -63,7 +66,10 @@
     "shell.filter.disabled": "Disabled",
     "shell.filter.success": "Succeeded",
     "shell.filter.failed": "Failed",
-    "shell.filter.running": "In progress"
+    "shell.filter.running": "In progress",
+    "shell.skills": "Skills",
+    "shell.title.skills": "Teach your agent to use Flow2API.",
+    "shell.description.skills": "Install the skill so your coding agent can check the server and generate images and videos with valid options."
   },
   "vi": {
     "shell.navigation": "Điều hướng chính",
@@ -96,6 +102,9 @@
     "shell.filter.disabled": "Đã tắt",
     "shell.filter.success": "Thành công",
     "shell.filter.failed": "Thất bại",
-    "shell.filter.running": "Đang chạy"
+    "shell.filter.running": "Đang chạy",
+    "shell.skills": "Skill",
+    "shell.title.skills": "Dạy agent dùng Flow2API.",
+    "shell.description.skills": "Cài skill để coding agent kiểm tra máy chủ và tạo ảnh, video đúng tùy chọn."
   }
 }

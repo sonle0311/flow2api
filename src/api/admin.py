@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 from curl_cffi.requests import AsyncSession
+from ..services import skill_package
 from ..core.auth import AuthManager
 from ..core.model_resolver import get_model_catalog
 from ..services.client_keys import (
@@ -1088,6 +1089,19 @@ def _service(service, name: str):
     if service is None:
         raise HTTPException(status_code=503, detail=f"{name} is not ready")
     return service
+
+
+@router.get("/api/admin/skills/{skill_name}/download")
+async def download_skill(skill_name: str, token: str = Depends(verify_admin_token)):
+    """The flow2api client skill as a zip, for the console's Agent skill tab."""
+    archive = await asyncio.to_thread(skill_package.build_skill_zip, skill_name)
+    if archive is None:
+        raise HTTPException(status_code=404, detail="Unknown skill")
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{skill_name}-skill.zip"', "Cache-Control": "no-store"},
+    )
 
 
 @router.get("/api/admin/usage")
